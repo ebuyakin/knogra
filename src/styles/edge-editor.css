@@ -1,0 +1,343 @@
+/**
+ * Edge Editor Modal Styles
+ */
+
+/* Modal backdrop */
+.edge-editor-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+/* Dialog container */
+.edge-editor-dialog {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 8px;
+  min-width: 420px;
+  max-width: 520px;
+  max-height: 85vh;
+  color: var(--text-primary, #e6edf3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+/* =========================================================================
+   TOP SECTION - Fixed header with basic controls
+   ========================================================================= */
+
+.edge-editor-top {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+  background-color: var(--bg-secondary, #161b22);
+}
+
+/* Header row with edge/scene IDs */
+.edge-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  cursor: move;
+  user-select: none;
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-tertiary, #6e7681);
+}
+
+/* Source/Target metadata - compact inline */
+.edge-editor-metadata {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding: 6px 8px;
+  background-color: var(--bg-tertiary, #1c2128);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.edge-editor-metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.edge-editor-metadata-label {
+  color: var(--text-tertiary, #6e7681);
+}
+
+.edge-editor-metadata-value {
+  color: var(--text-primary, #e6edf3);
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Basic controls grid - compact 2-column layout */
+.edge-editor-basic-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+/* Single control in grid */
+.edge-editor-control {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Control spanning full width */
+.edge-editor-control.full-width {
+  grid-column: 1 / -1;
+}
+
+/* Inline control (label + input side by side) */
+.edge-editor-control.inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.edge-editor-control.inline .edge-editor-label {
+  margin-bottom: 0;
+}
+
+/* Control labels */
+.edge-editor-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary, #7d8590);
+}
+
+/* Section divider within top */
+.edge-editor-divider {
+  height: 1px;
+  background-color: var(--border-primary, #30363d);
+  margin: 10px 0;
+}
+
+/* =========================================================================
+   MIDDLE SECTION - Scrollable style-specific parameters
+   ========================================================================= */
+
+.edge-editor-middle {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  min-height: 80px;
+  max-height: 300px;
+}
+
+/* Style-specific section */
+.edge-editor-style-section {
+  display: none;
+}
+
+.edge-editor-style-section.active {
+  display: block;
+}
+
+.edge-editor-style-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #e6edf3);
+}
+
+/* Control point list */
+.edge-editor-points-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* Point row - inline distance/weight */
+.edge-editor-point-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.edge-editor-point-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-tertiary, #6e7681);
+  min-width: 20px;
+}
+
+/* Add/Remove buttons row */
+.edge-editor-points-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Subsection label */
+.edge-editor-subsection-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary, #7d8590);
+  margin: 12px 0 6px 0;
+}
+
+/* Empty state for style sections */
+.edge-editor-empty-state {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-tertiary, #6e7681);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* =========================================================================
+   BOTTOM SECTION - Fixed footer with buttons
+   ========================================================================= */
+
+.edge-editor-bottom {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-primary, #30363d);
+  background-color: var(--bg-secondary, #161b22);
+}
+
+/* =========================================================================
+   FORM CONTROLS
+   ========================================================================= */
+
+/* Color input */
+.edge-editor-color-input {
+  width: 48px;
+  height: 24px;
+  padding: 2px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  background-color: var(--bg-tertiary, #1c2128);
+  cursor: pointer;
+}
+
+/* Select dropdown */
+.edge-editor-select {
+  width: 100%;
+  padding: 6px 8px;
+  background-color: var(--bg-tertiary, #1c2128);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.edge-editor-select:focus {
+  outline: none;
+  border-color: var(--accent-primary, #238636);
+}
+
+/* Compact select for inline use */
+.edge-editor-select.compact {
+  width: auto;
+  min-width: 100px;
+}
+
+/* Range slider container */
+.edge-editor-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edge-editor-slider {
+  flex: 1;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--accent-primary, #238636);
+}
+
+.edge-editor-slider-value {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-primary, #e6edf3);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Number input */
+.edge-editor-number-input {
+  width: 100%;
+  padding: 5px 8px;
+  background-color: var(--bg-tertiary, #1c2128);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 12px;
+}
+
+.edge-editor-number-input:focus {
+  outline: none;
+  border-color: var(--accent-primary, #238636);
+}
+
+/* Compact number input */
+.edge-editor-number-input.compact {
+  width: 60px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+/* =========================================================================
+   BUTTONS
+   ========================================================================= */
+
+.edge-editor-btn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+
+.edge-editor-btn-secondary {
+  background-color: var(--button-secondary, #21262d);
+  color: var(--text-primary, #e6edf3);
+  border: 1px solid var(--border-primary, #30363d);
+}
+
+.edge-editor-btn-secondary:hover {
+  background-color: var(--button-secondary-hover, #30363d);
+}
+
+.edge-editor-btn-primary {
+  background-color: var(--button-primary, #238636);
+  color: white;
+  border: none;
+}
+
+.edge-editor-btn-primary:hover {
+  background-color: var(--button-primary-hover, #2ea043);
+}
+
+/* Small button variant */
+.edge-editor-btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}

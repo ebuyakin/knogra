@@ -1,0 +1,111 @@
+/**
+ * Node Picker Dialog Styles
+ */
+
+.node-picker-dialog {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0;
+  max-width: 500px;
+  width: 90vw;
+  max-height: 70vh;
+}
+
+.node-picker-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.node-picker-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+}
+
+.node-picker-container h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.node-picker-search {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+}
+
+.node-picker-search:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.node-picker-list {
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.node-picker-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.node-picker-item:hover {
+  background: var(--bg-primary);
+  border-color: var(--accent-blue);
+}
+
+.node-picker-title {
+  font-weight: 500;
+  margin-bottom: var(--spacing-xs);
+}
+
+.node-picker-id {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.node-picker-empty {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.node-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-primary);
+}
+
+.node-picker-actions button {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+}
+
+.node-picker-actions button:hover {
+  background: var(--bg-primary);
+  border-color: var(--accent-blue);
+}

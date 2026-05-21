@@ -1,0 +1,589 @@
+/**
+ * SharedCoreAnimator
+ * Phase 2: Handles shared movement animations for scene transitions.
+ * All transformations (background, position, design) run in parallel.
+ */
+
+import type { Core } from 'cytoscape';
+import type { NodeId, Scene } from '../../../core/main-types';
+import type { BackgroundRenderer } from '../../../background/background-renderer';
+import type { SharedBackgroundTiming } from '../../../config/transition-settings';
+
+import { graphStore } from '../../../storage/graph-store';
+import { getSetting } from '../../../config';
+import { isDebug } from '../../../config/debug-flags';
+import { BackgroundOperator } from './shared-core-animation/background-operator';
+import { StyleGenerator } from '../../../styles/style-generator';
+import { TransitionAnalysisOperator, type TransitionAnalysis } from './shared-core-animation/transition-analysis-operator';
+import { GhostOperator } from './shared-core-animation/ghost-operator';
+import { waitForStep } from './scene-to-scene-orchestrator';
+
+interface Position {
+  x: number;
+  y: number;
+}
+
+type TargetPositions = Record<NodeId, Position>;
+
+/** Pre-calculated crossfade durations/delays from overlap percentage. */
+interface CrossfadeTiming {
+  fadeOutDuration: number;
+  fadeInDelay: number;
+  fadeInDuration: number;
+}
+
+/**
+ * Convert overlap percentage (0–100) to concrete ms timings.
+ * Overlap centered around 50%: fadeOutEnd = 50% + overlap/2,
+ * fadeInStart = 50% - overlap/2.
+ */
+function calculateCrossfadeTiming(overlapPercent: number, duration: number): CrossfadeTiming {
+  const overlapFraction = overlapPercent / 100;
+  const fadeOutEndRatio = 0.5 + overlapFraction / 2;
+  const fadeInStartRatio = 0.5 - overlapFraction / 2;
+  return {
+    fadeOutDuration: duration * fadeOutEndRatio,
+    fadeInDelay: duration * fadeInStartRatio,
+    fadeInDuration: duration * (1 - fadeInStartRatio)
+  };
+}
+
+export class SharedCoreAnimator {
+  #cy: Core;
+  #backgroundOperator: BackgroundOperator;
+  #analyzer: TransitionAnalysisOperator;
+  #ghostOperator: GhostOperator;
+
+  constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
+    this.#cy = cy;
+    this.#backgroundOperator = new BackgroundOperator(cy, backgroundRenderer);
+    this.#analyzer = new TransitionAnalysisOperator(cy);
+    this.#ghostOperator = new GhostOperator(cy);
+  }
+
+  // ==========================================================================
+  // SHARED PHASE EXECUTION (New Parallel Logic)
+  // ==========================================================================
+
+  async executeSharedPhase(
+    sharedElements: NodeId[],
+    currentScene: Scene,
+    targetScene: Scene,
+    targetPositions: TargetPositions,
+    targetScales: Record<NodeId, number>,
+    isNewScene: boolean
+  ): Promise<void> {
+    const { morphDuration, morphDelay, crossfadeTiming } = this.#getMorphTiming();
+    const bgTiming = getSetting('transition.sharedBackgroundTiming') as SharedBackgroundTiming;
+
+    // 2.0: Analyze shared elements
+    const analysis = this.#analyzer.analyze(sharedElements, currentScene, targetScene);
+    await waitForStep('[2.0] Analyze complete — ghosts not yet created');
+
+    // 2.1: Create ghosts (old-design clones)
+    await this.#ghostOperator.createGhosts(analysis, currentScene);
+    await waitForStep('[2.1] Ghosts created — real elements not yet switched');
+
+    // 2.2: Switch real elements to new design (hidden at opacity 0)
+    await this.#setupRealElementsForCrossfade(analysis, targetScene);
+    await waitForStep('[2.2] Real elements switched to new design (hidden) — before animations');
+
+    // 2.3: Background fade-out (sequential mode only)
+    if (bgTiming === 'sequential') {
+      await this.#backgroundOperator.fadeOutBackground();
+      await this.#backgroundOperator.loadBackground(targetScene);
+      this.#backgroundOperator.setCanvasOpacity(0);
+      await waitForStep('[2.3] Background faded out (sequential) — before parallel animations');
+    }
+
+    // 2.4: Execute parallel animations
+    const animations: Promise<void>[] = [];
+
+    // A. Background crossfade (parallel mode only)
+    if (bgTiming === 'parallel') {
+      animations.push(this.#backgroundOperator.crossfadeBackground(targetScene, morphDuration));
+    }
+
+    // B. Viewport
+    if (!isNewScene && targetScene.viewport?.zoom > 0) {
+      if (isDebug('d_transition')) {
+        console.log(`[d_transition] Viewport animation: current zoom=${this.#cy.zoom().toFixed(4)} → target zoom=${targetScene.viewport.zoom.toFixed(4)}`);
+      }
+      animations.push(this.#animateViewport(targetScene.viewport.zoom, targetScene.viewport.pan, morphDuration));
+    }
+
+    // C. Nodes (move + crossfade)
+    animations.push(this.#animateNodes(analysis, targetPositions, targetScales, morphDuration, crossfadeTiming));
+
+    // D. Edges (tween + crossfade)
+    animations.push(this.#animateEdges(analysis, targetScene, morphDuration, crossfadeTiming));
+
+    await Promise.all(animations);
+    await waitForStep('[2.4] Parallel animations complete — before cleanup');
+
+    // 2.5: Cleanup ghosts and their stylesheet rules
+    this.#removeGhostStylesheetRules();
+    this.#ghostOperator.cleanup();
+    this.#finalizeRealElements(analysis);
+
+    // 2.5b: Update stylesheet for moveOnly nodes with scale changes
+    await this.#commitMoveOnlyScales(analysis.nodes.moveOnly, targetScales, targetScene);
+
+    // 2.6: Background fade-in (sequential mode only)
+    if (bgTiming === 'sequential') {
+      await this.#backgroundOperator.fadeInBackground();
+    }
+
+    // Update node/edge data to reflect new state (deferred from setup)
+    this.#commitNodeData(analysis);
+    this.#commitEdgeData(analysis, targetScene);
+
+    await this.#delay(morphDelay);
+  }
+
+  // ==========================================================================
+  // HELPERS
+  // ==========================================================================
+
+  #getMorphTiming(): { morphDuration: number; morphDelay: number; crossfadeTiming: CrossfadeTiming } {
+    const [duration, delay] = getSetting('transition.morphDuration') as [number, number];
+    const overlapPercent = getSetting('transition.morphCrossfadeOverlap') as number;
+    return {
+      morphDuration: duration,
+      morphDelay: delay,
+      crossfadeTiming: calculateCrossfadeTiming(overlapPercent, duration)
+    };
+  }
+
+  /**
+   * Hide real crossfade elements and update stylesheet to new design.
+   * Also adds ghost stylesheet rules so both ghosts and real nodes are
+   * styled via the stylesheet. Only opacity is set as a bypass.
+   * Node data updates are deferred to #commitNodeData after animation.
+   */
+  async #setupRealElementsForCrossfade(
+    analysis: TransitionAnalysis,
+    targetScene: Scene
+  ): Promise<void> {
+    const themeId = targetScene.themeId || 'dark';
+
+    // 1. Clear all inline bypasses and hide real crossfade elements.
+    this.#cy.startBatch();
+    for (const change of analysis.nodes.crossfade) {
+      const node = this.#cy.getElementById(change.nodeId);
+      if (node.length > 0) {
+        node.removeStyle();
+        node.style('opacity', 0);
+      }
+    }
+    for (const change of analysis.edges.crossfade) {
+      const edge = this.#cy.getElementById(change.edgeId);
+      if (edge.length > 0) {
+        edge.removeStyle();
+        edge.style('opacity', 0);
+      }
+    }
+    this.#cy.endBatch();
+
+    // 2. Build combined stylesheet: real nodes (new design) + ghosts (old design)
+    const currentStylesheet = (this.#cy.style() as any).json();
+
+    // DIAG: log per-edge rules in current stylesheet
+    if (isDebug('d_ghost')) {
+      for (const change of analysis.edges.crossfade) {
+        const sel = `edge[id = "${change.edgeId}"]`;
+        const rule = currentStylesheet.find((r: any) => r.selector === sel);
+        console.log(`[d_ghost] ${change.edgeId}: currentRule=`, rule ? rule.style : 'NONE');
+      }
+    }
+    const stylesheetNodes = analysis.nodes.crossfade
+      .map(c => ({
+        nodeId: c.nodeId,
+        nodeData: graphStore.nodes.find(n => n.id === c.nodeId)!,
+        design: c.newDesign,
+        scale: c.newScale
+      }))
+      .filter(n => !!n.nodeData);
+
+    let updatedStylesheet = await StyleGenerator.addNodesToStylesheet(
+      currentStylesheet,
+      stylesheetNodes,
+      themeId
+    );
+
+    // Update base 'edge' rule to target theme (for tween edges that rely on it)
+    const baseEdgeRule = StyleGenerator.generateEdgeStyle(themeId);
+    const baseEdgeIndex = updatedStylesheet.findIndex((r: any) => r.selector === 'edge');
+    if (baseEdgeIndex !== -1) {
+      updatedStylesheet[baseEdgeIndex] = baseEdgeRule;
+    }
+
+    for (const change of analysis.edges.crossfade) {
+      const newStyle = StyleGenerator.generateEdgeStyleForId(
+        change.edgeId,
+        change.newParams,
+        themeId
+      );
+      updatedStylesheet = StyleGenerator.updateEdgeInStylesheet(
+        updatedStylesheet,
+        change.edgeId,
+        newStyle
+      );
+    }
+
+    // Update per-edge stylesheet rules for tween edges (new target style)
+    for (const edgeId of analysis.edges.tween) {
+      const targetDesign = targetScene.edges?.[edgeId]?.design;
+      const newStyle = StyleGenerator.generateEdgeStyleForId(edgeId, targetDesign, themeId);
+      updatedStylesheet = StyleGenerator.updateEdgeInStylesheet(
+        updatedStylesheet,
+        edgeId as any,
+        newStyle
+      );
+    }
+
+    // Add ghost rules AFTER existing rules so they aren't overridden
+    // by the base 'edge' selector (Cytoscape: later rules win)
+    const ghostRules = this.#ghostOperator.getStylesheetRules();
+    updatedStylesheet = [...updatedStylesheet, ...ghostRules];
+
+    // Append central/selected rules at the very end (must win over per-node rules)
+    // Filter out any existing central/selected rules first to avoid duplicates
+    updatedStylesheet = updatedStylesheet.filter(
+      (r: any) =>
+        r.selector !== 'node[?centralNode]' &&
+        r.selector !== 'node:selected' &&
+        r.selector !== 'node[?centralNode]:selected'
+    );
+    updatedStylesheet = [
+      ...updatedStylesheet,
+      ...StyleGenerator.buildCentralAndSelectedRules(themeId)
+    ];
+
+    // 3. Apply combined stylesheet and reveal ghosts
+    // DIAG: log ghost rules and per-edge rules in final stylesheet
+    if (isDebug('d_ghost')) {
+      for (const change of analysis.edges.crossfade) {
+        const realSel = `edge[id = "${change.edgeId}"]`;
+        const realRule = updatedStylesheet.find((r: any) => r.selector === realSel);
+        console.log(`[d_ghost] ${change.edgeId}: finalRule=`, realRule ? realRule.style : 'NONE');
+
+        const ghostId = this.#ghostOperator.getGhostFor(change.edgeId)?.id();
+        if (ghostId) {
+          const ghostSel = `edge[id = "${ghostId}"]`;
+          const ghostRule = updatedStylesheet.find((r: any) => r.selector === ghostSel);
+          console.log(`[d_ghost] ${change.edgeId}: ghostId=${ghostId} ghostRule=`, ghostRule ? JSON.stringify(ghostRule.style) : 'NONE');
+        } else {
+          console.log(`[d_ghost] ${change.edgeId}: NO GHOST FOUND`);
+        }
+      }
+    }
+    this.#cy.style().fromJson(updatedStylesheet).update();
+    this.#ghostOperator.revealGhosts();
+
+    // DIAG: log computed style after update (both real and ghost)
+    if (isDebug('d_ghost')) {
+      for (const change of analysis.edges.crossfade) {
+        const edge = this.#cy.getElementById(change.edgeId);
+        console.log(`[d_ghost] ${change.edgeId}: REAL AFTER color=${edge.style('line-color')} curve=${edge.style('curve-style')} opacity=${edge.style('opacity')}`);
+
+        const ghost = this.#ghostOperator.getGhostFor(change.edgeId);
+        if (ghost?.length > 0) {
+          console.log(`[d_ghost] ${change.edgeId}: GHOST AFTER color=${ghost.style('line-color')} curve=${ghost.style('curve-style')} opacity=${ghost.style('opacity')}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Ensure all crossfade and tween elements are finalized after animation.
+   * Removes inline overrides so stylesheet takes control.
+   */
+  #finalizeRealElements(analysis: TransitionAnalysis): void {
+    this.#cy.startBatch();
+    for (const change of analysis.nodes.crossfade) {
+      this.#cy.getElementById(change.nodeId).removeStyle('opacity');
+    }
+    for (const change of analysis.edges.crossfade) {
+      this.#cy.getElementById(change.edgeId).removeStyle('opacity');
+    }
+    // Remove tween animation bypasses so stylesheet rules take over
+    for (const edgeId of analysis.edges.tween) {
+      this.#cy.getElementById(edgeId).removeStyle('line-color width line-opacity target-arrow-color');
+    }
+    this.#cy.endBatch();
+  }
+
+  /** Remove ghost stylesheet rules after animation. */
+  #removeGhostStylesheetRules(): void {
+    const stylesheet = (this.#cy.style() as any).json();
+    const cleaned = stylesheet.filter(
+      (r: any) => !r.selector?.includes('ghost_')
+    );
+    this.#cy.style().fromJson(cleaned).update();
+  }
+
+  /**
+   * Commit node data (design/scale) after animations are done.
+   * Deferred from setup to avoid conflicting with animation.
+   */
+  #commitNodeData(analysis: TransitionAnalysis): void {
+    this.#cy.startBatch();
+    for (const change of analysis.nodes.crossfade) {
+      const node = this.#cy.getElementById(change.nodeId);
+      if (node.length > 0) {
+        node.data('design', change.newDesign);
+        node.data('scale', change.newScale);
+        node.removeStyle('width height');
+      }
+    }
+    this.#cy.endBatch();
+  }
+
+  /**
+   * Update stylesheet for moveOnly nodes whose scale changed.
+   * Must run BEFORE removeStyle('width height') so the node falls back
+   * to the correct stylesheet dimensions instead of the old ones.
+   */
+  async #commitMoveOnlyScales(
+    moveOnlyNodes: NodeId[],
+    targetScales: Record<NodeId, number>,
+    targetScene: Scene
+  ): Promise<void> {
+    const themeId = targetScene.themeId || 'dark';
+    let stylesheet = (this.#cy.style() as any).json();
+    const changed: { nodeId: NodeId; newScale: number }[] = [];
+
+    for (const nodeId of moveOnlyNodes) {
+      const node = this.#cy.getElementById(nodeId);
+      if (node.length === 0) continue;
+
+      const oldScale = node.data('scale') || 1.0;
+      const newScale = targetScales[nodeId] || 1.0;
+      if (oldScale === newScale) continue;
+
+      const nodeData = graphStore.nodes.find(n => n.id === nodeId);
+      if (!nodeData) continue;
+
+      const design = node.data('design');
+      stylesheet = await StyleGenerator.updateNodeInStylesheet(
+        stylesheet, nodeId, nodeData, design, newScale, themeId
+      );
+      changed.push({ nodeId, newScale });
+    }
+
+    if (changed.length > 0) {
+      this.#cy.style().fromJson(stylesheet).update();
+
+      this.#cy.startBatch();
+      for (const { nodeId, newScale } of changed) {
+        const node = this.#cy.getElementById(nodeId);
+        node.data('scale', newScale);
+        node.removeStyle('width height');
+        if (isDebug('d_transition')) {
+          console.log(`[d_transition] moveOnly ${nodeId}: stylesheet updated, scale committed to ${newScale}, width=${node.width().toFixed(1)}`);
+        }
+      }
+      this.#cy.endBatch();
+    }
+  }
+
+  /**
+   * Commit edge design data after animations are done.
+   * Ensures cyEdge.data('design') matches the target scene so graphSaver
+   * persists the correct design when it next syncs.
+   */
+  #commitEdgeData(analysis: TransitionAnalysis, targetScene: Scene): void {
+    this.#cy.startBatch();
+    for (const change of analysis.edges.crossfade) {
+      const edge = this.#cy.getElementById(change.edgeId);
+      if (edge.length > 0) {
+        edge.data('design', change.newParams);
+      }
+    }
+    // Also commit data for tween edges (color/width changes)
+    for (const edgeId of analysis.edges.tween) {
+      const edge = this.#cy.getElementById(edgeId);
+      if (edge.length > 0) {
+        const newDesign = targetScene.edges?.[edgeId]?.design ?? null;
+        edge.data('design', newDesign);
+      }
+    }
+    this.#cy.endBatch();
+  }
+
+  async #animateNodes(
+    analysis: TransitionAnalysis,
+    targetPositions: TargetPositions,
+    targetScales: Record<NodeId, number>,
+    duration: number,
+    timing: CrossfadeTiming
+  ): Promise<void> {
+    const promises: Promise<void>[] = [];
+
+    // 1. Move-only nodes: animate position (and scale if changed)
+    for (const nodeId of analysis.nodes.moveOnly) {
+      const node = this.#cy.getElementById(nodeId);
+      if (node.length === 0) continue;
+
+      const targetPos = targetPositions[nodeId];
+      if (!targetPos) continue;
+
+      const oldScale = node.data('scale') || 1.0;
+      const newScale = targetScales[nodeId] || 1.0;
+      const animProps: any = { position: targetPos };
+
+      if (oldScale !== newScale) {
+        const ratio = newScale / oldScale;
+        animProps.style = {
+          width: node.width() * ratio,
+          height: node.height() * ratio
+        };
+        if (isDebug('d_transition')) {
+          console.log(`[d_transition] moveOnly ${nodeId}: scale ${oldScale}→${newScale}, width ${node.width().toFixed(1)}→${(node.width() * ratio).toFixed(1)}, height ${node.height().toFixed(1)}→${(node.height() * ratio).toFixed(1)}`);
+        }
+      }
+
+      promises.push(this.#runAnimation(node, animProps, duration));
+    }
+
+    // 2. Crossfade nodes: movement + opacity run in PARALLEL via .animation().play()
+    //    (cy.animate() queues, so we must use .animation().play() for parallel)
+    for (const change of analysis.nodes.crossfade) {
+      const realNode = this.#cy.getElementById(change.nodeId);
+      const targetPos = targetPositions[change.nodeId];
+      const ghost = this.#ghostOperator.getGhostFor(change.nodeId);
+
+      // Ghost: move full duration + fade out
+      if (ghost.length > 0 && targetPos) {
+        const moveGhost = ghost.animation(
+          { position: targetPos },
+          { duration, easing: 'ease-in-out-cubic' }
+        );
+        const fadeOutGhost = ghost.animation(
+          { style: { opacity: 0 } },
+          { duration: timing.fadeOutDuration, easing: 'ease-in' }
+        );
+        moveGhost.play();
+        fadeOutGhost.play();
+        promises.push(moveGhost.promise() as Promise<void>);
+      }
+
+      // Real: move full duration + delayed fade in
+      if (realNode.length > 0 && targetPos) {
+        const moveReal = (realNode as any).animation(
+          { position: targetPos },
+          { duration, easing: 'ease-in-out-cubic' }
+        );
+        moveReal.play();
+        promises.push(moveReal.promise() as unknown as Promise<void>);
+        promises.push(this.#delayedFadeIn(realNode, timing.fadeInDelay, timing.fadeInDuration));
+      }
+    }
+
+    await Promise.all(promises);
+  }
+
+  async #animateEdges(
+    analysis: TransitionAnalysis,
+    targetScene: Scene,
+    duration: number,
+    timing: CrossfadeTiming
+  ): Promise<void> {
+    const promises: Promise<void>[] = [];
+    const themeId = targetScene.themeId || 'dark';
+
+    // 1. Tween edges: animate color, width, opacity
+    for (const edgeId of analysis.edges.tween) {
+      const edge = this.#cy.getElementById(edgeId);
+      if (edge.length === 0) continue;
+
+      const targetDesign = targetScene.edges?.[edgeId]?.design;
+      const targetStyle = StyleGenerator.generateEdgeStyleForId(edgeId, targetDesign, themeId);
+
+      const animStyle = {
+        'line-color': targetStyle['line-color'],
+        'width': targetStyle['width'],
+        'line-opacity': targetStyle['line-opacity'] ?? 1,
+        'target-arrow-color': targetStyle['target-arrow-color']
+      };
+
+      promises.push(this.#runAnimation(edge, { style: animStyle }, duration));
+    }
+
+    // 2. Crossfade edges: ghost fades out, real fades in (using .delay().animate())
+    for (const change of analysis.edges.crossfade) {
+      const ghostEdge = this.#ghostOperator.getGhostFor(change.edgeId);
+      const realEdge = this.#cy.getElementById(change.edgeId);
+
+      if (ghostEdge.length > 0) {
+        promises.push(this.#runAnimation(
+          ghostEdge, { style: { opacity: 0 } }, timing.fadeOutDuration
+        ));
+      }
+      if (realEdge.length > 0) {
+        promises.push(this.#delayedFadeIn(
+          realEdge, timing.fadeInDelay, timing.fadeInDuration
+        ));
+      }
+    }
+
+    await Promise.all(promises);
+  }
+
+  async #animateViewport(zoom: number, pan: {x:number, y:number}, duration: number): Promise<void> {
+     return new Promise(resolve => {
+       this.#cy.animate({
+         zoom, pan
+       }, {
+         duration,
+         complete: () => resolve()
+       });
+     });
+  }
+
+  // Central node styling is handled by transition.ts after all phases complete.
+  // No #unlockCentralNode needed here — avoids double-application.
+
+  #runAnimation(ele: any, params: any, duration: number): Promise<void> {
+    return new Promise(resolve => {
+      ele.animate(params, {
+        duration,
+        easing: 'ease-in-out-cubic',
+        complete: () => resolve()
+      });
+    });
+  }
+
+  /** Wait, then fade element from opacity 0 → 1. Uses .animation().play() for clean timing. */
+  #delayedFadeIn(ele: any, delayMs: number, fadeDuration: number): Promise<void> {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        const fadeIn = ele.animation(
+          { style: { opacity: 1 } },
+          { duration: fadeDuration, easing: 'ease-out' }
+        );
+        fadeIn.play();
+        fadeIn.promise().then(resolve);
+      }, delayMs);
+    });
+  }
+
+  async #delay(ms: number): Promise<void> {
+    if (ms <= 0) return;
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ==========================================================================
+  // BACKGROUND DELEGATIONS (used by PhaseOrchestrator)
+  // ==========================================================================
+
+  async loadBackground(scene: Scene): Promise<void> {
+    return this.#backgroundOperator.loadBackground(scene);
+  }
+
+  clearBackground(): void {
+    this.#backgroundOperator.clearBackground();
+  }
+}
+

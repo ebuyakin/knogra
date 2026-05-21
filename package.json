@@ -1,0 +1,43 @@
+{
+  "name": "knogra",
+  "version": "0.1.0",
+  "description": "An AI-assisted web client for constructing and exploring knowledge graphs with memory-palace-like navigation and mind-mapping capabilities",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "type-check": "tsc --noEmit",
+    "deps": "node .ws/deps/generate-deps.js",
+    "tutorial": "tsx scripts/tutorial/generate-tutorial.mjs"
+  },
+  "keywords": [
+    "knowledge-graph",
+    "mind-mapping",
+    "visualization",
+    "ai-assisted",
+    "memory-palace"
+  ],
+  "author": "Knogra",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^1.37.0",
+    "@upstash/redis": "^1.38.0",
+    "cytoscape": "^3.33.1",
+    "d3": "^7.8.5",
+    "d3-force": "^3.0.0",
+    "dexie": "^4.2.1",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/d3": "^7.4.3",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "dependency-cruiser": "^17.3.10",
+    "eslint": "^8.56.0",
+    "tsx": "^4.22.3",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12"
+  }
+}

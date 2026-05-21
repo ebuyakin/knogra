@@ -1,0 +1,231 @@
+/**
+ * Chat Panel Styles
+ */
+
+/* Quick Actions Bar */
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.quick-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.quick-action-btn:hover {
+  background: #30363d;
+  border-color: #484f58;
+}
+
+.quick-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quick-action-btn:disabled:hover {
+  background: #21262d;
+  border-color: #30363d;
+}
+
+/* Dimmed AI input when no API key */
+.chat-input.ai-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Hint messages (non-error guidance) */
+.message.hint .message-content {
+  color: #8b949e;
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* Notes */
+.message.note {
+  border-top: 1px solid #21262d;
+  padding-top: 6px;
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+
+.note-header {
+  font-size: 11px;
+  color: #484f58;
+  margin-bottom: 4px;
+}
+
+.note-content {
+  color: #8b949e;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Note editor (active editing state) */
+.note-editor {
+  border-top: 1px solid #30363d;
+}
+
+.note-input {
+  width: 100%;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #e6edf3;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.note-input:focus {
+  border-color: #58a6ff;
+}
+
+.note-input::placeholder {
+  color: #484f58;
+}
+
+.quick-action-icon {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.quick-action-label {
+  font-weight: 500;
+}
+
+/* Message content styling */
+.message.assistant .message-content {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Headers */
+.message-content h2,
+.message-content h3,
+.message-content h4 {
+  margin: 0.8em 0 0.4em 0;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.message-content h2 { font-size: 1.3em; }
+.message-content h3 { font-size: 1.15em; }
+.message-content h4 { font-size: 1em; }
+
+/* Paragraphs */
+.message-content p {
+  margin: 0.5em 0;
+}
+
+/* Lists */
+.message-content ul,
+.message-content ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.message-content li {
+  margin: 0.25em 0;
+}
+
+/* Code */
+.message-content code {
+  background: #0d1117;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+  color: #79c0ff;
+}
+
+.message-content pre {
+  background: #0d1117;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.message-content pre code {
+  background: none;
+  padding: 0;
+  color: #c9d1d9;
+}
+
+/* Links */
+.message-content a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.message-content a:hover {
+  text-decoration: underline;
+}
+
+/* Bold and italic */
+.message-content strong {
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.message-content em {
+  font-style: italic;
+}
+
+/* Tables */
+.message-content table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  width: 100%;
+  font-size: 13px;
+}
+
+.message-content th,
+.message-content td {
+  border: 1px solid #30363d;
+  padding: 6px 10px;
+}
+
+.message-content th {
+  background: #161b22;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.message-content td {
+  background: #0d1117;
+}
+
+.message-content tr:hover td {
+  background: #161b22;
+}
+
+/* MathJax equations - force smaller size */
+.message-content mjx-container,
+.message-content mjx-container[jax="SVG"],
+.message-content mjx-container svg {
+  font-size: 14px !important;
+  max-width: 100%;
+}
+
+.message-content mjx-container[display="true"] {
+  margin: 0.5em 0;
+  display: block;
+  overflow-x: auto;
+}

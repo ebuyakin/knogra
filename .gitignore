@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+
+# Generated reports
+reports/
+playwright-report/
+test-results/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Workspace files
+*.code-workspace
+
+# Personal notes
+dev-notes.md
+
+# Local dev workspace (diagnostics, snapshots, chat logs, dependency outputs)
+.ws/
+
+# Internal dev process docs (journals, session handoffs, agent prompts)
+.github/project-journal.md
+.github/project-journals/
+.github/session-handoff.md
+.github/session-handoffs/
+.github/common-mistakes.md
+.github/agents/
+.github/prompts/
+
+# Release plan (working document)
+docs/release-plan.md
+
+# Generated tutorial output (publish via knogra-graphs repo, not tracked here)
+scripts/tutorial/tutorial.knogra
+scripts/tutorial/tutorial-report.md
+
+# Guides, study, experiments, and templates
+guides/
+
+# Dev scripts — track source, ignore generated/binary outputs
+scripts/tutorial/tutorial-graph/
+scripts/tutorial/*.knogra
+
+# Dependency analysis generated outputs
+.ws/deps/outputs/

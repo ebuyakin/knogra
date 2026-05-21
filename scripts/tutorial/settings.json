@@ -1,0 +1,176 @@
+{
+  "fold": {
+    "collapseDuration": 300,
+    "collapseDelayBetweenLayers": 0,
+    "collapseEdgeFadeDelay": 1500,
+    "expandDuration": 600,
+    "expandEdgeFadeDelay": 300,
+    "easingCollapse": "ease-in",
+    "easingExpand": "ease-out",
+    "minRadiusMultiplier": 1,
+    "expandShowAllEdges": true,
+    "collapseRemoveAll": false
+  },
+  "transition": {
+    "transitionMode": "animated",
+    "departureEdgesFadeOut": [
+      500,
+      200
+    ],
+    "departureLayerDuration": [
+      400,
+      0
+    ],
+    "departureLayerStagger": [
+      200,
+      0
+    ],
+    "departureCentralZoomOut": [
+      400,
+      200
+    ],
+    "morphDuration": [
+      700,
+      200
+    ],
+    "morphCrossfadeOverlap": 0,
+    "sharedBgFadeOut": [
+      400,
+      200
+    ],
+    "sharedBgFadeIn": [
+      400,
+      200
+    ],
+    "arrivalLayerDuration": [
+      400,
+      0
+    ],
+    "arrivalLayerStagger": [
+      200,
+      0
+    ],
+    "arrivalEdgesFadeIn": [
+      400,
+      200
+    ],
+    "openBgFadeIn": [
+      400,
+      200
+    ],
+    "openCentralFlyIn": [
+      400,
+      200
+    ],
+    "openCentralZoomIn": [
+      400,
+      200
+    ],
+    "openLayerDuration": [
+      400,
+      0
+    ],
+    "openLayerStagger": [
+      100,
+      0
+    ],
+    "openEdgesFadeIn": [
+      400,
+      200
+    ],
+    "closeLayerDuration": [
+      400,
+      0
+    ],
+    "closeLayerStagger": [
+      100,
+      0
+    ],
+    "closeCentralFadeOut": [
+      400,
+      0
+    ],
+    "departureEdgeTiming": "parallel",
+    "sharedBackgroundTiming": "parallel",
+    "arrivalEdgeTiming": "parallel",
+    "openEdgeMode": "parallel",
+    "openFitPadding": 50
+  },
+  "ai": {
+    "provider": "gemini",
+    "geminiModel": "gemini-3-flash-preview",
+    "openrouterModel": "anthropic/claude-sonnet-4.6",
+    "webSearchEnabled": true,
+    "thinkingLevel": "low",
+    "chatScrollPosition": "top",
+    "responseLanguage": "",
+    "shelfPreviewScale": 0.8,
+    "shelfPreviewOpacity": 0.7,
+    "shelfPreviewGrayscale": 30,
+    "shelfExitDuration": 1000,
+    "shelfPauseBetween": 1000,
+    "shelfEnterDuration": 1000,
+    "shelfRemovalDuration": 1000,
+    "shelfRemovalPause": 1000,
+    "shelfCollapseDuration": 1000,
+    "shelfAdditionDuration": 1000
+  },
+  "node": {
+    "inheritDesignFromSelected": true,
+    "inheritDesignForConnected": true,
+    "defaultDesign": "default-node",
+    "shelfDesignWithEquation": "equation-compact-node",
+    "shelfDesignBasic": "default-node"
+  },
+  "edge": {
+    "defaultColor": "#7d8590",
+    "defaultOpacity": 1,
+    "defaultWidth": 2,
+    "defaultCurveStyle": "bezier",
+    "defaultArrowShape": "triangle",
+    "defaultArrowScale": 1,
+    "bezierControlDistances": [
+      -100
+    ],
+    "bezierControlWeights": [
+      0.5
+    ],
+    "segmentRadii": [
+      10,
+      10
+    ],
+    "taxiRadius": 15,
+    "taxiDirection": "auto"
+  },
+  "customTheme": {
+    "baseTheme": "default",
+    "canvasColor": "",
+    "canvasVignetteStrength": "",
+    "canvasVignetteSpread": "",
+    "canvasVignetteBlur": "",
+    "canvasVignetteColor": "",
+    "canvasVignetteColorOpacity": "",
+    "nodeBackground": "",
+    "nodeOpacity": "",
+    "nodeTextColor": "",
+    "nodeBorderColor": "",
+    "nodeBorderWidth": "",
+    "centralBorderColor": "",
+    "selectedBorderColor": "",
+    "centralSelectedBorderColor": "",
+    "shadowOffsetX": "",
+    "shadowOffsetY": "",
+    "shadowBlur": "",
+    "shadowOpacity": "",
+    "shadowColor": "",
+    "nodeVignetteStrength": "",
+    "nodeVignetteSpread": "",
+    "nodeVignetteBlur": "",
+    "nodeVignetteColor": "",
+    "edgeColor": "",
+    "edgeArrowColor": ""
+  },
+  "interaction": {
+    "doubleClickNode": "edit"
+  }
+}

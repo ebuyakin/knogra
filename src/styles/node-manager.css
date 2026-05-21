@@ -1,0 +1,266 @@
+/**
+ * Node Manager Dialog Styles
+ * Uses GitHub dark theme palette for consistency with other overlays
+ */
+
+.node-manager-dialog {
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 8px;
+  padding: 0;
+  background: var(--bg-secondary, #161b22);
+  color: var(--text-primary, #e6edf3);
+  width: 1040px;
+  max-width: 95vw;
+  height: 80vh;
+  max-height: 80vh;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  
+  /* Position will be set by JavaScript */
+  position: fixed;
+  margin: 0;
+}
+
+.node-manager-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.node-manager-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.node-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+}
+
+.node-manager-header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.node-manager-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #8b949e);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.node-manager-close:hover {
+  color: var(--text-primary, #e6edf3);
+}
+
+.node-manager-search {
+  padding: 12px 20px;
+}
+
+.node-manager-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  background: var(--bg-tertiary, #1c2128);
+  color: var(--text-primary, #e6edf3);
+  font-size: 14px;
+}
+
+.node-manager-search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary, #238636);
+}
+
+.node-manager-table-container {
+  flex: 1;
+  overflow-y: scroll;
+  padding: 0;
+}
+
+/* Dark scrollbar styling */
+.node-manager-table-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.node-manager-table-container::-webkit-scrollbar-track {
+  background: var(--bg-secondary, #161b22);
+}
+
+.node-manager-table-container::-webkit-scrollbar-thumb {
+  background: var(--border-primary, #30363d);
+  border-radius: 4px;
+}
+
+.node-manager-table-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary, #8b949e);
+}
+
+.node-manager-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.node-manager-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary, #161b22);
+  z-index: 1;
+}
+
+.node-manager-table th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+  font-weight: 500;
+  color: var(--text-secondary, #8b949e);
+}
+
+.node-manager-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary, #21262d);
+}
+
+.node-manager-table tbody tr:hover {
+  background: var(--bg-tertiary, #1c2128);
+}
+
+.node-manager-table tbody tr.selected {
+  background: var(--bg-tertiary, #1c2128);
+}
+
+/* Column widths */
+.col-checkbox { width: 40px; text-align: center; }
+.col-title { width: auto; }
+.col-node-id { 
+  width: 160px; 
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-secondary, #8b949e);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-scenes { width: 60px; text-align: center; }
+.col-connections { width: 60px; text-align: center; }
+.col-own-scene { width: 50px; text-align: center; }
+.col-status { width: 60px; text-align: center; }
+.col-in-scene { width: 50px; text-align: center; }
+
+/* Anchor marker */
+.anchor-marker {
+  color: var(--accent-warning, #d29922);
+  font-weight: bold;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Checkbox styling */
+.node-manager-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Indicator dots */
+.indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-primary, #30363d);
+}
+
+.indicator.active {
+  background: var(--accent-primary, #238636);
+}
+
+/* Scene integrity status dot (Status column) */
+.scene-status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  cursor: help;
+}
+.scene-status-dot.grey { background: var(--border-primary, #30363d); }
+.scene-status-dot.green { background: var(--accent-primary, #238636); }
+.scene-status-dot.red { background: var(--accent-danger, #f85149); }
+
+/* Status filter row (below grid, above footer) */
+.node-manager-status-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-primary, #30363d);
+  color: var(--text-secondary, #8b949e);
+  font-size: 13px;
+}
+.node-manager-status-filter select {
+  background: var(--bg-tertiary, #1c2128);
+  color: var(--text-primary, #e6edf3);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.node-manager-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary, #30363d);
+}
+
+.node-manager-selection-count {
+  color: var(--text-secondary, #8b949e);
+  font-size: 13px;
+}
+
+.node-manager-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.node-manager-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+  background: var(--bg-tertiary, #1c2128);
+  color: var(--text-primary, #e6edf3);
+}
+
+.node-manager-actions button:hover:not(:disabled) {
+  background: var(--border-primary, #30363d);
+}
+
+.node-manager-actions button:disabled {
+  color: var(--text-secondary, #8b949e);
+  cursor: not-allowed;
+}
+
+/* Copy List button width stays constant across label swap (Copy List / Copied! / Copy failed) */
+.btn-copy-list {
+  min-width: 110px;
+  text-align: center;
+}
+
+/* Empty state */
+.node-manager-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary, #8b949e);
+}

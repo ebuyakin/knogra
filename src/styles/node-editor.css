@@ -1,0 +1,282 @@
+/* =============================================================================
+   Node Editor - 3-section layout: fixed top, scrollable middle, fixed bottom
+   ============================================================================= */
+
+.node-editor-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.node-editor-dialog {
+  position: absolute;
+  background-color: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 8px;
+  min-width: 480px;
+  max-width: 600px;
+  height: 85vh;
+  color: var(--text-primary, #e6edf3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* =============================================================================
+   TOP SECTION - Fixed header + core fields
+   ============================================================================= */
+
+.node-editor-top {
+  flex-shrink: 0;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+}
+
+.node-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  cursor: move;
+  user-select: none;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-secondary, #7d8590);
+}
+
+/* =============================================================================
+   MIDDLE SECTION - Scrollable, contains foldable sections
+   ============================================================================= */
+
+.node-editor-middle {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 20px;
+}
+
+/* =============================================================================
+   BOTTOM SECTION - Fixed metadata + buttons
+   ============================================================================= */
+
+.node-editor-bottom {
+  flex-shrink: 0;
+  padding: 8px 20px 16px;
+  border-top: 1px solid var(--border-primary, #30363d);
+}
+
+.node-editor-meta {
+  font-size: 11px;
+  color: var(--text-secondary, #8b949e);
+  font-family: monospace;
+  margin-bottom: 10px;
+}
+
+.node-editor-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.node-editor-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.node-editor-btn-cancel {
+  background-color: transparent;
+  border: 1px solid var(--border-primary, #30363d);
+  color: var(--text-primary, #e6edf3);
+}
+
+.node-editor-btn-save {
+  background-color: var(--accent-blue, #58a6ff);
+  border: none;
+  color: #0d1117;
+  font-weight: 500;
+}
+
+/* =============================================================================
+   FOLDABLE SECTIONS
+   ============================================================================= */
+
+.node-editor-section {
+  margin-bottom: 4px;
+}
+
+.node-editor-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 0;
+}
+
+.node-editor-section-header:hover .node-editor-section-title {
+  color: var(--text-primary, #e6edf3);
+}
+
+.node-editor-section-toggle {
+  font-size: 8px;
+  width: 12px;
+  text-align: center;
+  color: var(--text-secondary, #7d8590);
+  transition: transform 0.15s;
+}
+
+.node-editor-section.collapsed .node-editor-section-toggle {
+  transform: rotate(-90deg);
+}
+
+.node-editor-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-blue, #58a6ff);
+  transition: color 0.15s;
+}
+
+.node-editor-section-content {
+  padding-bottom: 4px;
+}
+
+.node-editor-section.collapsed .node-editor-section-content {
+  display: none;
+}
+
+/* =============================================================================
+   FORM FIELDS
+   ============================================================================= */
+
+.node-editor-field {
+  margin-bottom: 10px;
+}
+
+.node-editor-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #7d8590);
+}
+
+.node-editor-input,
+.node-editor-textarea,
+.node-editor-select {
+  width: 100%;
+  padding: 8px;
+  background-color: var(--bg-tertiary, #1c2128);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.node-editor-textarea {
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+}
+
+/* Slider */
+.node-editor-slider-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.node-editor-slider-value {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-primary, #e6edf3);
+}
+
+.node-editor-slider {
+  width: 100%;
+  accent-color: var(--accent-blue, #58a6ff);
+}
+
+/* Scale numeric input */
+.node-editor-scale-input {
+  width: 70px;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-primary, #e6edf3);
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 3px;
+  text-align: left;
+}
+
+/* Color control (inline row) */
+.node-editor-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.node-editor-color-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #7d8590);
+  min-width: 100px;
+}
+
+.node-editor-color-input {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.node-editor-color-reset {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 3px;
+  color: var(--text-secondary, #7d8590);
+  cursor: pointer;
+}
+
+.node-editor-color-reset:hover {
+  color: var(--text-primary, #e6edf3);
+  border-color: var(--text-secondary, #7d8590);
+}
+
+/* Combined color + opacity row (single line) */
+.node-editor-color-opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.node-editor-opacity-slider {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--accent-blue, #58a6ff);
+}
+
+.node-editor-opacity-value {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-secondary, #7d8590);
+  min-width: 30px;
+  text-align: right;
+}

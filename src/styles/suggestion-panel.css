@@ -1,0 +1,153 @@
+/**
+ * Suggestion Panel Styles
+ * Horizontal shelf for AI-suggested nodes
+ */
+
+.suggestion-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0d1117;
+  box-sizing: border-box;
+}
+
+.suggestion-shelf {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-sizing: border-box;
+}
+
+.suggestion-shelf::-webkit-scrollbar {
+  height: 6px;
+}
+
+.suggestion-shelf::-webkit-scrollbar-track {
+  background: #161b22;
+}
+
+.suggestion-shelf::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+
+.suggestion-shelf::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+.suggestion-empty {
+  color: #484f58;
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Suggestion Item */
+.suggestion-item {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.suggestion-item:hover {
+  background: #21262d;
+  transform: translateY(-2px);
+}
+
+.suggestion-item:active {
+  transform: translateY(0);
+}
+
+.suggestion-node-preview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  min-height: 40px;
+}
+
+.suggestion-node-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+/* Badge for include_existing items */
+.shelf-badge-existing {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background-color: #2d333b;
+  color: #8b949e;
+  font-size: 10px;
+  font-family: 'Times New Roman', serif;
+  font-style: italic;
+  padding: 1px 4px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Restore full opacity/color on hover */
+.suggestion-item:hover .suggestion-node-preview img {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+/* ============================================================================
+   SHELF ANIMATIONS
+   ============================================================================ */
+
+/* Exit animation: slide left + fade out */
+.suggestion-shelf.shelf-exiting {
+  animation: shelfExit var(--shelf-exit-duration, 150ms) ease-out forwards;
+}
+
+@keyframes shelfExit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50px);
+  }
+}
+
+/* Enter animation: handled by inline styles in JS for reliable state control */
+
+/* Item placement animation: fly up + fade */
+.suggestion-item.item-placing {
+  animation: itemPlace var(--shelf-item-duration, 150ms) ease-out forwards;
+}
+
+@keyframes itemPlace {
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(1.1);
+  }
+}
+
+/* Item dismiss animation: fade + shrink */
+.suggestion-item.item-dismissing {
+  animation: itemDismiss var(--shelf-item-duration, 150ms) ease-out forwards;
+}
+
+@keyframes itemDismiss {
+  to {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}

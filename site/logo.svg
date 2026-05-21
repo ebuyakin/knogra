@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="72" height="72">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#58a6ff"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <!-- Enclosing circle -->
+  <circle cx="36" cy="36" r="34" fill="none" stroke="url(#grad)" stroke-width="2" stroke-opacity="0.6"/>
+  <!-- Edges -->
+  <line x1="36" y1="22" x2="20" y2="42" stroke="url(#grad)" stroke-width="2" stroke-opacity="0.5"/>
+  <line x1="36" y1="22" x2="52" y2="38" stroke="url(#grad)" stroke-width="2" stroke-opacity="0.5"/>
+  <line x1="36" y1="22" x2="48" y2="54" stroke="url(#grad)" stroke-width="2" stroke-opacity="0.5"/>
+  <line x1="20" y1="42" x2="48" y2="54" stroke="url(#grad)" stroke-width="2" stroke-opacity="0.4"/>
+  <line x1="52" y1="38" x2="48" y2="54" stroke="url(#grad)" stroke-width="2" stroke-opacity="0.4"/>
+  <!-- Nodes -->
+  <circle cx="36" cy="22" r="7" fill="url(#grad)"/>
+  <circle cx="20" cy="42" r="5" fill="url(#grad)" opacity="0.85"/>
+  <circle cx="52" cy="38" r="5.5" fill="url(#grad)" opacity="0.9"/>
+  <circle cx="48" cy="54" r="4.5" fill="url(#grad)" opacity="0.8"/>
+</svg>

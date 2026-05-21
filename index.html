@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/site/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Knogra — Think in graphs. Learn visually. An AI-assisted knowledge graph explorer." />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://knogra.io/" />
+    <meta property="og:title" content="Knogra — Knowledge Graph Explorer" />
+    <meta property="og:description" content="Think in graphs. Learn visually. An AI-assisted knowledge graph explorer for visual learners, researchers, and the deeply curious." />
+    <meta property="og:image" content="https://knogra.io/og-image.jpg" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Knogra — Knowledge Graph Explorer" />
+    <meta name="twitter:description" content="Think in graphs. Learn visually. An AI-assisted knowledge graph explorer for visual learners, researchers, and the deeply curious." />
+    <meta name="twitter:image" content="https://knogra.io/og-image.jpg" />
+
+    <title>Knogra — Knowledge Graph Explorer</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #0d1117;
+        color: #e6edf3;
+        line-height: 1.6;
+      }
+      a { color: #58a6ff; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+    </style>
+    <link rel="stylesheet" href="/site/landing.css" />
+  </head>
+  <body>
+    <!-- Hero -->
+    <section id="hero">
+      <canvas id="hero-canvas"></canvas>
+      <div class="hero-content">
+      <div class="hero-title">
+        <img src="/site/logo.svg" alt="Knogra logo" class="hero-logo" />
+        <h1>Knogra</h1>
+      </div>
+        <p class="tagline">Think in graphs. Learn visually.</p>
+        <p class="subtitle">An AI-assisted knowledge graph explorer for visual learners, researchers, and the deeply curious.</p>
+        <div class="hero-actions">
+          <a href="#benefits" class="btn btn-secondary">Learn More</a>
+          <button id="hero-tutorial-btn" class="btn btn-secondary" title="Open the Tutorial graph in the app — explore Knogra through a real example">Tutorial</button>
+          <a href="#library" class="btn btn-secondary" title="Explore the collection of graphs on various topics">Library</a>
+          <a href="/app/" class="btn btn-secondary" title="Open your workspace and start working with your current graph or create a new one">Launch App</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Benefits -->
+    <section id="benefits">
+      <h2>What You Can Build</h2>
+      <div class="benefits-grid">
+        <div class="benefit-card">
+          <h3>Mind Maps</h3>
+          <p>Free-form thinking with structure when you need it. Not locked into rigid hierarchies.</p>
+        </div>
+        <div class="benefit-card">
+          <h3>Concept Maps</h3>
+          <p>Labeled relationships between ideas. See how concepts connect, not just how they nest.</p>
+        </div>
+        <div class="benefit-card">
+          <h3>Memory Palace</h3>
+          <p>Navigate scenes spatially. Visual transitions build the associations that stick.</p>
+        </div>
+        <div class="benefit-card">
+          <h3>Equation Collections</h3>
+          <p>LaTeX cheat sheets that live inside your knowledge graph. Math where it belongs.</p>
+        </div>
+        <div class="benefit-card">
+          <h3>Semantic Networks</h3>
+          <p>Nodes are concepts, edges are relationships. Classic knowledge representation, modern interface.</p>
+        </div>
+        <div class="benefit-card">
+          <h3>Long-Distance Associations</h3>
+          <p>Connect ideas across domains — chemistry to cooking, math to music. No folder boundaries.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Graph Library -->
+    <section id="library">
+      <h2>Explore Graphs</h2>
+      <div id="library-grid" class="library-grid">
+        <p class="library-status">Loading graph library...</p>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section>
+      <h2 id="features">Features</h2>
+      <div class="features-grid">
+        <div class="feature">
+          <h3>Scenes & Transitions</h3>
+          <p>Each concept gets a focused view. Navigate between them with smooth, spatial animations.</p>
+        </div>
+        <div class="feature">
+          <h3>AI Assistant</h3>
+          <p>Context-aware chat that understands your graph. Suggests new nodes and connections.</p>
+        </div>
+        <div class="feature">
+          <h3>Design System</h3>
+          <p>20+ node designs, multiple themes, background images with color grading. Beautiful by default.</p>
+        </div>
+        <div class="feature">
+          <h3>Paths</h3>
+          <p>Create guided tours through your knowledge — for revision, presentation, or storytelling.</p>
+        </div>
+        <div class="feature">
+          <h3>Fold & Unfold</h3>
+          <p>Collapse branches to focus. Expand when you're ready to explore deeper.</p>
+        </div>
+        <div class="feature">
+          <h3>LaTeX Support</h3>
+          <p>First-class math rendering inside nodes. Equations are knowledge too.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Privacy -->
+    <section id="privacy">
+      <h2>Your Data, Your Rules</h2>
+      <div class="privacy-content">
+        <p>Everything stays in your browser. No server, no account, no tracking.</p>
+        <p>IndexedDB storage. Works offline. Export and import anytime.</p>
+        <p>Bring your own AI API key — calls go directly to your chosen provider.</p>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div class="footer-content">
+        <div class="footer-links">
+          <a href="/app/">Launch App</a>
+          <a href="https://github.com/ebuyakin/knogra">GitHub</a>
+          <a href="#privacy">Privacy</a>
+        </div>
+        <p class="copyright">© 2026 Knogra · MIT License</p>
+      </div>
+    </footer>
+
+    <script type="module" src="/site/hero-animation.ts"></script>
+    <script type="module" src="/site/catalog.ts"></script>
+  </body>
+</html>
