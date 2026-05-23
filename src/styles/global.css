@@ -52,26 +52,6 @@ body {
   overflow: hidden;
 }
 
-/* Layout */
-#app {
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-#graph-container {
-  flex: 1;
-  width: 100%;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-}
-
-#info-panel {
-  padding: var(--spacing-lg);
-  background-color: var(--bg-primary);
-  border-top: 1px solid var(--border-primary);
-}
 
 /* Typography */
 h1, h2, h3, h4, h5, h6 {
