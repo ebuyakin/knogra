@@ -226,14 +226,6 @@ footer {
   color: #484f58;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .hero-content h1 { font-size: 2.5rem; }
-  .tagline { font-size: 1.2rem; }
-  .benefits-grid { grid-template-columns: 1fr; }
-  .features-grid { grid-template-columns: 1fr; }
-  .library-grid { grid-template-columns: 1fr; }
-}
 
 /* Graph Library */
 .library-grid {
@@ -314,7 +306,31 @@ footer {
   background: rgba(88, 166, 255, 0.08);
 }
 
+.library-mobile-note {
+  display: none;
+}
+
+.hero-mobile-note {
+  display: none;
+}
+
 .library-status {
   color: #484f58;
   font-size: 0.9rem;
+}
+
+/* Responsive — must be at end of file so media query rules are not overridden by base styles above */
+@media (max-width: 1024px) {
+  .hero-content h1 { font-size: 2.5rem; padding-right: 0; }
+  .tagline { font-size: 1.2rem; }
+  section { padding: 48px 20px; }
+  .benefits-grid { grid-template-columns: 1fr; }
+  .features-grid { grid-template-columns: 1fr; }
+  .library-grid { grid-template-columns: 1fr; }
+  .hero-actions { flex-wrap: wrap; justify-content: center; }
+  .hero-actions .btn { min-width: 140px; }
+  .graph-card-btn { display: none; }
+  .library-mobile-note { display: block; text-align: center; color: #8b949e; font-size: 0.9rem; margin-top: -24px; margin-bottom: 32px; }
+  .hero-mobile-note { display: block; font-size: 0.85rem; color: #8b949e; margin-top: 16px; }
+  .app-link { display: none !important; }
 }

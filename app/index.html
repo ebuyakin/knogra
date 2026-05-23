@@ -14,6 +14,48 @@
         padding: 0;
         overflow: hidden;
       }
+
+      #mobile-message {
+        display: none;
+      }
+
+      @media (max-width: 1024px) {
+        #app { display: none !important; }
+        #mobile-message {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          background: #0d1117;
+          padding: 32px;
+          text-align: center;
+        }
+        .mobile-message-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+          max-width: 320px;
+        }
+        .mobile-message-content h1 {
+          font-size: 1.8rem;
+          font-weight: 700;
+          color: #e6edf3;
+          margin: 0;
+        }
+        .mobile-message-content p {
+          font-size: 1rem;
+          color: #8b949e;
+          line-height: 1.6;
+          margin: 0;
+        }
+        .mobile-home-link {
+          font-size: 0.9rem;
+          color: #58a6ff;
+          text-decoration: none;
+          margin-top: 8px;
+        }
+      }
       
       #app {
         display: grid;
@@ -126,6 +168,16 @@
       </div>
       <div id="suggestions"></div>
     </div>
+
+    <div id="mobile-message">
+      <div class="mobile-message-content">
+        <img src="/site/logo.svg" alt="Knogra" width="56" height="56" />
+        <h1>Knogra</h1>
+        <p>Knogra is a desktop application.<br>Please open it on a computer for the full experience.</p>
+        <a href="/" class="mobile-home-link">← Back to knogra.io</a>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

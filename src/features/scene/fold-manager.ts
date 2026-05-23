@@ -206,8 +206,31 @@ export class FoldManager {
     const cy = this.#cy;
     const cyNode = cy.getElementById(rootNodeId);
 
-    // Build edge list from the database (hidden nodes may not have edges in cy)
-    const edgesForTraversal = graphStore.edges;
+    // Dev-only assertion: every hidden node in foldedMap must be in cy with display:none.
+    // If this fires, our assumption that cy.edges() covers the scene's edge set is
+    // broken — investigate before proceeding.
+    if (import.meta.env.DEV) {
+      for (const id of foldedMap.keys()) {
+        const n = cy.getElementById(id);
+        if (n.length === 0) {
+          console.warn(`[FoldManager.unfold] hidden node ${id} missing from cy (root: ${rootNodeId})`);
+        } else if (n.style('display') !== 'none') {
+          console.warn(`[FoldManager.unfold] hidden node ${id} not display:none (root: ${rootNodeId})`);
+        }
+      }
+    }
+
+    // Use SCENE-level edges (cy.edges()), not graph-level (graphStore.edges).
+    // graphStore may contain edges that exist in the graph database but are not
+    // part of this scene; treating them as parent-child relationships during
+    // the unfold split would attribute the wrong descendants to the wrong
+    // revealed children (see DBG-260523-2). All hidden nodes are in cy with
+    // display:none and their edges are in cy with display:none, so cy.edges()
+    // is a complete and correct view of the scene's edge set.
+    const edgesForTraversal = cy.edges().map(e => ({
+      sourceId: e.source().id() as NodeId,
+      targetId: e.target().id() as NodeId
+    }));
 
     // Find direct children of root within the folded set
     const directChildren: NodeId[] = [];
@@ -241,7 +264,7 @@ export class FoldManager {
     const remainingKeys = new Set(remainingHidden.keys());
     const newFoldRoots: NodeId[] = [];
     for (const childId of directChildren) {
-      const childDescendants = this.#findDescendantsInSet(childId, remainingKeys);
+      const childDescendants = this.#findDescendantsInSet(childId, remainingKeys, edgesForTraversal);
       if (childDescendants.size > 0) {
         const childMap = new Map<NodeId, { dx: number; dy: number }>();
         // Recompute offsets relative to the new fold root (the child)
@@ -662,16 +685,24 @@ export class FoldManager {
 
   /**
    * Find descendants of a node within a specific set of node IDs.
-   * BFS traversal using database edges, constrained to candidateSet.
+   * BFS traversal using the supplied edge list (scene-level), constrained to candidateSet.
+   *
+   * Edges must come from cy.edges() (scene scope), NOT graphStore.edges (graph scope).
+   * Using graph-level edges here would pull in relationships from other scenes and
+   * misattribute hidden nodes to the wrong revealed parent.
    */
-  #findDescendantsInSet(nodeId: NodeId, candidateSet: Set<NodeId>): Set<NodeId> {
+  #findDescendantsInSet(
+    nodeId: NodeId,
+    candidateSet: Set<NodeId>,
+    edges: { sourceId: NodeId; targetId: NodeId }[]
+  ): Set<NodeId> {
     const result = new Set<NodeId>();
     const queue: NodeId[] = [nodeId];
     const visited = new Set<NodeId>([nodeId]);
 
     while (queue.length > 0) {
       const current = queue.shift()!;
-      for (const edge of graphStore.edges) {
+      for (const edge of edges) {
         if (edge.sourceId === current && candidateSet.has(edge.targetId) && !visited.has(edge.targetId)) {
           result.add(edge.targetId);
           visited.add(edge.targetId);
