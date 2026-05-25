@@ -226,6 +226,16 @@ footer {
   color: #484f58;
 }
 
+.footer-featured {
+  margin-bottom: 20px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.footer-featured:hover {
+  opacity: 1;
+}
+
 
 /* Graph Library */
 .library-grid {
