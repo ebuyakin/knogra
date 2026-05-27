@@ -161,15 +161,43 @@ Each external directory has its own form fields and audience. Copy here is **per
 
 ---
 
-## B4. AlternativeTo — *(not yet submitted)*
+## B4. AlternativeTo — *(working draft, not yet submitted)*
 
 **URL:** https://alternativeto.net/software/add/
-**Audience:** Users searching for alternatives to specific tools (e.g. Obsidian, Roam, Miro)
-**Approach:** Position as alternative to Obsidian Graph view, Miro, Roam
+**Audience:** Users searching for alternatives to specific tools
+**Approach:** Position as alternative to **Obsidian** (graph-minded PKM users frustrated that the graph view is decorative) and **XMind** (mind-mappers hitting the single-hierarchy ceiling). Secondary: Roam, Logseq, Miro, Coggle, MindMeister.
 
-- **Tagline:** *(TBD)*
-- **Short description:** *(TBD)*
-- **Long description:** *(TBD)*
+**Suggest Knogra as alternative to:** Obsidian, XMind (primary); add others post-approval.
+
+**Submission fields:**
+
+- **Name:** Knogra
+- **Website:** https://knogra.io
+- **Platform:** Web
+- **License:** Free (Open Source) — MIT
+- **Icon:** `public/knogra-icon.svg` (280×280, transparent, blue→purple gradient graph mark)
+
+**Short description** (= A2, ~155 chars):
+
+> Beyond mind maps. Knogra is a knowledge graph in motion — flowing scenes tame complexity, anchor ideas in spatial memory. As you learn, the map draws itself.
+
+**Long description** *(working draft — pending review)*:
+
+> Looking for something between a mind map and a graph view? Knogra is a knowledge graph editor that fixes the gaps in both.
+>
+> Mind mapping tools (XMind, Coggle, MindMeister) force every idea into a single hierarchy radiating from one root. PKM graph views (Obsidian, Logseq, Roam) show the whole network at once as a flat, unreadable hairball — useful to look at, not to work inside. Knogra takes a third path.
+>
+> **One graph, many scenes.** Knogra stores a single underlying graph, but the workspace is organized into Scenes — focused views around a chosen central node, each with its own visible subset, layout, and background. Scenes are created automatically as you work; their look and arrangement get refined as a byproduct of thinking, not as a separate "now make it pretty" step. The same node can appear in many scenes (sized large in one, peripheral in another), but the graph behind them is one. Large graphs decompose into a connected network of small, readable scenes. No hairball at any scale.
+>
+> **Animated transitions — ideas stick because you move through them.** Clicking a node morphs the scene: shared nodes glide to their new positions, irrelevant ones fade, new ones appear. The continuity of motion is what makes spatial memory work — you remember a concept by where you came from and where you went next, not by which folder it lives in.
+>
+> **An AI that reads structure, not just text.** Standard chatbots are blind to the spatial relationships in your work. Knogra's assistant reads the graph itself — which concepts are central, which are isolated, where the missing links are. It proposes nodes and edges that fit your structure; you accept them with a click from a shelf, accelerating graph construction without giving up control. Bring your own API key — Gemini direct, or OpenRouter for all other providers. Calls go straight from your browser to the provider.
+>
+> **Local, free, open source.** No account, no cloud, no telemetry. Everything lives in your browser. Graphs export and import as human-readable JSON — you can store them, share them, or publish them in the Knogra library. MIT licensed.
+
+**Tags:**
+
+`knowledge-graph` · `mind-map` · `concept-map` · `pkm` · `visual-thinking` · `ai-assistant` · `local-first` · `open-source` · `semantic-network` · `spatial-memory`
 
 ---
 
@@ -197,7 +225,7 @@ Supporting material referenced across sections — keywords, app facts, friction
 | Account required | No |
 | Platform | Web (any modern browser) |
 | Data storage | Local (IndexedDB, no server) |
-| AI | Bring your own API key (OpenAI, Anthropic, etc.) |
+| AI | Bring your own API key (Google Gemini or OpenRouter) |
 | License | MIT |
 | GitHub | https://github.com/ebuyakin/knogra |
 
