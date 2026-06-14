@@ -1,7 +1,10 @@
 # Background System Design
 
-> Types: `src/core/background-types.ts` (part of the type system — see `main-types.ts` for index)
-> Related docs: `theme-architecture.md` (theme integration), `node-design-system.md` (node rendering)
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Canonical source for scene background canvas behavior and background rendering.  
+> **Types:** `src/core/background-types.ts`  
+> **Related:** [Documentation map](README.md), [Theme architecture](theme-architecture.md), [Node design system](node-design-system.md)
 
 ## Purpose & Motivation
 

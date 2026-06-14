@@ -1,7 +1,10 @@
 # Telemetry Design
 
-> Implementation: `src/utils/telemetry.ts` (client), `api/ping.ts` (server)
-> Related: `docs/release-plan.md` Phase 4
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Canonical source for telemetry scope, privacy constraints, and event semantics.  
+> **Implementation:** `src/utils/telemetry.ts` (client), `api/ping.ts` (server)  
+> **Related:** [Documentation map](README.md), [Release plan](release-plan.md)
 
 ## Purpose
 

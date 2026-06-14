@@ -16,7 +16,9 @@ import { graphStore } from '../../storage/graph-store';
 import { getAppMode, isEditMode, setAppMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
 import { exportWorkspace, showImportDialog, newWorkspace } from '../../storage/workspace';
+import { exportMermaidGraph, showImportMermaidDialog } from '../../storage/mermaid';
 import { SettingsModal } from './settings-modal';
+import { generateEquationFromPrompt } from '../../ai/equation-generator';
 
 export interface MenuItem {
   label: string;
@@ -326,6 +328,9 @@ export class ContextMenu {
           design: designUpdates,
           scale: scaleUpdate
         });
+      },
+      async (request) => {
+        return generateEquationFromPrompt(request);
       }
     );
   }
@@ -536,12 +541,7 @@ export class ContextMenu {
           }
         }
       },
-      {
-        label: 'Settings (⌘,)',
-        action: () => {
-          new SettingsModal().open();
-        }
-      },
+      this.#createModeMenuItem(),
       {
         label: 'Workspace',
         children: [
@@ -556,10 +556,28 @@ export class ContextMenu {
           {
             label: 'Import (⌘O)',
             action: () => showImportDialog()
+          },
+          {
+            label: 'Mermaid',
+            children: [
+              {
+                label: 'Export',
+                action: () => { exportMermaidGraph(); }
+              },
+              {
+                label: 'Import',
+                action: () => { showImportMermaidDialog(); }
+              }
+            ]
           }
         ]
       },
-      this.#createModeMenuItem()
+      {
+        label: 'Settings (⌘,)',
+        action: () => {
+          new SettingsModal().open();
+        }
+      }
     ];
 
     this.#showMenu(items, position);

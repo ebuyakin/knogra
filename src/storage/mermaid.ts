@@ -1,0 +1,388 @@
+import type { Edge, EdgeId, Node, NodeId, Scene, SceneId } from '../core/main-types';
+
+import { AppStateManager } from './app-state';
+import { exportWorkspace } from './workspace';
+import { hasMeaningfulWorkspaceData } from './workspace/dialogs';
+import { clearAllData, exportGraphData, importGraphData } from './workspace/transfer';
+import {
+  buildMermaidMarkdown,
+  parseMermaidFlowchart,
+  type ParsedMermaidEdge,
+  type ParsedMermaidGraph,
+  type ParsedMermaidNode,
+} from './mermaid/flowchart';
+import {
+  showMermaidImportSelectionDialog,
+  type MermaidImportSelection,
+} from './mermaid/import-dialog';
+import { getMermaidSceneSlice } from './mermaid/scene-slice';
+
+interface MermaidImportOptions {
+  exportFirst: boolean;
+}
+
+interface ImportedGraphData {
+  nodes: Node[];
+  edges: Edge[];
+  scenes: Scene[];
+  sceneId: SceneId;
+}
+
+interface ImportedEdgeRecord {
+  sourceMermaidId: string;
+  targetMermaidId: string;
+  edge: Edge;
+}
+
+interface Position {
+  x: number;
+  y: number;
+}
+
+export async function exportMermaidGraph(): Promise<void> {
+  const graph = await exportGraphData();
+  const nodes = graph.nodes.filter(isNode);
+  const edges = graph.edges.filter(isEdge);
+
+  if (nodes.length === 0) {
+    alert('There are no nodes to export.');
+    return;
+  }
+
+  const markdown = buildMermaidMarkdown(nodes, edges);
+  const dateStamp = new Date().toISOString().split('T')[0];
+  downloadText(markdown, `knogra-mermaid-${dateStamp}.md`);
+}
+
+export async function showImportMermaidDialog(): Promise<void> {
+  const hasExistingData = await hasMeaningfulWorkspaceData();
+  const options = await confirmMermaidImport(hasExistingData);
+  if (!options) return;
+
+  if (options.exportFirst) {
+    await exportWorkspace();
+  }
+
+  const file = await pickMermaidFile();
+  if (!file) return;
+
+  try {
+    const source = await file.text();
+    const parsed = parseMermaidFlowchart(source);
+    const selection = await showMermaidImportSelectionDialog(parsed);
+    if (!selection) return;
+    const imported = createImportedGraph(parsed, selection);
+
+    await clearAllData(true);
+    AppStateManager.clearAppState();
+    await importGraphData({ nodes: imported.nodes, edges: imported.edges, scenes: imported.scenes }, []);
+    AppStateManager.saveLastSceneId(imported.sceneId);
+    AppStateManager.requestFitOnNextOpen(imported.sceneId);
+    window.location.reload();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'The Mermaid file could not be imported.';
+    alert(`Failed to import Mermaid flowchart. ${message}`);
+  }
+}
+
+function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImportSelection): ImportedGraphData {
+  const now = new Date();
+  const prefix = `mermaid-${Date.now().toString(36)}`;
+  const sceneSlice = getMermaidSceneSlice(
+    parsed,
+    selection.anchorMermaidId,
+    selection.depth,
+    selection.allLevels
+  );
+  const idByMermaidId = new Map<string, NodeId>();
+
+  const nodes = parsed.nodes.map((node, index): Node => {
+    const id = `n-${prefix}-${index + 1}` as NodeId;
+    idByMermaidId.set(node.mermaidId, id);
+    return {
+      id,
+      title: node.title,
+      tags: [],
+      properties: {},
+      createdAt: now,
+      updatedAt: now,
+      attachments: [],
+      aiArtifacts: [],
+      isAnchor: node.mermaidId === selection.anchorMermaidId,
+    };
+  });
+
+  const edgeRecords = parsed.edges.map((edge, index): ImportedEdgeRecord => {
+    const sourceId = idByMermaidId.get(edge.sourceMermaidId);
+    const targetId = idByMermaidId.get(edge.targetMermaidId);
+    if (!sourceId || !targetId) {
+      throw new Error(`Edge ${edge.sourceMermaidId} → ${edge.targetMermaidId} references an unknown node.`);
+    }
+    const importedEdge: Edge = {
+      id: `e-${prefix}-${index + 1}` as EdgeId,
+      title: edge.title,
+      sourceId,
+      targetId,
+      tags: [],
+      properties: {},
+      createdAt: now,
+      updatedAt: now,
+    };
+    return {
+      sourceMermaidId: edge.sourceMermaidId,
+      targetMermaidId: edge.targetMermaidId,
+      edge: importedEdge,
+    };
+  });
+
+  const edges = edgeRecords.map(record => record.edge);
+
+  const centralNodeId = idByMermaidId.get(selection.anchorMermaidId);
+  if (!centralNodeId) throw new Error('Could not choose a central node.');
+
+  const sceneNodes = parsed.nodes.filter(node => sceneSlice.nodeIds.has(node.mermaidId));
+  const sceneEdges = edgeRecords.filter((_record, index) => sceneSlice.edgeIndexes.has(index));
+
+  const sceneId = `scene-${prefix}` as SceneId;
+  const scene: Scene = {
+    id: sceneId,
+    title: 'Mermaid import',
+    description: `Imported from a Mermaid flowchart. Anchor: ${selection.anchorMermaidId}. Depth: ${selection.depth}. Layout: ${selection.layout}.`,
+    centralNodeId,
+    nodes: layoutSceneNodes(
+      sceneNodes,
+      sceneEdges.map(record => ({
+        sourceMermaidId: record.sourceMermaidId,
+        targetMermaidId: record.targetMermaidId,
+        title: record.edge.title,
+        order: 0,
+      })),
+      selection.anchorMermaidId,
+      selection.layout,
+      idByMermaidId
+    ),
+    edges: Object.fromEntries(sceneEdges.map(record => [
+      record.edge.id,
+      { design: { id: 'default', params: {} } },
+    ])),
+    backgroundImages: [],
+    themeId: 'dark',
+    viewport: { zoom: 1, pan: getCyContainerCenter() },
+    foldedNodes: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  return { nodes, edges, scenes: [scene], sceneId };
+}
+
+function layoutSceneNodes(
+  nodes: ParsedMermaidNode[],
+  edges: ParsedMermaidEdge[],
+  centralMermaidId: string,
+  layout: MermaidImportSelection['layout'],
+  idByMermaidId: Map<string, NodeId>
+): Scene['nodes'] {
+  if (layout === 'top-down' || layout === 'left-right') {
+    return layoutSceneNodesFlow(nodes, edges, centralMermaidId, layout, idByMermaidId);
+  }
+
+  const distances = computeUndirectedDistances(nodes, edges, centralMermaidId);
+  const finiteDistances = [...distances.values()].filter(distance => Number.isFinite(distance));
+  const disconnectedDistance = (Math.max(0, ...finiteDistances) || 1) + 1;
+  const layers = new Map<number, ParsedMermaidNode[]>();
+
+  for (const node of nodes) {
+    const distance = distances.get(node.mermaidId) ?? disconnectedDistance;
+    const layer = Number.isFinite(distance) ? distance : disconnectedDistance;
+    const existing = layers.get(layer) ?? [];
+    existing.push(node);
+    layers.set(layer, existing);
+  }
+
+  const sceneNodes: Scene['nodes'] = {};
+  for (const [layer, layerNodes] of layers) {
+    const positions = positionsForLayer(layer, layerNodes.length);
+    layerNodes.forEach((node, index) => {
+      const nodeId = idByMermaidId.get(node.mermaidId);
+      if (!nodeId) return;
+      sceneNodes[nodeId] = {
+        position: positions[index],
+        scale: 1.0,
+        design: { id: 'default-node', params: {} },
+      };
+    });
+  }
+
+  return sceneNodes;
+}
+
+function layoutSceneNodesFlow(
+  nodes: ParsedMermaidNode[],
+  edges: ParsedMermaidEdge[],
+  centralMermaidId: string,
+  layout: 'top-down' | 'left-right',
+  idByMermaidId: Map<string, NodeId>
+): Scene['nodes'] {
+  const distances = computeUndirectedDistances(nodes, edges, centralMermaidId);
+  const reachable = new Set(distances.keys());
+  const fallbackDistance = (Math.max(0, ...distances.values()) || 1) + 1;
+  const layers = new Map<number, ParsedMermaidNode[]>();
+
+  for (const node of nodes) {
+    const layer = reachable.has(node.mermaidId) ? distances.get(node.mermaidId)! : fallbackDistance;
+    const existing = layers.get(layer) ?? [];
+    existing.push(node);
+    layers.set(layer, existing);
+  }
+
+  const sceneNodes: Scene['nodes'] = {};
+  for (const [layer, layerNodes] of layers) {
+    const positions = positionsForFlowLayer(layer, layerNodes.length, layout);
+    layerNodes.forEach((node, index) => {
+      const nodeId = idByMermaidId.get(node.mermaidId);
+      if (!nodeId) return;
+      sceneNodes[nodeId] = {
+        position: positions[index],
+        scale: 1.0,
+        design: { id: 'default-node', params: {} },
+      };
+    });
+  }
+
+  return sceneNodes;
+}
+
+function computeUndirectedDistances(
+  nodes: ParsedMermaidNode[],
+  edges: ParsedMermaidEdge[],
+  centralMermaidId: string
+): Map<string, number> {
+  const adjacency = new Map(nodes.map(node => [node.mermaidId, [] as string[]]));
+  for (const edge of edges) {
+    adjacency.get(edge.sourceMermaidId)?.push(edge.targetMermaidId);
+    adjacency.get(edge.targetMermaidId)?.push(edge.sourceMermaidId);
+  }
+
+  const distances = new Map<string, number>([[centralMermaidId, 0]]);
+  const queue = [centralMermaidId];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    const nextDistance = (distances.get(current) ?? 0) + 1;
+    for (const next of adjacency.get(current) ?? []) {
+      if (distances.has(next)) continue;
+      distances.set(next, nextDistance);
+      queue.push(next);
+    }
+  }
+
+  return distances;
+}
+
+function positionsForLayer(layer: number, count: number): Position[] {
+  if (layer === 0) return [{ x: 0, y: 0 }];
+  const radius = layer * 260;
+  return Array.from({ length: count }, (_unused, index): Position => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * index) / count;
+    const x = Math.round(Math.cos(angle) * radius);
+    const y = Math.round(Math.sin(angle) * radius);
+    return { x, y };
+  });
+}
+
+function positionsForFlowLayer(layer: number, count: number, layout: 'top-down' | 'left-right'): Position[] {
+  const primary = layer * 300;
+  const spacing = 340;
+  return Array.from({ length: count }, (_unused, index): Position => {
+    const secondary = Math.round((index - (count - 1) / 2) * spacing);
+    return layout === 'top-down'
+      ? { x: secondary, y: primary }
+      : { x: primary, y: secondary };
+  });
+}
+
+function confirmMermaidImport(hasExistingData: boolean): Promise<MermaidImportOptions | null> {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;';
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = 'position:absolute;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:420px;color:#e6edf3;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.5);';
+
+    const cyContainer = document.getElementById('cy');
+    const rect = cyContainer?.getBoundingClientRect();
+    if (rect) {
+      dialog.style.left = `${rect.left + rect.width / 2}px`;
+      dialog.style.top = `${rect.top + rect.height / 2}px`;
+      dialog.style.transform = 'translate(-50%, -50%)';
+    } else {
+      dialog.style.left = '50%';
+      dialog.style.top = '50%';
+      dialog.style.transform = 'translate(-50%, -50%)';
+    }
+    dialog.innerHTML = `
+      <h3 style="margin:0 0 12px; font-size:16px; font-weight:600;">Import Mermaid Flowchart</h3>
+      <p style="margin:0 0 16px; color:#8b949e; line-height:1.5;">
+        This will replace your current workspace graph with nodes and edges from a Mermaid flowchart.
+        ${hasExistingData ? 'Your current workspace will be lost unless you export it first.' : 'Continue?'}
+      </p>
+      ${hasExistingData ? `
+      <label style="display:flex; align-items:center; gap:8px; margin-bottom:20px; cursor:pointer;">
+        <input type="checkbox" id="mi-export" checked style="accent-color:#58a6ff;">
+        Export current workspace to a .knogra file first (recommended)
+      </label>` : ''}
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="mi-cancel" style="padding:6px 16px; border-radius:6px; border:1px solid #30363d;
+          background:none; color:#c9d1d9; cursor:pointer; font-size:13px;">Cancel</button>
+        <button id="mi-ok" style="padding:6px 16px; border-radius:6px; border:none;
+          background:#58a6ff; color:#fff; cursor:pointer; font-size:13px; font-weight:600;">Choose File</button>
+      </div>
+    `;
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    const close = (value: MermaidImportOptions | null): void => {
+      overlay.remove();
+      resolve(value);
+    };
+
+    dialog.querySelector('#mi-cancel')?.addEventListener('click', () => close(null));
+    dialog.querySelector('#mi-ok')?.addEventListener('click', () => {
+      const checkbox = dialog.querySelector('#mi-export') as HTMLInputElement | null;
+      close({ exportFirst: hasExistingData ? checkbox?.checked ?? false : false });
+    });
+  });
+}
+
+function pickMermaidFile(): Promise<File | null> {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    Object.assign(input, { type: 'file', accept: '.md,.mmd,.txt,text/markdown,text/plain' });
+    input.onchange = (): void => resolve(input.files?.[0] ?? null);
+    input.click();
+  });
+}
+
+function downloadText(content: string, filename: string): void {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  Object.assign(link, { href: url, download: filename });
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function getCyContainerCenter(): Position {
+  const element = document.getElementById('cy');
+  return {
+    x: (element?.clientWidth ?? window.innerWidth) / 2,
+    y: (element?.clientHeight ?? window.innerHeight) / 2,
+  };
+}
+
+function isNode(value: unknown): value is Node { const node = value as Partial<Node>; return typeof node.id === 'string' && typeof node.title === 'string'; }
+function isEdge(value: unknown): value is Edge { const edge = value as Partial<Edge>; return typeof edge.id === 'string' && typeof edge.sourceId === 'string' && typeof edge.targetId === 'string' && typeof edge.title === 'string'; }

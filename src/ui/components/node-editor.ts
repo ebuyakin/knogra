@@ -27,10 +27,32 @@ export type NodeEditorOnSave = (
   scaleUpdate: number
 ) => void;
 
+export interface NodeEditorEquationRequest {
+  title: string;
+  currentEquation: string;
+  prompt: string;
+}
+
+export interface NodeEditorEquationResult {
+  type: 'equation';
+  latex: string;
+}
+
+export interface NodeEditorEquationClarification {
+  type: 'clarification';
+  message: string;
+}
+
+export type NodeEditorOnGenerateEquation = (
+  request: NodeEditorEquationRequest
+) => Promise<NodeEditorEquationResult | NodeEditorEquationClarification>;
+
 export class NodeEditor {
   #modalElement: HTMLDivElement | null = null;
   #nodeId: NodeId | null = null;
   #onSave: NodeEditorOnSave | null = null;
+  #onGenerateEquation: NodeEditorOnGenerateEquation | null = null;
+  #containerRect: DOMRect | null = null;
   #isDragging = false;
   #dragOffsetX = 0;
   #dragOffsetY = 0;
@@ -40,10 +62,12 @@ export class NodeEditor {
     currentData: Node,
     currentDesign: { id: DesignId; params: Record<string, unknown> },
     context: NodeEditorContext,
-    onSave: NodeEditorOnSave
+    onSave: NodeEditorOnSave,
+    onGenerateEquation?: NodeEditorOnGenerateEquation
   ): void {
     this.#nodeId = nodeId;
     this.#onSave = onSave;
+    this.#onGenerateEquation = onGenerateEquation ?? null;
     this.#render(currentData, currentDesign, context);
   }
 
@@ -53,6 +77,8 @@ export class NodeEditor {
       this.#modalElement = null;
       this.#nodeId = null;
       this.#onSave = null;
+      this.#onGenerateEquation = null;
+      this.#containerRect = null;
     }
   }
 
@@ -66,6 +92,7 @@ export class NodeEditor {
     context: NodeEditorContext
   ): void {
     this.hide();
+    this.#containerRect = context.containerRect;
 
     const modal = this.#el('div', 'node-editor-modal');
     const dialog = this.#el('div', 'node-editor-dialog');
@@ -177,6 +204,29 @@ export class NodeEditor {
     }
     bottom.appendChild(meta);
 
+    const actionRow = this.#el('div', 'node-editor-action-row');
+    const equationActions = this.#el('div', 'node-editor-equation-actions');
+    if (this.#onGenerateEquation) {
+      const equationBtn = this.#text('button', this.#getEquationButtonLabel(equationInput.input.value)) as HTMLButtonElement;
+      equationBtn.className = 'node-editor-btn node-editor-btn-cancel';
+      equationBtn.title = 'Generate a LaTeX equation with AI';
+      equationBtn.addEventListener('click', () => {
+        this.#showEquationPromptDialog(
+          titleInput.input.value,
+          equationInput.input.value,
+          async (equation) => {
+            equationInput.input.value = equation;
+            equationBtn.textContent = this.#getEquationButtonLabel(equationInput.input.value);
+            equationInput.input.focus();
+          }
+        );
+      });
+      equationInput.input.addEventListener('input', () => {
+        equationBtn.textContent = this.#getEquationButtonLabel(equationInput.input.value);
+      });
+      equationActions.appendChild(equationBtn);
+    }
+
     const buttons = this.#el('div', 'node-editor-buttons');
     const cancelBtn = this.#text('button', 'Cancel') as HTMLButtonElement;
     cancelBtn.className = 'node-editor-btn node-editor-btn-cancel';
@@ -205,7 +255,8 @@ export class NodeEditor {
     });
 
     buttons.append(cancelBtn, saveBtn);
-    bottom.appendChild(buttons);
+    actionRow.append(equationActions, buttons);
+    bottom.appendChild(actionRow);
     dialog.appendChild(bottom);
 
     // ======================= EVENTS =======================
@@ -229,6 +280,116 @@ export class NodeEditor {
 
     titleInput.input.focus();
     titleInput.input.select();
+  }
+
+  #getEquationButtonLabel(equation: string): string {
+    return equation.trim() ? 'Replace Equation' : 'Add Equation';
+  }
+
+  #showEquationPromptDialog(
+    title: string,
+    currentEquation: string,
+    onEquationGenerated: (equation: string) => Promise<void>
+  ): void {
+    if (!this.#modalElement || !this.#onGenerateEquation) return;
+
+    const overlay = this.#el('div', 'node-editor-equation-overlay');
+    if (this.#containerRect) {
+      overlay.style.left = `${this.#containerRect.left}px`;
+      overlay.style.top = `${this.#containerRect.top}px`;
+      overlay.style.width = `${this.#containerRect.width}px`;
+      overlay.style.height = `${this.#containerRect.height}px`;
+    }
+    const dialog = this.#el('div', 'node-editor-equation-dialog');
+    dialog.addEventListener('click', (event) => event.stopPropagation());
+
+    const heading = this.#text('h3', currentEquation.trim() ? 'Replace Equation' : 'Add Equation');
+    heading.className = 'node-editor-equation-title';
+
+    const promptInput = this.#createTextarea(
+      'Prompt',
+      this.#buildEquationPrompt(title),
+      'Describe the equation you want',
+      5
+    );
+    promptInput.input.classList.add('node-editor-equation-prompt');
+
+    const error = this.#text('div', '');
+    error.className = 'node-editor-equation-error';
+
+    const footer = this.#el('div', 'node-editor-equation-footer');
+    const cancelBtn = this.#text('button', 'Cancel') as HTMLButtonElement;
+    cancelBtn.className = 'node-editor-btn node-editor-btn-cancel';
+    const generateBtn = this.#text('button', 'Generate') as HTMLButtonElement;
+    generateBtn.className = 'node-editor-btn node-editor-btn-save';
+
+    const close = (): void => overlay.remove();
+    const submit = async (): Promise<void> => {
+      const prompt = promptInput.input.value.trim();
+      if (!prompt) {
+        error.textContent = 'Prompt is required.';
+        return;
+      }
+
+      error.textContent = '';
+      generateBtn.disabled = true;
+      cancelBtn.disabled = true;
+      promptInput.input.disabled = true;
+      generateBtn.textContent = 'Generating...';
+
+      try {
+        const result = await this.#onGenerateEquation?.({ title, currentEquation, prompt });
+        if (!result) throw new Error('Equation generation is not available.');
+
+        if (result.type === 'clarification') {
+          error.textContent = result.message;
+          generateBtn.disabled = false;
+          cancelBtn.disabled = false;
+          promptInput.input.disabled = false;
+          generateBtn.textContent = 'Generate';
+          promptInput.input.focus();
+          return;
+        }
+
+        await onEquationGenerated(result.latex.trim());
+        close();
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : 'Could not generate equation.';
+        error.textContent = message;
+        generateBtn.disabled = false;
+        cancelBtn.disabled = false;
+        promptInput.input.disabled = false;
+        generateBtn.textContent = 'Generate';
+        promptInput.input.focus();
+      }
+    };
+
+    cancelBtn.addEventListener('click', close);
+    generateBtn.addEventListener('click', () => void submit());
+    overlay.addEventListener('click', close);
+    overlay.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        close();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        void submit();
+      }
+    });
+
+    footer.append(cancelBtn, generateBtn);
+    dialog.append(heading, promptInput.container, error, footer);
+    overlay.appendChild(dialog);
+    this.#modalElement.appendChild(overlay);
+    promptInput.input.focus();
+    promptInput.input.select();
+  }
+
+  #buildEquationPrompt(title: string): string {
+    const subject = title.trim() || 'this node';
+    return `Generate a LaTeX equation for "${subject}".`;
   }
 
   // ===========================================================================

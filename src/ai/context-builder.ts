@@ -4,7 +4,7 @@
  * Uses templates from config/prompts.ts
  */
 
-import type { NodeId, SceneId, Node, Scene } from '../core/main-types';
+import type { NodeId, SceneId, Node, Scene, Edge } from '../core/main-types';
 import { graphStore } from '../storage/graph-store';
 import { SYSTEM_PROMPT } from './prompts';
 import { getSetting } from '../config';
@@ -35,7 +35,7 @@ export interface SceneContext {
  * Build system prompt from scene context
  */
 export function buildSystemPrompt(context: SceneContext): string {
-  const { centralNodeId, sceneId, visibleNodeIds, navigationHistory, nodesWithChats } = context;
+  const { centralNodeId, sceneId, visibleNodeIds } = context;
 
   // Get central node
   const centralNode = graphStore.nodes.find(n => n.id === centralNodeId);
@@ -53,6 +53,8 @@ export function buildSystemPrompt(context: SceneContext): string {
   const visibleNodes = visibleNodeIds
     .map(id => graphStore.nodes.find(n => n.id === id))
     .filter((n): n is Node => n !== undefined);
+  const sceneNodeIds = new Set(visibleNodeIds);
+  const sceneEdges = getSceneEdges(scene, sceneNodeIds);
 
   // Build the prompt from sections
   const sections: string[] = [];
@@ -60,26 +62,19 @@ export function buildSystemPrompt(context: SceneContext): string {
   // Role
   sections.push(SYSTEM_PROMPT.role);
 
-  // Current situation
-  sections.push(renderCurrentConceptSection(centralNode, scene));
+  // Focus node
+  sections.push(renderCurrentConceptSection(centralNode));
 
-  // Connected concepts
+  // Current scene
+  sections.push(renderVisibleSceneSection(visibleNodes, centralNodeId, scene, sceneEdges));
+
+  // Directly connected nodes
   if (parents.length > 0 || children.length > 0) {
-    sections.push(renderConnectedConceptsSection(parents, children));
-  }
-
-  // Visible scene
-  if (visibleNodes.length > 1) {
-    sections.push(renderVisibleSceneSection(visibleNodes, centralNodeId));
+    sections.push(renderConnectedConceptsSection(parents, children, sceneNodeIds));
   }
 
   // Full knowledge graph (for dedup and include_existing)
   sections.push(renderKnowledgeGraphSection(visibleNodeIds));
-
-  // Learning journey
-  if (navigationHistory.length > 1 || nodesWithChats.length > 0) {
-    sections.push(renderLearningJourneySection(navigationHistory, nodesWithChats));
-  }
 
   // Action schema
   sections.push(SYSTEM_PROMPT.actionSchema);
@@ -103,7 +98,7 @@ export function buildSystemPrompt(context: SceneContext): string {
 // SECTION RENDERERS
 // ============================================================================
 
-function renderCurrentConceptSection(node: Node, scene: Scene | undefined): string {
+function renderCurrentConceptSection(node: Node): string {
   const data: Record<string, string> = {
     title: node.title
   };
@@ -127,73 +122,62 @@ function renderCurrentConceptSection(node: Node, scene: Scene | undefined): stri
     }
   }
 
-  if (scene?.description) {
-    data.sceneDescription = scene.description;
-  }
-
   return renderTemplate(SYSTEM_PROMPT.currentConceptTemplate, data);
 }
 
-function renderConnectedConceptsSection(parents: Node[], children: Node[]): string {
+function renderConnectedConceptsSection(
+  parents: Node[],
+  children: Node[],
+  sceneNodeIds: Set<NodeId>
+): string {
   const data: Record<string, string> = {};
 
   if (parents.length > 0) {
-    data.parents = parents.map(n => `- ${n.title}`).join('\n');
+    data.parents = parents.map(n => formatNodeForPrompt(n, { sceneNodeIds })).join('\n');
   }
 
   if (children.length > 0) {
-    data.children = children.map(n => `- ${n.title}`).join('\n');
+    data.children = children.map(n => formatNodeForPrompt(n, { sceneNodeIds })).join('\n');
   }
 
   return renderTemplate(SYSTEM_PROMPT.connectedConceptsTemplate, data);
 }
 
-function renderVisibleSceneSection(visibleNodes: Node[], centralNodeId: NodeId): string {
-  const nodeList = visibleNodes
-    .filter(n => n.id !== centralNodeId)
-    .map(n => {
-      const tags = n.tags?.length ? ` [${n.tags.join(', ')}]` : '';
-      return `- ${n.title}${tags}`;
-    })
-    .join('\n');
-
-  return renderTemplate(SYSTEM_PROMPT.visibleSceneTemplate, { visibleNodes: nodeList });
-}
-
-function renderLearningJourneySection(
-  navigationHistory: NodeId[],
-  nodesWithChats: NodeId[]
+function renderVisibleSceneSection(
+  visibleNodes: Node[],
+  centralNodeId: NodeId,
+  scene: Scene | undefined,
+  sceneEdges: Edge[]
 ): string {
-  const data: Record<string, string> = {};
+  const data: Record<string, string> = {
+    sceneContextStrength: calculateSceneContextStrength(visibleNodes, sceneEdges, centralNodeId)
+  };
 
-  if (navigationHistory.length > 1) {
-    const recentHistory = navigationHistory.slice(-5);
-    data.recentPath = recentHistory
-      .map(id => graphStore.nodes.find(n => n.id === id)?.title ?? id)
-      .join(' → ');
+  if (scene?.description) {
+    data.sceneDescription = scene.description;
   }
 
-  if (nodesWithChats.length > 0) {
-    data.nodesWithChats = nodesWithChats
-      .slice(0, 10)
-      .map(id => graphStore.nodes.find(n => n.id === id)?.title ?? id)
-      .join(', ');
+  if (visibleNodes.length > 0) {
+    data.sceneConcepts = visibleNodes
+      .map(n => formatNodeForPrompt(n, { centralNodeId }))
+      .join('\n');
   }
 
-  return renderTemplate(SYSTEM_PROMPT.learningJourneyTemplate, data);
+  if (sceneEdges.length > 0) {
+    data.sceneRelationships = sceneEdges
+      .map(formatSceneRelationship)
+      .join('\n');
+  }
+
+  return renderTemplate(SYSTEM_PROMPT.visibleSceneTemplate, data);
 }
 
 function renderKnowledgeGraphSection(visibleNodeIds: NodeId[]): string {
   const visibleSet = new Set(visibleNodeIds);
   const allNodes = graphStore.nodes;
 
-  const formatNode = (n: Node): string => {
-    const eq = n.properties?.equation;
-    return eq ? `- ${n.title} (${eq})` : `- ${n.title}`;
-  };
-
-  const inScene = allNodes.filter(n => visibleSet.has(n.id)).map(formatNode);
-  const notInScene = allNodes.filter(n => !visibleSet.has(n.id)).map(formatNode);
+  const inScene = allNodes.filter(n => visibleSet.has(n.id)).map(n => formatNodeForPrompt(n));
+  const notInScene = allNodes.filter(n => !visibleSet.has(n.id)).map(n => formatNodeForPrompt(n));
 
   const data: Record<string, string> = {};
   if (inScene.length > 0) data.inScene = inScene.join('\n');
@@ -257,4 +241,79 @@ function getConnectedNodes(nodeId: NodeId): { parents: Node[]; children: Node[] 
   }
   
   return { parents, children };
+}
+
+function getSceneEdges(scene: Scene | undefined, sceneNodeIds: Set<NodeId>): Edge[] {
+  if (!scene) return [];
+
+  return Object.keys(scene.edges)
+    .map(edgeId => graphStore.edges.find(edge => edge.id === edgeId))
+    .filter((edge): edge is Edge =>
+      edge !== undefined &&
+      sceneNodeIds.has(edge.sourceId) &&
+      sceneNodeIds.has(edge.targetId)
+    );
+}
+
+function calculateSceneContextStrength(
+  sceneNodes: Node[],
+  sceneEdges: Edge[],
+  centralNodeId: NodeId
+): string {
+  const nonFocusNodeCount = sceneNodes.filter(node => node.id !== centralNodeId).length;
+  if (nonFocusNodeCount === 0) {
+    return 'weak (focus node only)';
+  }
+
+  if (sceneEdges.length === 0) {
+    return nonFocusNodeCount <= 2
+      ? 'weak (sparse scene, no scene edges)'
+      : 'moderate (nodes present, no scene edges)';
+  }
+
+  const centralEdgeCount = sceneEdges.filter(edge =>
+    edge.sourceId === centralNodeId || edge.targetId === centralNodeId
+  ).length;
+
+  if (nonFocusNodeCount >= 4 && sceneEdges.length >= 3 && centralEdgeCount >= 2) {
+    return 'strong (detailed, relationship-rich scene)';
+  }
+
+  if (nonFocusNodeCount >= 2 && sceneEdges.length >= 1) {
+    return 'moderate (some local scene structure)';
+  }
+
+  return 'weak (limited scene structure)';
+}
+
+function formatNodeForPrompt(
+  node: Node,
+  options: { centralNodeId?: NodeId; sceneNodeIds?: Set<NodeId> } = {}
+): string {
+  const details: string[] = [];
+
+  if (options.centralNodeId === node.id) {
+    details.push('focus node');
+  }
+
+  if (options.sceneNodeIds) {
+    details.push(options.sceneNodeIds.has(node.id) ? 'in current scene' : 'not in current scene');
+  }
+
+  const equation = node.properties?.equation;
+  if (equation) {
+    details.push(String(equation));
+  }
+
+  const suffix = details.length > 0 ? ` (${details.join('; ')})` : '';
+  return `- ${node.title}${suffix}`;
+}
+
+function formatSceneRelationship(edge: Edge): string {
+  const sourceTitle = graphStore.nodes.find(node => node.id === edge.sourceId)?.title ?? edge.sourceId;
+  const targetTitle = graphStore.nodes.find(node => node.id === edge.targetId)?.title ?? edge.targetId;
+  const title = edge.title.trim();
+  return title
+    ? `- ${sourceTitle} -> ${targetTitle}: ${title}`
+    : `- ${sourceTitle} -> ${targetTitle}`;
 }

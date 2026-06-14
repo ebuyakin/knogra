@@ -1,5 +1,10 @@
 # Knogra — Marketing Raw Ideas
 
+> **Status:** Scratchpad  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Non-canonical brainstorming, rejected drafts, and notes-to-self. Approved copy should be promoted to [marketing.md](marketing.md).  
+> **Related:** [Documentation map](README.md), [Marketing copy](marketing.md)
+
 Scratchpad for brainstorming, rejected drafts, alternative angles, and notes-to-self.
 Material here is not canonical — promote to `marketing.md` once a version is approved.
 

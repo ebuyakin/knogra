@@ -21,6 +21,8 @@ interface AppState {
   lastSceneId?: SceneId;
   /** Persisted app mode (view/edit). Absent → default 'edit' on read. */
   appMode?: AppMode;
+  /** One-shot request to fit a scene after it is opened on startup. */
+  fitSceneOnNextOpen?: SceneId;
 }
 
 // ============================================================================
@@ -73,6 +75,25 @@ export class AppStateManager {
    */
   static saveLastSceneId(sceneId: SceneId): void {
     this.updateAppState({ lastSceneId: sceneId });
+  }
+
+  /**
+   * Request that the next startup fit this scene after opening it.
+   */
+  static requestFitOnNextOpen(sceneId: SceneId): void {
+    this.updateAppState({ fitSceneOnNextOpen: sceneId });
+  }
+
+  /**
+   * Consume the one-shot post-open fit request for a scene.
+   */
+  static consumeFitOnNextOpen(sceneId: SceneId): boolean {
+    const state = this.getAppState();
+    if (state.fitSceneOnNextOpen !== sceneId) return false;
+
+    const { fitSceneOnNextOpen: _fitSceneOnNextOpen, ...rest } = state;
+    localStorage.setItem(STATE_KEY, JSON.stringify(rest));
+    return true;
   }
 
   /**

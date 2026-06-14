@@ -225,7 +225,7 @@ async function renderMathJaxEquation(
  */
 function renderSVG(
   titleText: string,
-  typeText: string,
+  tagsText: string,
   equationData: {
     svgContent: string;
     width: number;
@@ -281,13 +281,13 @@ function renderSVG(
   
   // Calculate text widths
   const titleWidth = titleText.length * titleFontSize * 0.55;
-  const typeWidth = typeText.length * typeFontSize * 0.55;
+  const tagsWidth = tagsText.length * typeFontSize * 0.55;
   
   // Calculate node dimensions
   const contentWidth = Math.max(
     titleWidth + horizontalPadding * 2,
     equationData.width + horizontalPadding * 2,
-    typeWidth + horizontalPadding * 2,
+    tagsWidth + horizontalPadding * 2,
     minWidth
   );
   const middleHeight = equationData.height + verticalPadding * 2;
@@ -365,7 +365,7 @@ function renderSVG(
           font-size="${typeFontSize}"
           font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
         >
-          ${typeText}
+          ${tagsText}
         </text>
       </g>
     </svg>
@@ -384,7 +384,7 @@ export async function getEquationNodeStyle(
 ): Promise<CytoscapeNodeStyle> {
   // Extract data
   const equation = node.properties?.equation as string || '';
-  const typeText = node.properties?.typeText as string || 'no type';
+  const tagsText = Array.isArray(node.tags) && node.tags.length > 0 ? node.tags.join(', ') : '';
   const titleText = node.title;
   
   // Resolve text color for MathJax
@@ -394,7 +394,7 @@ export async function getEquationNodeStyle(
   const equationData = await renderMathJaxEquation(equation, textColor);
   
   // Build composite SVG with params
-  const { svg, width, height } = renderSVG(titleText, typeText, equationData, params, theme);
+  const { svg, width, height } = renderSVG(titleText, tagsText, equationData, params, theme);
   
   // Encode SVG as data URI
   const encodedSVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);

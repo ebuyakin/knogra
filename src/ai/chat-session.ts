@@ -228,7 +228,8 @@ export class ChatSession {
       const userMessage = await chatStore.addMessage(
         this.#currentNodeId,
         'user',
-        displayText ?? content
+        displayText ?? content,
+        'ai'
       );
       // In-memory copy uses actual prompt for LLM context
       const llmMessage = displayText ? { ...userMessage, content } : userMessage;
@@ -249,7 +250,8 @@ export class ChatSession {
       const assistantMessage = await chatStore.addMessage(
         this.#currentNodeId,
         'assistant',
-        response.content
+        response.content,
+        'ai'
       );
       this.#messages.push(assistantMessage);
       this.#events.onMessageAdded?.(assistantMessage);
@@ -321,10 +323,12 @@ export class ChatSession {
   }
 
   #toProviderMessages(): ProviderMessage[] {
-    return this.#messages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
+    return this.#messages
+      .filter(message => message.source === 'ai' || message.source === undefined)
+      .map(message => ({
+        role: message.role,
+        content: message.content
+      }));
   }
 
   /**

@@ -77,6 +77,7 @@ export type ProposedAction =
 /** Response from AI provider */
 export interface AIResponse {
   content: string;
+  rawContent?: string;
   actions: ProposedAction[];
 }
 

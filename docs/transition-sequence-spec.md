@@ -1,10 +1,9 @@
 # Transition Feature — Design & Specification
 
-> **⚠ Under review (April 2026).**
-> The scene-composition and scene-transition logic is undergoing a holistic
-> review and refactoring. This entire document may be **superseded** by
-> [`scene-transitions.md`](scene-transitions.md). Until that document
-> stabilizes, treat content here as historical reference, not authoritative.
+> **Status:** Superseded  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Historical transition reference only. Current transition behavior is defined by [scene-transitions.md](scene-transitions.md).  
+> **Related:** [Documentation map](README.md), [Scene transitions](scene-transitions.md), [Fold/unfold design](fold-unfold-design.md)
 
 ## Vision
 

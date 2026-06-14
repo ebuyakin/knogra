@@ -1,8 +1,9 @@
 # Refactoring Implementation Plan
 
-> **Status:** Draft (May 2026)  
-> **Scope:** Fix transition/fold instability, implement regime model, enforce architectural invariants  
-> **Constraint:** Max 3 files changed per step (per `copilot-instructions.md`)
+> **Status:** Historical  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Implementation plan and bug record for transition/fold stabilization. Current architectural authority lives in [architecture.md](architecture.md) and [scene-transitions.md](scene-transitions.md).  
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Scene transitions](scene-transitions.md), [Fold/unfold design](fold-unfold-design.md)
 
 ---
 

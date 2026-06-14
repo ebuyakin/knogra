@@ -15,6 +15,7 @@ import { SettingsModal } from './components/settings-modal';
 import { ShortcutOverlay } from './components/shortcut-overlay';
 import { getAppMode, isEditMode, setAppMode } from '../storage/app-mode';
 import { exportWorkspace, showImportDialog, newWorkspace } from '../storage/workspace';
+import { generateEquationFromPrompt } from '../ai/equation-generator';
 
 export class KeyboardHandler {
   #cy: Core;
@@ -588,6 +589,9 @@ export class KeyboardHandler {
           design: designUpdates,
           scale: scaleUpdate
         });
+      },
+      async (request) => {
+        return generateEquationFromPrompt(request);
       }
     );
   }

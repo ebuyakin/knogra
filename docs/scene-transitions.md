@@ -1,8 +1,10 @@
 # Scene Manipulation & Transition Specification
 
-> **Status:** Draft (May 2026)  
-> **Replaces:** `transition-sequence-spec.md`, `fold-unfold-design.md` (sections on transitions)  
-> **Authority:** This document is the canonical source for scene manipulation and transition behavior.
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Canonical source for scene manipulation, scene transitions, fold semantics, and related invariants.  
+> **Replaces:** [transition-sequence-spec.md](transition-sequence-spec.md), transition-related sections of [fold-unfold-design.md](fold-unfold-design.md)  
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Background design](background-design.md)
 
 ---
 

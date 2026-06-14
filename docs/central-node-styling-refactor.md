@@ -1,10 +1,9 @@
 # Central Node Styling — Architecture Reference
 
-> **⚠ Under review (April 2026).**
-> The transition-related claims in this document (central-border survival
-> across stylesheet rebuilds during scene-to-scene transitions) are being
-> consolidated into [`scene-transitions.md`](scene-transitions.md) §5.3.
-> Stylesheet authoring details remain authoritative here.
+> **Status:** Current with caveats  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Current authority for central-node styling, selected-node styling priority, and the `centralNode` data-flag approach. For broader transition sequencing, defer to [scene-transitions.md](scene-transitions.md).  
+> **Related:** [Documentation map](README.md), [Scene transitions](scene-transitions.md), [Theme architecture](theme-architecture.md), [Node design system](node-design-system.md)
 
 ## Problem Statement
 

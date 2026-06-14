@@ -1,5 +1,10 @@
 # Landing Page ↔ App Interaction Spec
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** User-facing landing/app behavior specification and implementation status table.  
+> **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Release plan](release-plan.md)
+
 User-facing scenarios and expected behavior. Technical rules are derived from these — not the other way around.
 
 ---
@@ -98,7 +103,7 @@ In scenario B, the user clicks Open and the app immediately loads the graph with
 | Scenario | Status | Notes |
 |---|---|---|
 | A | ✅ Working | Cold-start seed added |
-| B | ❌ Broken | In-app import dialog appears; should be silent |
+| B | ✅ Working | First-time catalog import runs before seeding and skips the dialog |
 | C | ✅ Working | |
 | D | ✅ Working | Landing modal implemented |
 | E | ✅ Working | In-app import dialog appears over loaded workspace |

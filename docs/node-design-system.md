@@ -1,5 +1,10 @@
 # Node Design System
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Canonical source for built-in node designs and node-level visual parameters.  
+> **Related:** [Documentation map](README.md), [Theme architecture](theme-architecture.md), [Central node styling refactor](central-node-styling-refactor.md)
+
 ## Overview
 
 The design system defines how individual nodes are visually rendered in graph scenes. Each node has a **design type** (shape/layout) and can have **per-node overrides** (colors, effects, gradients).

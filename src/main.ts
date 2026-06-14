@@ -150,6 +150,9 @@ cy.on('select', 'node', (event) => {
 // 7. STARTUP (open scene, initialize features that need scene context)
 // =============================================================================
 await features.transition.openScene(currentSceneId);
+if (AppStateManager.consumeFitOnNextOpen(currentSceneId)) {
+  features.scene.fit();
+}
 features.path.init(currentSceneId);
 
 // Initialize AI chat panel — try auto-init from settings, load conversation regardless

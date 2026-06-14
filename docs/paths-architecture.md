@@ -1,5 +1,10 @@
 # Paths Feature Architecture
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Current model for navigation history, saved paths, and the path panel.  
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Scene transitions](scene-transitions.md)
+
 ## 1. Overview
 
 The Paths feature allows users to track, save, and navigate through sequences of scenes. It provides a breadcrumb-style panel showing the current navigation journey and enables saving meaningful paths for later use.

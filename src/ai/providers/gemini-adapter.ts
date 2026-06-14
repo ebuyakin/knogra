@@ -81,6 +81,7 @@ export class GeminiAdapter implements AIProvider {
 
     return {
       content: this.#extractConversationalContent(textContent),
+      rawContent: textContent,
       actions
     };
   }

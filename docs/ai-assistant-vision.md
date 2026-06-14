@@ -1,5 +1,10 @@
 # AI Assistant: Vision & Architecture
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Current AI assistant goals, behavior rules, provider model, and graph-action flow.  
+> **Related:** [Documentation map](README.md), [Chat panel architecture](chat-panel-architecture.md), [Product vision](knogra-vision.md)
+
 > **Note:** The AI chat is one mode of the broader chat panel, which also serves as a notebook and tutorial content pane. See [Chat Panel Architecture](chat-panel-architecture.md) for the full panel design.
 
 ## Overview

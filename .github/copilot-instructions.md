@@ -1,112 +1,37 @@
 # Copilot Instructions
 
-## 1. What Knogra Is
+1. **Source Of Truth**
+This file is the authoritative agreement for Knogra project context, user-agent collaboration, coding norms, workflow, and session memory.
 
-Browser-based knowledge-graph editor: nodes (concepts) + edges (relationships) organized into **scenes** (different views of the same underlying graph). Spatial-memory tool with AI-assisted exploration and authoring. Entry point: `src/main.ts`. Full vision: `docs/knogra-vision.md`.
+2. **Project Identity And Key Documents**
+Knogra is a browser-based knowledge-graph editor: nodes and edges organized into scenes, with spatial transitions and AI-assisted authoring. Entry point: `src/main.ts`. Key documents: `docs/knogra-vision.md` for product direction, `docs/architecture.md` for system architecture, and domain docs listed below for specialized areas.
 
-## 2. Rules of Engagement
+3. **Agent Role And Collaboration Stance**
+Act fluidly as Builder, Architect, Reviewer, Teacher, and Advisor. Be prudent, practical, direct, and not a yes-machine. Reason from actual code and project documents, push back on weak assumptions, name tradeoffs clearly, and explain unfamiliar concepts at the user's likely level.
 
-Be prudent and practical. Break complex responses into digestible chunks. Explain step by step. Infer the user's familiarity with each concept; explain unfamiliar terms before relying on them. Keep answers within ~300 words when appropriate.
+4. **Change Protocol**
+Do not be a silent executor. Before code or project-document edits, state the intended change and wait for explicit confirmation unless the user has already authorized that specific edit in the current turn. Explicitly flag signature changes, new dependencies, new imports, architecture changes, data/storage migrations, and broad refactors. Work incrementally, prefer small verifiable steps, and keep the user oriented.
 
-### Rule 0: Explicit Approval Required
-- **Discuss first, code second**: always discuss before making any changes
-- Wait for explicit confirmation before modifying the codebase
-- Flag signature changes, new dependencies, or new imports explicitly
+5. **Tool Discipline And Limits**
+Tool calls cost latency, money, and context. Search before reading, batch related reads, avoid speculative broad reads, prefer targeted line ranges, ask before loading large docs, and do not re-read files already in context. Use built-in editor tools for source changes. No file deletion: tell the user when deletion is needed. No terminal: ask the user to run scripts, installs, builds, git commands, or tests.
 
-### Rule 1: Incremental Changes
-- **Max 3 files per step**: small, verifiable increments
-- Allow review between steps; remove obsolete code immediately, don't defer
+6. **Architecture Discipline And Clean Design**
+Knogra is architecture-driven: layered boundaries, vertical feature slices, and maintainable componentization matter more than quick patches. Prefer root-cause fixes over surface fixes. Preserve dependency direction, use existing local abstractions, avoid compatibility shims, avoid cross-layer shortcuts, and extract or reorganize code when complexity threatens maintainability.
 
-### Rule 2: File Size & Structure
-- **~300 lines max per file**: extract subroutines when files grow large
-- Clear separation of concerns; proper encapsulation
+7. **Code Quality Norms**
+Use meaningful searchable names, explicit return types, and avoid `any`. Keep every entity — file, folder, function, class, and module — within a clear responsibility boundary. Limit complexity aggressively: shallow logic, early returns, simple data structures, and componentization before an entity becomes hard to scan, test, or explain. Comments should explain why; code structure, names, and types should explain what.
 
-### Rule 3: Limit Complexity
-- **Max 3 nested logical layers**: restructure if deeper nesting is needed
-- Use early returns; prefer simple data structures; avoid over-engineering
+8. **Project Structure**
+`src/core` contains pure domain types and must stay dependency-light. `src/events` provides cross-module eventing. `src/config` defines settings, debug flags, storage keys, shortcuts, and design manifests. `src/storage` owns IndexedDB/localStorage persistence, GraphStore/GraphSaver, app state, workspace import/export, chat/path stores, and interchange formats. `src/features` owns user-facing graph operations as vertical slices: scene, transition, graph, node, edge, path, background. `src/styles` generates Cytoscape theme and design styles. `src/background` renders canvas backgrounds. `src/ui` owns DOM panels, modals, menus, keyboard handling, and editors. `src/ai` owns chat/session context, prompts, providers, and node shelf behavior. `src/main.ts` wires the runtime together.
 
-### Rule 4: Code Quality
-- **Naming**: meaningful, descriptive, searchable; camelCase for variables/functions, PascalCase for classes/types; avoid repetition (`dataData`, `handleHandle`)
-- **Type safety**: always use type aliases (`NodeId`, `EdgeId`, `SceneId`, `ThemeId`) instead of raw strings; explicit return types on all functions; avoid `any`; use `undefined` explicitly
-- **Comments**: explain *why*, not *what*
+9. **Documentation And Self-Documentation**
+Do not create or expand docs unless explicitly asked or necessary to preserve important project knowledge. Consult relevant docs before implementation in their domain, but first check each doc's status, date, and authority notes because some docs are draft, under review, or historical. Prefer current/canonical docs such as `knogra-vision.md`, `architecture.md`, `workspace-architecture.md`, `theme-architecture.md`, `paths-architecture.md`, `chat-panel-architecture.md`, `scene-transitions.md`, `background-design.md`, `node-design-system.md`, `project-plan.md`, and `release-plan.md`; treat older transition/fold overlap docs as historical unless the task needs that context. Future project docs should state their status, authority, and last-updated context clearly. Prefer self-documenting code through names, types, component boundaries, and comments that explain rationale.
 
-### Rule 5: Prefer Built-in Tools Over Terminal
-- Use built-in editor tools for file reading/editing — they produce reviewable diffs in chat
-- Terminal only for: running scripts, installs, git operations, builds, complex shell pipelines
-- Never use `sed`/`awk` to edit source files
+10. **Debugging And Diagnostics**
+Knogra has dev-only diagnostic surfaces; choose the lightest tool that can answer the question. Runtime `DEBUG` flags in `src/config/debug-flags.ts` can be enabled from devtools (`DEBUG.d_transition`, `d_fold`, `d_saver`, `d_store`, `d_scene`, `d_background`, `d_chat`, `d_shelf`, `DEBUG.all`, etc.) for targeted console traces. `window.debugger` exposes live app objects (`cy`, `features`, `graphSaver`, `components`, `panels`, `graphStore`) for inspection. `knogra.auditScene()` compares live Cytoscape state against persisted scene records, fold state, node/edge presence, and visibility; `knogra.auditEdges()` checks duplicate/orphan/dangling edges. `window.transitionDebug.stepMode = true` plus `.next()` steps through transitions. Structured buffers record actions, transitions, GraphSaver events, errors, and invariant drift; use `knogra.clearBuffers()` before a focused repro. Use `knogra.snapshot()` / `Ctrl+Shift+D` only when a portable state capture is useful, and read snapshots from the beginning with `read_file`, not summarized attachments. Dependency maps: `.ws/deps/generate-deps.js` can generate dependency-cruiser reports with various level of details. Use existing `.ws/deps/outputs/*/*-list.txt`, `*-check.md`, and `*-metrics.txt`, or ask the user to run `npm run deps` / a scoped config when working on architecture drift, cross-layer refactors, dependency direction, cycles, or subsystem boundaries. Do not use it for small local bug fixes where targeted search/read is cheaper.
 
-### Rule 6: Scene Specification Notation
-When discussing user actions, bugs, or feature behavior involving scenes, use abbreviated scene notation to make communication unambiguous:
+11. **Session Memory And Workflow**
+`.github/project-journal.md` is the official append-only record of project work, decisions, fixes, and remaining tasks. Read the newest relevant journal entries first, using workstream/tags once the journal format is updated. `todo.md` is the user-maintained active checklist and should be cross-checked against the journal, not treated as history. At checkpoint/session close, update the journal and todo so the next session can resume from those two sources.
 
-- **Nodes & edges**: `A→B, A→C, B→D` (directed, using `→`)
-- **Roles**: inline — `A (central)`, `D (focused)`, `B (fold-root)`
-- **Actions**: against the named nodes — `fold B`, `unfold A`, `exclude C`, `move D to (x, y)`
-
-Example: *"Scene: `A→B, A→C, B→D, B→E, C→D, C→E`, A central. Steps: fold A → unfold A → unfold B. Expected: C loses fold badge."*
-
-Use this notation from the start of any bug report, feature spec, or design discussion that involves scene structure or user interactions. It eliminates ambiguity and makes reasoning about state changes precise.
-
-## 3. Code Structure (`src/`)
-
-- `core/` — pure type definitions; no runtime deps; foundation for all other modules
-- `events/` — `EventBus` for cross-module signaling (e.g. `sceneChanged`)
-- `config/` — settings definitions, debug flags, storage keys, shortcut definitions; read via `getSetting()`
-- `storage/` — Dexie/IndexedDB stores, `app-state.ts` (localStorage), `graph-saver.ts`, workspace import/export
-- `styles/` — theme definitions, Cytoscape style generation
-- `features/` — vertical-slice modules: `transition/`, `scene/`, `path/`, `edge.ts`, `node.ts`, `graph.ts`; exposed via `feature-api.ts`
-- `background/` — canvas background rendering (selective color, image processing)
-- `ui/` — DOM panels, modals, context menus, keyboard handler, node/edge editors
-- `ai/` — chat session, context-builder, prompts, node-shelf, providers
-- `utils/` — generic helpers
-- `main.ts` — entry point; constructs Cytoscape, `FeatureAPI`, panels, UI components
-
-## 4. Dependency Map
-
-Top-level module dependencies (regenerate with `node .ws/deps/generate-deps.js` can be expanded and customized as needed):
-
-```
-src/core        → []
-src/utils       → []
-src/events      → [src/core]
-src/config      → [src/ai, src/core, src/styles]
-src/storage     → [src/ai, src/config, src/core, src/events]
-src/styles      → [src/config, src/core, src/storage]
-src/background  → [src/config, src/core, src/features, src/storage]
-src/features    → [src/background, src/config, src/core, src/events, src/storage, src/styles]
-src/ai          → [src/config, src/core, src/events, src/features, src/storage]
-src/ui          → [src/ai, src/config, src/core, src/events, src/features, src/storage, src/styles]
-src/main.ts     → [src/ai, src/background, src/features, src/storage, src/styles, src/ui, src/utils]
-```
-
-## 5. Documentation
-
-Consult the relevant doc before implementing features in its domain. Do not load preemptively — know they exist and read when needed.
-
-- `docs/knogra-vision.md` — product vision and long-term direction
-- `docs/architecture.md` — system architecture overview
-- `docs/workspace-architecture.md` — workspace import/export format
-- `docs/theme-architecture.md` — theming system
-- `docs/paths-architecture.md` — paths feature design
-- `docs/chat-panel-architecture.md` — AI chat panel
-- `docs/transition-sequence-spec.md` — scene transition sequencing
-- `docs/fold-unfold-design.md` — fold/unfold feature
-- `docs/background-design.md` — background rendering
-- `docs/node-design-system.md` — node styling system
-- `docs/project-plan.md`, `docs/release-plan.md` — active milestones and priorities
-
-## 6. Debugging
-
-- Debug flags: `isDebug('d_*')` in `src/config/debug-flags.ts` — e.g. `d_transition`, `d_edgeStyle`
-- Step-mode transitions: `window.transitionDebug.stepMode = true` then `.next()` to advance
-- **Diagnostics snapshot** (`src/utils/diagnostics/`): structured telemetry dump from the running app — use it to diagnose bugs without requiring manual reproduction. The snapshot lives at `.ws/snapshots/knogra-snapshot.json`. **Always read it using `read_file` in full from the beginning** — do not rely on an attached version, which VS Code will summarize and lose structure. Key segments: `transitions[]` (one structured record per recent transition: element counts, timing, errors), `cy` (live Cytoscape state: all node positions, classes, scratch values), `saverEvents[]` (GraphSaver suspend/resume/sync log — useful for diagnosing timing races), `invariantDrift[]` (detected divergences between graphStore in-memory positions and last-persisted values), `actions[]` (recent user actions: sceneChanged, fold, unfold), `persisted.graph` (full IndexedDB export — off by default in lean snapshots). If the snapshot covers too many unrelated events, ask the user to run `knogra.clearBuffers()` in devtools before reproducing the bug, then take a fresh snapshot. Full segment reference: `src/utils/diagnostics/snapshot.ts` file-level JSDoc.
-- **Common mistakes**: `.github/common-mistakes.md` — read when working in unfamiliar areas.
-
-## 7. Project Journal
-
-`.github/project-journal.md` — session-by-session history of completed work. **Always read using `read_file` tool — never rely on an attached version**, which VS Code will summarize and lose detail. Entries are in **reverse chronological order**; read from the top (line 1) and stop when you have enough depth — there is no need to read the full history unless explicitly asked. Use the **Tags** and main theme in each entry header to navigate to relevant sessions quickly. End-of-session update workflow is in `.github/prompts/update-primer.prompt.md`.
-
-## 8. My Setup
-
-- VS Code on Mac; project on Ubuntu 24.04 VM (12 GB RAM) via UTM/SSH
-- Project folder: `~/pro/knogra/`
-- All agentic work on the VM, not Mac; VS Code extensions and MCP servers run on the VM
+12. **Working Setup**
+The project is worked on through VS Code over SSH, with the repo on the Ubuntu VM at `~/pro/knogra/`. This matters mainly for paths, user-run commands, and explaining environment-specific steps; do not spend tokens on setup unless it affects the task.

@@ -1,31 +1,28 @@
 # Knogra Architecture
-**Updated:** January 26, 2026
 
-> **⚠ Under review (April 2026).**
-> Sections 1–2 (Core Philosophy and Lexicon) include vocabulary —
-> particularly *Included* vs *Visible*, *Scene*, *Fold* — that is being
-> consolidated into [`scene-transitions.md`](scene-transitions.md). Once
-> that document stabilizes, vocabulary authority moves there and this doc
-> will reference it. Other sections remain authoritative.
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Main authoritative architecture document for layers, dependency direction, module responsibilities, persistence ownership, and coding standards. For detailed scene, fold, visibility, and transition terminology, defer to [Scene Transitions](scene-transitions.md).  
+> **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Scene transitions](scene-transitions.md)
 
 ## Section 1. Core Philosophy
 
 **Modular layered architecture with vertical feature organization.**
 
-The app is structured in **horizontal layers** at the top level (UI, Features, Rendering, Storage) with clear separation of concerns and dependencies flowing downward. Within the **Features layer**, we use **vertical slicing** — each feature (Scene, SceneBackground, Node, Edge, Graph, Transition, Path) is self-contained with its own utilities and logic, independent of other features.
+The app uses horizontal layers at the top level (UI, Features, Background, Styles, Storage) and vertical slices inside Features. Each feature coordinates with Cytoscape and stays independent of the others.
 
-This hybrid approach combines:
-- **Layered architecture:** Clear boundaries, testability, predictable data flow
-- **Vertical features:** Domain-focused modules, easy to understand and modify, minimal coupling
+This keeps boundaries clear, preserves predictable data flow, and keeps modules easy to reason about.
 
-Each feature is a complete vertical slice that coordinates with Cytoscape but doesn't depend on other features.
-
-**Unidirectional data flow:**
+**Primary scene persistence flow:**
 ```
 UI → Features → Cytoscape → GraphSaver → Database
 ```
 
 Cytoscape is the core component responsible for manipulation and presentation of scenes. The current/real-time state of the scene is tracked by Cytoscape (not by any other state management system). Cytoscape is the **source of truth** for graph state.
+
+Some operations are not Cytoscape-derived scene mutations and therefore write through explicit storage services instead of GraphSaver: workspace import/export, custom themes, Mermaid import/export, background image library updates, saved paths, chat notes, app mode, and cross-scene deletion cleanup. These exceptions must stay named and intentional.
+
+**Dependency maps:** Dependency-cruiser reports live under `.ws/deps/outputs/`. The default architecture-orientation report is `.ws/deps/outputs/toprepo/toprepo-list.txt`, generated from `.ws/deps/toprepo.txt` with two-level expansion. The generator `.ws/deps/generate-deps.js` is configurable: use `+N`, `+X`, exclusions, and anchors to produce broader or narrower views of the whole codebase or a specific subsystem. When this architecture document changes in a way that affects layer boundaries, dependency direction, or module ownership, regenerate the relevant dependency map and compare it against this document.
 
 ---
 
@@ -60,15 +57,10 @@ This distinction matters for transition routing: a morph transition requires the
 These are peer features with distinct responsibilities.
 
 ### Path
-**Path** — A sequence of scenes produced by user navigation. May exist in-memory during a session or be persisted for later replay. Analogous to how Scene or Node can be in-memory or stored.
+**Path** — A sequence of scenes produced by user navigation. It may exist in memory during a session or be persisted for later replay.
 
 ### Workspace
-**Workspace** — Complete application state bundle exported as a `.knogra` file. Includes:
-- Graph data (nodes, edges, scenes, background images)
-- Settings (user preferences)
-- Chat history (AI conversations)
-- Saved paths
-- App state (last scene)
+**Workspace** — Complete application state bundle exported as a `.knogra` file. Includes graph data, settings, chat history, saved paths, custom themes, and app state.
 
 ### Shelf
 **Shelf** — Collection of AI-suggested nodes waiting to be placed on the graph. Managed by NodeShelf, displayed by SuggestionPanel.
@@ -108,16 +100,25 @@ graph TD
         GraphF[Graph]
     end
 
-    subgraph Rendering["Rendering Layer"]
+    subgraph Background["Background Layer"]
         BgRenderer[BackgroundRenderer]
+    end
+
+    subgraph Styles["Styles Layer"]
+        StyleGen[StyleGenerator]
+        Themes[Themes]
+        Designs[Node Designs]
     end
 
     subgraph Storage["Storage Layer"]
         GraphStore[GraphStore]
         GraphSaver[GraphSaver]
         AppState[AppStateManager]
+        AppMode[AppMode]
         PathStore[PathStore]
         ChatStore[ChatStore]
+        ThemeStore[ThemeStore]
+        Mermaid[Mermaid]
         Workspace[Workspace]
     end
 
@@ -135,24 +136,29 @@ graph TD
 
     UI -->|calls| Features
     Features -->|mutates| Cytoscape
-    Features -->|uses| Rendering
+    Features -->|uses| Background
+    Features -->|uses| Styles
     Features -->|reads| Storage
-    Rendering -->|reads| Storage
+    Background --> Core
+    Styles --> Core
+    Styles -->|reads| Storage
     
     Cytoscape -->|events| GraphSaver
     GraphSaver -->|writes| GraphStore
     GraphStore -->|persists| IndexedDB
+    PathStore -->|persists| IndexedDB
+    ChatStore -->|persists| IndexedDB
+    ThemeStore -->|persists| IndexedDB
     
     AppState -->|persists| LocalStorage
     Config -->|persists| LocalStorage
     
     Features --> Core
     Features --> Config
-    Rendering --> Core
     Storage --> Core
 ```
 
-**Dependency direction:** UI → Features → Rendering/Storage → Core
+**Dependency direction:** UI → Features → Background/Styles/Storage → Core
 
 ### 3.2 Foundation Layers
 
@@ -161,10 +167,11 @@ Type definitions and interfaces. **No logic.**
 
 | File | Purpose |
 |------|---------|
-| `main-types.ts` | Node, Edge, Scene, Path, Graph types |
+| `main-types.ts` | Primitive IDs, Node, Edge, Scene, Path, provider, and app mode types |
+| `style-types.ts` | Theme, visual primitive, node style, edge style, and Cytoscape style types |
 | `background-types.ts` | Background image and filter types |
 | `design-types.ts` | Node/edge design system types |
-| `store-types.ts` | Database interface types |
+| `chat-types.ts` | Chat persistence types |
 
 #### Config (`src/config/`)
 Application settings and user preferences.
@@ -184,46 +191,50 @@ Application settings and user preferences.
 #### Graph Persistence
 
 **GraphStore** (`graph-store.ts`)
-- Interface to IndexedDB via Dexie
-- In-memory cache of nodes, edges, scenes, backgroundImages
-- CRUD operations: `createNode()`, `updateNode()`, `deleteNode()`, etc.
-- **Read by:** Features, UI, Rendering (for lookups)
-- **Written by:** GraphSaver only
+- IndexedDB-backed cache of nodes, edges, scenes, and background images
+- Read by Features, UI, Background, Styles, diagnostics, and storage workflows
+- Written by GraphSaver for Cytoscape-derived scene persistence; explicit storage workflows handle seeding, workspace import, Mermaid import, deletion cleanup, background image library changes, theme changes, and scene auto-creation
 
 **GraphSaver** (`graph-saver.ts`)
-- Listens to Cytoscape events: `add`, `remove`, `data`, `free`, `viewport`
-- Debounced auto-save (500ms delay)
-- Extracts state from Cytoscape → writes to GraphStore
-- Handles deletion queue (nodes/edges marked for deletion)
+- Listens to Cytoscape events and debounced-saves scene state to GraphStore
+- Handles deletion queues and scoped `suspend(reason)` / `resume(token)` semantics so transitions, fold/unfold, collapse/expand, and View mode do not interfere with one another
 
 #### Session State
 
 **AppStateManager** (`app-state.ts`)
 - Manages session state in localStorage (`knogra.state`)
-- Tracks last opened scene
-- Listens to `scene:changed` events
-- Static class with `getLastSceneId()`, `saveLastSceneId()`, `clearAppState()`
+- Tracks last opened scene, persisted app mode (`view` / `edit`), and one-shot startup fit requests
+- Listens to EventBus `sceneChanged` events
+- Static class with helpers for reading, writing, and clearing app state
+
+**AppMode** (`app-mode.ts`)
+- Runtime View/Edit mode state that persists through AppStateManager, suspends GraphSaver in View mode, and emits `appModeChanged`
 
 #### Auxiliary Stores
 
 **PathStore** (`path-store.ts`)
 - Separate IndexedDB (`knogra-paths`) for saved navigation paths
-- In-memory cache + CRUD operations
-- Independent from GraphStore
+- Independent cache and CRUD operations
 
 **ChatStore** (`chat-store.ts`)
-- Separate IndexedDB (`knogra-chat`) for AI conversations
-- Conversations keyed by `nodeId`
+- Separate IndexedDB (`knogra-chat`) for AI conversations keyed by `nodeId`
+
+**ThemeStore** (`theme-store.ts`)
+- Separate persistence for custom themes merged into `styles/themes.ts`
+
+**Mermaid** (`mermaid.ts`, `mermaid-flowchart.ts`, `mermaid-import-dialog.ts`)
+- Graph-only interchange path for Mermaid flowcharts; it replaces graph data without preserving the rest of the workspace
 
 #### Workspace
 
 **Workspace** (`workspace.ts`)
 - Export/import complete workspace as `.knogra` ZIP file
-- Works directly with storage layers (not via store classes)
-- Collects: graph, settings, chat, paths, backgrounds, app-state
-- Handles validation and restoration on import
+- Delegates transfer, dialogs, and validation to `storage/workspace/`
+- Collects graph, settings, chat, paths, backgrounds, custom themes, shelf, and app state
 
-### 3.4 Rendering Layer (`src/rendering/`)
+### 3.4 Background And Styles Layers
+
+#### Background (`src/background/`)
 
 **BackgroundRenderer** (`background-renderer.ts`)
 - Canvas layer for scene background images
@@ -232,7 +243,21 @@ Application settings and user preferences.
 - Transforms with zoom/pan events
 - Injected into features that need it (SceneBackground, Transition)
 
-**Design rationale:** Separates background rendering from Cytoscape's graph rendering. Allows independent optimization and cleaner feature boundaries.
+**Design rationale:** Background rendering stays separate from Cytoscape so it can be optimized independently.
+
+#### Styles (`src/styles/`)
+
+**StyleGenerator** (`style-generator.ts`)
+- Pure stylesheet generation and stylesheet-update helpers for Cytoscape
+- Owns node/edge style rule construction and central/selected selector rules
+- Applies styles through `cy.style().fromJson(stylesheet).update()`
+
+**Themes** (`themes.ts`, `theme-store.ts`)
+- Built-in and custom color themes
+- Scene theme is resolved by `scene.themeId`; there is no separate global current theme state
+
+**Designs** (`styles/designs/`)
+- Built-in node renderers and design registry that converts node data, scene design parameters, and theme into Cytoscape node styles
 
 ### 3.5 Features Layer (`src/features/`)
 
@@ -255,9 +280,11 @@ scene/
   viewport.ts     # Viewport calculations
 
 transition/
-  transition.ts   # Main orchestrator
-  stage-animator.ts  # Animation stage helpers (subclass)
-  scene-factory.ts   # Scene creation utilities
+    transition.ts            # Public transition facade and routing
+    opening-closing/         # Open/close scene animation path
+    scene-to-scene/          # Morph transition path
+    scene-factory-utils.ts   # Scene auto-creation utilities
+    fold-state-handler.ts    # Fold-state application after scene changes
 
 path/
   path.ts         # Main feature class
@@ -265,12 +292,9 @@ path/
 ```
 
 **Subclass extraction pattern:**
-When a feature has many related methods sharing dependencies, extract them into a helper class (not pure functions). The helper class holds shared state (`cy`, `container`, `renderer`), while the main feature class orchestrates.
+When a feature has many related methods sharing dependencies, extract them into a helper class (not pure functions). The helper class holds shared state such as `cy`, `container`, or `renderer`; the main feature class orchestrates.
 
-Example: `StageAnimator` in `transition/`
-- Holds: `#cy`, `#container`, `#backgroundRenderer`
-- Provides: `fadeOutEdges()`, `flyOutNodes()`, `moveNodes()`, etc.
-- Transition orchestrates stage sequence, StageAnimator executes each stage
+Example: transition helpers in `transition/opening-closing/` and `transition/scene-to-scene/` hold shared dependencies and execute specific animation or classification steps while `Transition` routes public actions.
 
 **Shared utilities** (`features/utils/`):
 Used by 2+ features. Split by purity:
@@ -310,13 +334,13 @@ Core Types only
 
 **EventBus** (`event-bus.ts`)
 - Typed publish/subscribe for cross-module communication
-- Enables unidirectional data flow: Graph System → AI System
+- Enables cross-module notifications without direct module imports
 
 **Cytoscape Custom Events:**
 
 | Event | Payload | Emitted by | Consumed by |
 |-------|---------|------------|-------------|
-| `scene:changed` | `sceneId` | Transition | Path, AppStateManager, ChatSession |
+| `scene:changed` | `sceneId` | Transition | Path |
 | `path:updated` | (none) | Path | PathPanel |
 
 **Usage pattern:**
@@ -334,7 +358,10 @@ this.#cy.on('scene:changed', (_event, sceneId) => {
 
 | Event | Payload | Emitted by | Consumed by |
 |-------|---------|------------|-------------|
-| `sceneChanged` | `{sceneId, centralNodeId}` | Transition | ChatSession |
+| `sceneChanged` | `{sceneId, centralNodeId}` | Transition | ChatSession, NodeShelf, AppStateManager, diagnostics, FoldBadge |
+| `transitionStart` | (none) | Transition | UI transition guards |
+| `transitionEnd` | (none) | Transition | UI transition guards |
+| `appModeChanged` | `{mode}` | AppMode | SuggestionPanel and other mode-aware UI |
 
 ### 3.7 AI Module (`src/ai/`)
 
@@ -346,15 +373,14 @@ AI-assisted learning companion. Provides contextual help, suggestions, and graph
 | `types.ts` | Message, Action, Conversation, ShelfItem types |
 | `providers/provider.ts` | AI provider interface + factory |
 | `providers/gemini-adapter.ts` | Gemini API implementation |
+| `providers/openrouter-adapter.ts` | OpenRouter API implementation |
 | `context-builder.ts` | Builds system prompt from graph state |
 | `chat-session.ts` | Manages conversation state |
 | `node-shelf.ts` | Suggestion state; orchestrates placement via FeatureAPI |
 | `shelf-design-selector.ts` | Selects designs for shelf items |
 
 **NodeShelf** is the AI→Features integration point. It:
-- Manages suggested nodes per scene (in-memory + localStorage)
-- Converts AI actions to shelf items
-- Calls FeatureAPI to place nodes on graph when user approves
+- Manages suggested nodes per scene, converts AI actions to shelf items, and calls FeatureAPI when the user approves placement
 
 **Storage:**
 - ChatStore (`storage/chat-store.ts`) — Separate IndexedDB for conversations
@@ -366,7 +392,7 @@ AI-assisted learning companion. Provides contextual help, suggestions, and graph
 
 ### 3.8 UI Layer (`src/ui/`)
 
-Pure presentation. Delegates all logic to Features. **No business logic in UI.**
+UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interaction flows. Domain mutations should go through Features or explicit storage services. Some current UI modules still write directly to stores; those are named technical debt.
 
 #### Components (`ui/components/`)
 
@@ -377,13 +403,18 @@ Pure presentation. Delegates all logic to Features. **No business logic in UI.**
 | `context-menu.ts` | Right-click menus |
 | `node-editor.ts` | Edit node modal |
 | `edge-editor.ts` | Edit edge modal |
+| `node-manager.ts` | Node management and scene cleanup dialog ⚠️ |
 | `node-picker.ts` | Node selection dialog |
 | `scene-picker.ts` | Scene selection dialog |
+| `path-picker.ts` | Saved path picker/editor ⚠️ |
 | `background-editor.ts` | Background image picker/editor ⚠️ |
+| `theme-editor.ts` | Custom theme editor |
 | `settings-modal.ts` | Application settings |
 | `connection-badge.ts` | Connection count badges |
+| `fold-badge.ts` | Fold state affordance |
+| `shortcut-overlay.ts` | Keyboard shortcut overlay |
 
-⚠️ **Technical debt:** `background-editor.ts` directly accesses `graphStore`. Should be refactored to go through `SceneBackground` feature.
+⚠️ **Technical debt:** `background-editor.ts`, `path-picker.ts`, and parts of `node-manager.ts` directly access storage. Prefer feature/service facades for future edits.
 
 #### Panels (`ui/panels/`)
 
@@ -391,11 +422,11 @@ Pure presentation. Delegates all logic to Features. **No business logic in UI.**
 
 | Panel | Purpose |
 |-------|---------|
-| `chat-panel.ts` | AI chat interface |
+| `chat-panel/` | Chat, notes, tutorial timeline, AI controls ⚠️ |
 | `suggestion-panel.ts` | AI-suggested nodes shelf |
 | `path-panel.ts` | Navigation breadcrumbs ⚠️ |
 
-⚠️ **Technical debt:** `path-panel.ts` contains business logic that should move to `Path` feature.
+⚠️ **Technical debt:** `path-panel.ts` writes saved paths directly, and `chat-panel/chat-note-editor.ts` writes notes directly to ChatStore. These should eventually move behind feature/service facades.
 
 #### Keyboard Handler
 
@@ -423,9 +454,9 @@ UI Layer
     ↓ calls
 Features Layer
     ↓ uses
-Rendering Layer ← Storage Layer
-    ↓               ↓
-    └──── Core ─────┘
+Background / Styles / Storage
+    ↓
+Core
 ```
 
 ### 4.2 Architectural Constraints
@@ -433,12 +464,14 @@ Rendering Layer ← Storage Layer
 | Layer | Constraint |
 |-------|------------|
 | **UI** | No direct Cytoscape access (only via Features) |
-| **UI** | No direct storage writes (only reads for display) |
-| **Features** | No direct GraphStore writes (only via Cytoscape mutations) |
+| **UI** | Domain mutations should go through Features or explicit storage services; direct store writes are technical debt unless the UI component is itself the storage workflow surface |
+| **Features** | Cytoscape-derived scene mutations should flow through Cytoscape and GraphSaver |
+| **Features** | Direct GraphStore writes are allowed only for named non-Cytoscape operations: scene auto-creation, theme/background persistence, graph deletion cleanup, workspace/Mermaid import, seeding, and diagnostics/validation workflows |
 | **Features** | Independent of each other (no cross-feature imports) |
 | **Features** | Config is read-only (use `getSetting()`) |
-| **Rendering** | Pure rendering, no business logic |
-| **Storage** | GraphSaver is the sole writer to GraphStore |
+| **Background** | Canvas rendering only; scene membership and graph mutations stay outside the renderer |
+| **Styles** | Style generation only; business decisions stay in Features/UI |
+| **Storage** | Stores own persistence mechanics and import/export workflows; GraphSaver owns autosave from Cytoscape events |
 | **Shared Utils** | Cannot import from feature files |
 
 ### 4.3 Critical Contracts
@@ -451,6 +484,7 @@ cy.scratch('currentSceneId', sceneId)  // Track active scene
 cy.scratch('activeNodeId', nodeId)     // Track selected node
 cy.scratch('nodesToDelete', [ids])     // Queue for deletion
 cy.scratch('edgesToDelete', [ids])     // Queue for deletion
+cy.scratch('foldedNodes', state)       // Runtime fold state for current scene
 ```
 
 #### Scene Ownership
@@ -466,16 +500,17 @@ cy.scratch('edgesToDelete', [ids])     // Queue for deletion
 | **Delete** | `graph.deleteNode()` | Removes from database permanently. Node disappears from ALL scenes. |
 | **Exclude** | `scene.excludeNode()` | Removes from current scene only. Node still exists, can be included elsewhere. |
 
-#### GraphSaver as Sole Writer
-- UI and Features NEVER call `graphStore.updateNode()` directly
-- All writes: Cytoscape mutation → GraphSaver → GraphStore
-- Prevents state inconsistencies
+#### Persistence Ownership
+- Cytoscape-derived scene changes are persisted by GraphSaver.
+- GraphSaver reads Cytoscape elements, viewport, `currentSceneId`, deletion queues, and `foldedNodes` scratch state.
+- Explicit storage workflows may write stores directly when the state does not originate from Cytoscape events.
+- Direct writes must be local, named, and documented by the owning module.
 
 ---
 
 ## Section 5. Data Flow
 
-### 5.1 Write Path (Mutations)
+### 5.1 Write Path: Cytoscape-Derived Scene Mutations
 
 ```
 User Action
@@ -499,6 +534,20 @@ GraphStore Write (updateScene, updateNode, deleteNode, etc.)
 IndexedDB Persistence
 ```
 
+### 5.1b Write Path: Explicit Storage Workflows
+
+```
+User Action or startup/import flow
+    ↓
+Owning UI / Feature / Storage service
+    ↓
+Explicit store method or workspace transfer helper
+    ↓
+IndexedDB / localStorage persistence
+```
+
+Examples: workspace import/export, Mermaid graph import/export, custom themes, saved paths, chat notes, background image library, app mode, seed workspace, and cross-scene deletion cleanup.
+
 ### 5.2 Read Path (Queries)
 
 ```
@@ -509,7 +558,7 @@ Read from GraphStore cache (graphStore.nodes, graphStore.scenes, etc.)
 Return immediately (in-memory, fast)
 ```
 
-**Note:** Cache is populated on app init and updated by GraphSaver. UI/Features never write to GraphStore directly.
+**Note:** Cache is populated on app init and updated by GraphSaver or explicit storage workflows. UI/Features should prefer feature/service facades for writes; existing direct writes are named debt or explicit workflow surfaces.
 
 ### 5.3 Event Flow
 
@@ -522,7 +571,7 @@ Transition emits cy.emit('scene:changed', [sceneId])
     ├── AppStateManager.saveLastSceneId(sceneId)
     └── eventBus.emit('sceneChanged', {sceneId, centralNodeId})
             ↓
-            ChatSession.loadForNode(centralNodeId, sceneId)
+            ChatSession / NodeShelf / diagnostics / UI listeners react
 ```
 
 ### 5.4 Workspace Export/Import Flow
@@ -534,10 +583,11 @@ User triggers export
 Workspace.exportWorkspace()
     ↓
 Collect from all sources:
-  - GraphStore (nodes, edges, scenes, backgroundImages)
-  - localStorage (settings, shelf, app-state)
-  - ChatStore (conversations)
-  - PathStore (saved paths)
+    - GraphStore (nodes, edges, scenes, backgroundImages)
+    - localStorage (settings, shelf, app-state)
+    - ChatStore (conversations)
+    - PathStore (saved paths)
+    - ThemeStore (custom themes)
     ↓
 Create ZIP with manifest
     ↓
@@ -572,8 +622,13 @@ Reload page to reinitialize app
 ### Why GraphSaver is Separate from Features
 - Features focus on business logic
 - GraphSaver is pure infrastructure (auto-save)
-- Can be disabled for testing
-- Clear separation of concerns
+- It can be scoped-suspended during transitions, fold/unfold, collapse/expand, and View mode
+
+### Why Direct Storage Workflows Exist
+- Not all persisted state originates from Cytoscape events
+- Workspace import/export, Mermaid interchange, paths, chat notes, themes, background image library, and app mode have their own storage contracts
+- Keeping those as explicit workflows is clearer than forcing unrelated data through Cytoscape
+- The tradeoff is stricter discipline: direct writes must be named, local, and reviewed as architecture exceptions
 
 ### Why Scenes Store Positions
 - Enables multiple perspectives on same graph
@@ -588,11 +643,10 @@ Reload page to reinitialize app
 - Cache updated by GraphSaver after each write
 - Trade-off: memory vs speed (acceptable for <10k nodes)
 
-### Why Separate Rendering Layer
+### Why Separate Background And Styles Layers
 - Cytoscape handles graph elements; canvas handles backgrounds
-- Separation allows independent optimization
-- Clean injection into features that need it
-- Background rendering doesn't affect Cytoscape's internal state
+- StyleGenerator handles Cytoscape stylesheet construction
+- Separation allows independent optimization and cleaner injection into features that need it
 
 ### Why Subclass Extraction Pattern
 - Large features benefit from extracting method groups into helper classes

@@ -1,8 +1,11 @@
 # Node Rank (Explicit Z-Index) — Design Spec
 
-> **Status: DEFERRED to v2.**
->
-> This feature is intentionally not implemented in v1. Users can achieve the
+> **Status:** Deferred  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Future design note for explicit node stacking control; not implemented in v1.  
+> **Related:** [Documentation map](README.md), [Node design system](node-design-system.md), [Theme architecture](theme-architecture.md)
+
+This feature is intentionally not implemented in v1. Users can achieve the
 > desired stacking order today by excluding and re-including nodes (re-inclusion
 > raises implicit z-index via Cytoscape insertion order). Explicit rank adds
 > non-trivial complexity across rendering, persistence, transitions, and UI, and

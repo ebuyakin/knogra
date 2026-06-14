@@ -8,6 +8,11 @@ import type { BackgroundImage, BackgroundImageId } from '../../core/main-types';
 import { graphStore } from '../../storage/graph-store';
 import '../../styles/background-editor.css';
 
+const MAX_BACKGROUND_IMAGE_BYTES = 1 * 1024 * 1024;
+const MAX_BACKGROUND_IMAGE_DIMENSION = 2048;
+const ALLOWED_BACKGROUND_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const ALLOWED_BACKGROUND_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
 export class BackgroundEditor {
   #dialog: HTMLDialogElement | null = null;
   #currentImage: SceneBackgroundImage | null = null;
@@ -132,10 +137,12 @@ export class BackgroundEditor {
         <input 
           type="file" 
           id="bg-image-upload" 
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp"
           style="display: none;"
         />
-        ${hasImage ? `<div class="bg-image-selected">Selected: ${this.#escapeHtml(libraryImages.find(img => img.id === currentImageId)?.name || 'None')}</div>` : '<div class="bg-image-selected">No image selected</div>'}
+        ${hasImage
+          ? `<div class="bg-image-selected">Selected: ${this.#escapeHtml(libraryImages.find(img => img.id === currentImageId)?.name || 'None')}. Allowed: PNG, JPEG, and WebP; max 1 MB; max 2048 x 2048 px.</div>`
+          : '<div class="bg-image-selected">No image selected. Allowed: PNG, JPEG, and WebP; max 1 MB; max 2048 x 2048 px.</div>'}
       </div>
     `;
   }
@@ -431,6 +438,13 @@ export class BackgroundEditor {
     
     if (!file) return;
 
+    const validationError = this.#validateUploadFile(file);
+    if (validationError) {
+      alert(validationError);
+      input.value = '';
+      return;
+    }
+
     // Read file as data URI
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -439,6 +453,13 @@ export class BackgroundEditor {
       // Create Image to get dimensions
       const img = new Image();
       img.onload = async () => {
+        const dimensionError = this.#validateImageDimensions(img.width, img.height);
+        if (dimensionError) {
+          alert(dimensionError);
+          input.value = '';
+          return;
+        }
+
         // Create new BackgroundImage
         const newImage: BackgroundImage = {
           id: `bg${Date.now()}` as BackgroundImageId,
@@ -454,10 +475,45 @@ export class BackgroundEditor {
 
         // Select the newly uploaded image
         this.#handleImageSelect(imageId);
+        input.value = '';
+      };
+      img.onerror = () => {
+        alert('Failed to load image');
+        input.value = '';
       };
       img.src = dataUri;
     };
+    reader.onerror = () => {
+      alert('Failed to read file');
+      input.value = '';
+    };
     reader.readAsDataURL(file);
+  }
+
+  #validateUploadFile(file: File): string | null {
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+    if (file.type) {
+      if (!ALLOWED_BACKGROUND_IMAGE_MIME_TYPES.has(file.type)) {
+        return 'Only PNG, JPEG, and WebP images are allowed.';
+      }
+    } else if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(extension)) {
+      return 'Only PNG, JPEG, and WebP images are allowed.';
+    }
+
+    if (file.size > MAX_BACKGROUND_IMAGE_BYTES) {
+      return 'Background images must be 1 MB or smaller.';
+    }
+
+    return null;
+  }
+
+  #validateImageDimensions(width: number, height: number): string | null {
+    if (width > MAX_BACKGROUND_IMAGE_DIMENSION || height > MAX_BACKGROUND_IMAGE_DIMENSION) {
+      return 'Background images must be at most 2048 x 2048 pixels.';
+    }
+
+    return null;
   }
 
   async #handleImageDelete(imageId: BackgroundImageId): Promise<void> {

@@ -1,5 +1,10 @@
 # Graph Explorer - Project Vision & Architecture
 
+> **Status:** Historical  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Early Python/Neo4j R&D planning background. Current product and architecture authority lives in [knogra-vision.md](knogra-vision.md) and [architecture.md](architecture.md).  
+> **Related:** [Documentation map](README.md), [Product vision](knogra-vision.md), [Architecture](architecture.md)
+
 ## Background
 
 Started as a simple Neo4j graph visualization experiment (`src/experiments/neo4j_explorer.py`), the tool quickly proved valuable for spatial knowledge exploration. The ability to save custom node layouts emerged as a powerful feature for cognitive mapping - treating graph fragments as mind maps where spatial arrangement carries meaning.

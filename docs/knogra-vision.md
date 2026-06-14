@@ -1,5 +1,10 @@
 # AI-Assisted Spatial Knowledge Graph Explorer — Product Vision (internal)
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Product direction and core UX primitives.  
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [AI assistant](ai-assistant-vision.md)
+
 ## One-liner
 A learning workspace where a subject becomes a navigable graph of “learning points”, explored through node-focused spatial scene that you can manually shape, with AI helping you ask, build, and review. Knoledge graph meets Memory palace meets Mindmapping meets Prezi and all of that supplemented by AI assistant helping to build, navigate, make sense, memorize, and test knowledge.
 

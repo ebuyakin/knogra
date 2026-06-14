@@ -1,5 +1,10 @@
 # Chat Panel Architecture
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Canonical source for the per-node timeline that combines notes, AI chat, and tutorial messages.  
+> **Related:** [Documentation map](README.md), [AI assistant](ai-assistant-vision.md), [Workspace architecture](workspace-architecture.md)
+
 > The chat panel is a **per-node timeline** combining user notes, AI conversations, and pre-filled tutorial content in a single unified interface.
 
 ## Overview

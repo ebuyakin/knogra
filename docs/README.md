@@ -1,0 +1,65 @@
+# Knogra Documentation Map
+
+> **Status:** Current index  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Use this file to orient within `docs/`. It classifies documents by current usefulness and points to the canonical sources when older documents overlap.
+
+## Status Legend
+
+| Status | Meaning |
+|---|---|
+| Current | Describes the current product, architecture, or implementation model. |
+| Current with caveats | Mostly current, but has a named area that should be verified before relying on it. |
+| Historical | Useful for project memory, rationale, or completed implementation history; not a source of current requirements. |
+| Superseded | Replaced by another document for current decisions. Keep only as background. |
+| Deferred | Valid design idea intentionally postponed beyond v1. |
+| Scratchpad | Non-canonical notes, rejected drafts, or raw thinking. |
+
+## Product And Planning
+
+| Document | Status | Notes |
+|---|---|---|
+| [knogra-vision.md](knogra-vision.md) | Current | Product direction and core UX primitives. |
+| [project-plan.md](project-plan.md) | Historical | Early project plan; read through current docs and `todo.md`. |
+| [release-plan.md](release-plan.md) | Historical | v1 release checklist; v1 is complete as of 2026-06-14. |
+| [knogra-product-discussion.md](knogra-product-discussion.md) | Historical | Early Python/Neo4j R&D planning background. |
+
+## Architecture
+
+| Document | Status | Notes |
+|---|---|---|
+| [architecture.md](architecture.md) | Current | Main authoritative architecture document; scene/fold terminology should defer to [scene-transitions.md](scene-transitions.md) where overlapping. |
+| [scene-transitions.md](scene-transitions.md) | Current | Canonical source for scene manipulation, transitions, fold semantics, and related invariants. |
+| [workspace-architecture.md](workspace-architecture.md) | Current | Workspace export/import model. |
+| [paths-architecture.md](paths-architecture.md) | Current | Paths feature model and implementation history. |
+| [chat-panel-architecture.md](chat-panel-architecture.md) | Current | Chat, notes, tutorial timeline, and chat storage model. |
+| [ai-assistant-vision.md](ai-assistant-vision.md) | Current | AI assistant behavior and architecture; read with chat panel doc for UI details. |
+| [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md) | Current with caveats | Current AI chat API call composition, quick-action prompt contract, and scene-context caveats. |
+| [telemetry-design.md](telemetry-design.md) | Current | Anonymous usage-counting design and privacy constraints. |
+| [landing-app-interaction.md](landing-app-interaction.md) | Current | User-facing landing/app scenarios and implementation status. |
+
+## Visual Systems
+
+| Document | Status | Notes |
+|---|---|---|
+| [theme-architecture.md](theme-architecture.md) | Current | Theme cascade, style generation, and scene theme behavior. |
+| [node-design-system.md](node-design-system.md) | Current | Built-in node designs and node-level visual parameters. |
+| [background-design.md](background-design.md) | Current | Scene background canvas system and theme integration. |
+| [central-node-styling-refactor.md](central-node-styling-refactor.md) | Current with caveats | Current central-node styling contract; broad transition sequencing defers to [scene-transitions.md](scene-transitions.md). |
+| [node-styling-diagram.md](node-styling-diagram.md) | Current with caveats | Current styling principles and call-flow reference; some old diagram names are historical. |
+| [node-rank-z-index.md](node-rank-z-index.md) | Deferred | Explicit z-index design intentionally postponed beyond v1. |
+
+## Superseded Transition Documents
+
+| Document | Status | Notes |
+|---|---|---|
+| [transition-sequence-spec.md](transition-sequence-spec.md) | Superseded | Replaced by [scene-transitions.md](scene-transitions.md). |
+| [fold-unfold-design.md](fold-unfold-design.md) | Historical / partly superseded | Fold basics remain useful; transition and invariant sections defer to [scene-transitions.md](scene-transitions.md). |
+| [refactoring-plan.md](refactoring-plan.md) | Historical | Implementation plan and bug record; current architecture authority lives in [architecture.md](architecture.md) and [scene-transitions.md](scene-transitions.md). |
+
+## Marketing
+
+| Document | Status | Notes |
+|---|---|---|
+| [marketing.md](marketing.md) | Current | Canonical marketing copy and directory listing notes. |
+| [marketing-raw-ideas.md](marketing-raw-ideas.md) | Scratchpad | Brainstorming and rejected copy; not canonical. |

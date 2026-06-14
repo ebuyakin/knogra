@@ -1,5 +1,10 @@
 # Workspace Module Architecture
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Canonical source for `.knogra` workspace export/import behavior.  
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Release plan](release-plan.md)
+
 ## 1. Overview
 
 The Workspace module handles saving, loading, and creating workspaces. A workspace is a complete, portable snapshot of user data that can be exported to a `.knogra` file and imported on any machine.

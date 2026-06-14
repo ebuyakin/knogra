@@ -12,6 +12,11 @@ import { isEditMode } from '../storage/app-mode';
 import { getTheme } from '../styles/themes';
 import { isDebug } from '../config/debug-flags';
 
+const MAX_BACKGROUND_IMAGE_BYTES = 1 * 1024 * 1024;
+const MAX_BACKGROUND_IMAGE_DIMENSION = 2048;
+const ALLOWED_BACKGROUND_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const ALLOWED_BACKGROUND_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
 export class SceneBackground {
   #cy: Core;
   #backgroundRenderer: BackgroundRenderer;
@@ -39,6 +44,11 @@ export class SceneBackground {
    * Upload a new image to the background library
    */
   async uploadImage(file: File): Promise<BackgroundImageId> {
+    const validationError = this.#validateUploadFile(file);
+    if (validationError) {
+      throw new Error(validationError);
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       
@@ -48,6 +58,12 @@ export class SceneBackground {
         // Create Image to get dimensions
         const img = new Image();
         img.onload = async () => {
+          const dimensionError = this.#validateImageDimensions(img.width, img.height);
+          if (dimensionError) {
+            reject(new Error(dimensionError));
+            return;
+          }
+
           const newImage: BackgroundImage = {
             id: `bg${Date.now()}` as BackgroundImageId,
             name: file.name,
@@ -67,6 +83,32 @@ export class SceneBackground {
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
     });
+  }
+
+  #validateUploadFile(file: File): string | null {
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+    if (file.type) {
+      if (!ALLOWED_BACKGROUND_IMAGE_MIME_TYPES.has(file.type)) {
+        return 'Only PNG, JPEG, and WebP images are allowed.';
+      }
+    } else if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(extension)) {
+      return 'Only PNG, JPEG, and WebP images are allowed.';
+    }
+
+    if (file.size > MAX_BACKGROUND_IMAGE_BYTES) {
+      return 'Background images must be 1 MB or smaller.';
+    }
+
+    return null;
+  }
+
+  #validateImageDimensions(width: number, height: number): string | null {
+    if (width > MAX_BACKGROUND_IMAGE_DIMENSION || height > MAX_BACKGROUND_IMAGE_DIMENSION) {
+      return 'Background images must be at most 2048 x 2048 pixels.';
+    }
+
+    return null;
   }
 
   /**

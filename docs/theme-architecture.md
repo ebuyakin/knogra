@@ -1,5 +1,10 @@
 # Theme & Style Architecture
 
+> **Status:** Current  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Canonical source for theme cascade, scene theme behavior, and style generation.  
+> **Related:** [Documentation map](README.md), [Node design system](node-design-system.md), [Background design](background-design.md)
+
 ## Overview
 
 Themes control the visual appearance of graph elements (nodes, edges, canvas background). Themes are **per-scene** — different scenes can have different themes. The visual system is organized as a 4-level cascade from global defaults down to individual node overrides.

@@ -7,7 +7,26 @@
     <meta name="description" content="An AI-assisted web client for constructing and exploring knowledge graphs" />
     <title>Knogra - Knowledge Graph Explorer</title>
     <link rel="stylesheet" href="/src/styles/global.css" />
-    <script defer src="/_vercel/insights/script.js"></script>
+    <script>
+      (function () {
+        const hostname = location.hostname;
+        const isLocalHost =
+          hostname === 'localhost' ||
+          hostname === '127.0.0.1' ||
+          hostname === '::1' ||
+          hostname.endsWith('.local') ||
+          /^10\./.test(hostname) ||
+          /^192\.168\./.test(hostname) ||
+          /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+
+        if (isLocalHost) return;
+
+        const script = document.createElement('script');
+        script.defer = true;
+        script.src = '/_vercel/insights/script.js';
+        document.head.appendChild(script);
+      })();
+    </script>
     <style>
       body {
         margin: 0;

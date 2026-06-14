@@ -29,9 +29,6 @@
  *   - Opacity masks (GradientMask, MaskStop)
  *   - Scene placement (SceneBackgroundImage)
  *
- * store-types.ts
- *   - Storage interface (GraphStore)
- *
  * chat-types.ts
  *   - Chat persistence types (Conversation, ChatMessage, MessageId, MessageSource)
  *

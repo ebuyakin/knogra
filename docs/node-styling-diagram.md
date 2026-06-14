@@ -1,5 +1,10 @@
 # Node Styling Architecture
 
+> **Status:** Current with caveats  
+> **Last reviewed:** 2026-06-14  
+> **Authority:** Current styling principles and call-flow reference for node design updates. Some older method names in the diagram are historical; [theme-architecture.md](theme-architecture.md), [node-design-system.md](node-design-system.md), [central-node-styling-refactor.md](central-node-styling-refactor.md), and current code remain the authority for exact APIs.  
+> **Related:** [Documentation map](README.md), [Theme architecture](theme-architecture.md), [Node design system](node-design-system.md), [Central node styling refactor](central-node-styling-refactor.md)
+
 This document describes the correct architecture for node styling in Knogra.
 
 ## Principles
@@ -20,10 +25,10 @@ This document describes the correct architecture for node styling in Knogra.
 
 | Method | Purpose | When to Use |
 |--------|---------|-------------|
-| `generateSceneStylesheet()` | Full scene load | `Scene.open()` |
+| `generateSceneStylesheet()` | Full scene stylesheet generation | Kept for potential future use; not currently on the main scene-open path |
 | `addNodesToStylesheet()` | Add new nodes | `Scene.includeNode()`, `Graph.addNode()`, transitions |
 | `updateNodeInStylesheet()` | Update existing node | `Scene.updateNodeStyle()` |
-| `updateCentralNodeInStylesheet()` | Update central node highlight | `Transition.#updateCentralNodeStyle()` |
+| `buildCentralAndSelectedRules()` | Build central/selected selector rules | Scene open and transition stylesheet rebuilds |
 | `generateNodeStyle()` | Generate single style | Called internally by above methods |
 
 ## Call Flow Diagram
@@ -51,7 +56,7 @@ flowchart LR
         GSS[generateSceneStylesheet]
         ANS[addNodesToStylesheet]
         UNS[updateNodeInStylesheet]
-        UCN[updateCentralNode]
+        BCSR[buildCentralAndSelectedRules]
         GNS[generateNodeStyle]
     end
 
@@ -84,8 +89,8 @@ flowchart LR
     EA_expand --> ANS
     %% 11: ANS -> GNS
     ANS --> GNS
-    %% 12: Trans_central -> UCN
-    Trans_central --> UCN
+    %% 12: Trans_central -> BCSR
+    Trans_central --> BCSR
 
     %% 13: Scene_open -> CY
     Scene_open --> CY_JSON
@@ -118,12 +123,14 @@ Cytoscape applies styles in order — later rules override earlier ones (with eq
 ```
 1. node[id="n1"] styles     ← specific node styles (first)
 2. node[id="n2"] styles
-3. node[id="centralNodeId"] ← central node highlight
-4. node:selected            ← selected state (must come after node styles)
-5. edge                     ← edge styles
+3. edge                     ← base edge styles
+4. edge[id="e1"]           ← edge overrides
+5. node[?centralNode]       ← central node highlight
+6. node:selected            ← selected state
+7. node[?centralNode]:selected ← combined central + selected state
 ```
 
-**Critical:** Node-specific styles must come BEFORE `:selected` so that selection highlighting works.
+**Critical:** Node-specific styles must come before central/selected rules so that central and selection highlighting survive per-node design changes. Cytoscape resolves conflicts by stylesheet order: the last matching rule wins.
 
 ## Key Rules
 
