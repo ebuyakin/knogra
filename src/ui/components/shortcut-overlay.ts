@@ -41,6 +41,7 @@ export class ShortcutOverlay {
     closeBtn.addEventListener('click', () => this.hide());
     header.appendChild(closeBtn);
     dialog.appendChild(header);
+    this.#setupDrag(header, dialog);
 
     // Hint
     const hint = document.createElement('div');
@@ -94,14 +95,39 @@ export class ShortcutOverlay {
     document.body.appendChild(overlay);
     this.#overlay = overlay;
 
-    // Center on Cytoscape viewport (left of chat panel)
-    const chatPanel = document.getElementById('chat');
-    const chatWidth = chatPanel?.offsetWidth || 350;
-    const leftAreaWidth = window.innerWidth - chatWidth;
+    // Center on the Cytoscape viewport.
+    const cy = document.getElementById('cy');
+    const cyRect = cy?.getBoundingClientRect();
     const dlgRect = dialog.getBoundingClientRect();
     dialog.style.position = 'fixed';
-    dialog.style.left = `${Math.max(20, (leftAreaWidth - dlgRect.width) / 2)}px`;
-    dialog.style.top = `${Math.max(20, (window.innerHeight - dlgRect.height) / 2)}px`;
+    dialog.style.left = `${Math.max(20, ((cyRect?.left ?? 0) + (cyRect?.width ?? window.innerWidth) / 2) - dlgRect.width / 2)}px`;
+    dialog.style.top = `${Math.max(20, ((cyRect?.top ?? 0) + (cyRect?.height ?? window.innerHeight) / 2) - dlgRect.height / 2)}px`;
+  }
+
+  #setupDrag(handle: HTMLElement, dialog: HTMLElement): void {
+    handle.addEventListener('mousedown', (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest('button')) return;
+
+      const rect = dialog.getBoundingClientRect();
+      const dragOffsetX = event.clientX - rect.left;
+      const dragOffsetY = event.clientY - rect.top;
+      document.body.style.cursor = 'move';
+
+      const onMouseMove = (moveEvent: MouseEvent): void => {
+        dialog.style.left = `${moveEvent.clientX - dragOffsetX}px`;
+        dialog.style.top = `${moveEvent.clientY - dragOffsetY}px`;
+      };
+
+      const onMouseUp = (): void => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      event.preventDefault();
+    });
   }
 
   hide(): void {

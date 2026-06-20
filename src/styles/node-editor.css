@@ -238,6 +238,55 @@
   text-align: left;
 }
 
+.node-editor-layout-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 18px;
+  row-gap: 8px;
+  padding-top: 2px;
+}
+
+.node-editor-default-layout-section {
+  margin-top: 10px;
+}
+
+.node-editor-number-row,
+.node-editor-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.node-editor-layout-cell {
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.node-editor-layout-controls .node-editor-color-label {
+  min-width: 86px;
+  text-align: left;
+}
+
+.node-editor-layout-controls .node-editor-scale-input {
+  width: 78px;
+}
+
+.node-editor-layout-controls .node-editor-checkbox-row input {
+  margin-left: 0;
+}
+
+.node-editor-checkbox-row {
+  cursor: pointer;
+  color: var(--text-secondary, #7d8590);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.node-editor-checkbox-row input {
+  accent-color: var(--accent-blue, #58a6ff);
+}
+
 /* Color control (inline row) */
 .node-editor-color-row {
   display: flex;

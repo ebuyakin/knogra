@@ -9,7 +9,7 @@
  * Listens to EventBus sceneChanged (fires from all transition paths)
  */
 
-import type { AppMode, SceneId } from '../core/main-types';
+import type { AppMode, EdgeTypeId, SceneId } from '../core/main-types';
 import { STATE_KEY } from '../config/storage-config';
 import { eventBus } from '../events/event-bus';
 
@@ -23,6 +23,8 @@ interface AppState {
   appMode?: AppMode;
   /** One-shot request to fit a scene after it is opened on startup. */
   fitSceneOnNextOpen?: SceneId;
+  /** Last selected edge type id (persisted for new-edge default) */
+  lastEdgeTypeId?: EdgeTypeId;
 }
 
 // ============================================================================
@@ -75,6 +77,20 @@ export class AppStateManager {
    */
   static saveLastSceneId(sceneId: SceneId): void {
     this.updateAppState({ lastSceneId: sceneId });
+  }
+
+  /**
+   * Get last used edge type id persisted in app state
+   */
+  static getLastEdgeTypeId(): EdgeTypeId | undefined {
+    return this.getAppState().lastEdgeTypeId;
+  }
+
+  /**
+   * Persist last used edge type id
+   */
+  static saveLastEdgeTypeId(typeId: EdgeTypeId): void {
+    this.updateAppState({ lastEdgeTypeId: typeId });
   }
 
   /**

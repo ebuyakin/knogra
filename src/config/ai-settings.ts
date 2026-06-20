@@ -36,6 +36,18 @@ export interface AISettings {
 
   /** Custom instructions appended to the AI's system prompt (workspace-specific) */
   customInstructions: string;
+
+  /** Extra instructions appended to the Scene quick-action user message */
+  scenePromptInstructions: string;
+
+  /** Extra instructions appended to the Node quick-action user message */
+  nodePromptInstructions: string;
+
+  /** Extra instructions appended to the Suggest quick-action user message */
+  suggestPromptInstructions: string;
+
+  /** Extra instructions appended to the Connect quick-action user message */
+  connectPromptInstructions: string;
   
   /** Shelf: preview scale relative to actual node size (0.1-1.0) */
   shelfPreviewScale: number;
@@ -79,6 +91,10 @@ export const AI_DEFAULTS: AISettings = {
   chatScrollPosition: 'bottom',
   responseLanguage: '',
   customInstructions: '',
+  scenePromptInstructions: '',
+  nodePromptInstructions: '',
+  suggestPromptInstructions: '',
+  connectPromptInstructions: '',
   
   // Shelf display settings
   shelfPreviewScale: 0.8,

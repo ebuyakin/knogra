@@ -1,9 +1,9 @@
 # AI Assistant: Vision & Architecture
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-14  
+> **Last reviewed:** 2026-06-25  
 > **Authority:** Current AI assistant goals, behavior rules, provider model, and graph-action flow.  
-> **Related:** [Documentation map](README.md), [Chat panel architecture](chat-panel-architecture.md), [Product vision](knogra-vision.md)
+> **Related:** [Documentation map](README.md), [Chat panel architecture](chat-panel-architecture.md), [AI chat API call composition](ai-chat-api-call-composition.md), [Product vision](knogra-vision.md)
 
 > **Note:** The AI chat is one mode of the broader chat panel, which also serves as a notebook and tutorial content pane. See [Chat Panel Architecture](chat-panel-architecture.md) for the full panel design.
 
@@ -23,6 +23,7 @@ The AI understands:
 - **General awareness** — that the chat is part of the learning app (not a generic chat), what the application is, how it works, and the AI assistant's role.
 - **Current concept** (central node of the scene)
 - **Related concepts** (connected nodes, visible scene)
+- **Current selection** (selected node or nodes when the user invokes the Node command)
 - **Learning journey** (navigation history, previous discussions)
 - **Graph structure** (what exists, what's missing)
 
@@ -42,6 +43,17 @@ AI responses contain both:
 - Conversation associated with each node (stored in IndexedDB)
 - System prompt built dynamically from graph/scene state
 - Conversation loaded/saved on scene transitions
+
+Preconfigured chat commands provide common starting points without changing provider mode:
+
+| Command | Purpose | Action bias |
+|---|---|---|
+| **Scene** | Discuss the current scene as a whole around its central node. | Explanatory; graph actions only when useful. |
+| **Node** | Explain the currently selected node(s) in scene context; falls back to the central node when nothing is selected. | Explanatory; graph actions only when useful. |
+| **Suggest** | Propose brand-new concepts related to the current scene. | `create_connected` actions. |
+| **Connect** | Find existing graph nodes that belong in the current scene. | `include_existing` actions. |
+
+The visible timeline stores compact command text, while the provider receives the fuller hidden command prompt. Each command can have optional setting-driven additions appended to that hidden prompt. Exact command wording and API-call composition are defined in [AI chat API call composition](ai-chat-api-call-composition.md).
 
 ### B. Node Shelf (Suggestion Panel)
 
@@ -73,24 +85,19 @@ A horizontal shelf at the bottom of the viewport showing AI-suggested nodes. Two
 
 ### C. Context & Prompt Architecture
 
-The system prompt provides the AI with full graph awareness:
+The system prompt provides the AI with scene-aware graph context rather than a generic chat setup. It distinguishes:
 
-```
-## Knowledge Graph
-**In current scene:**
-- Maxwell's Equations (∇·E = ρ/ε₀)
-- Four-Potential (A_μ) (A_μ = (φ/c, -A))
-
-**Not in current scene (available to include):**
-- Lorentz Force
-- Gauge Invariance
-- Wave Equation (□²ψ = 0)
-```
+- the scene central node
+- currently selected node(s), when present
+- visible scene nodes and scene-included edges
+- direct graph neighbors of the central node
+- full-graph nodes already in the scene vs available to include
 
 This enables the AI to:
 - Avoid suggesting duplicates (`create_connected` for something that exists)
 - Suggest relevant existing nodes (`include_existing`) with exact title matching
-- Understand the full knowledge structure
+- Treat scene membership, runtime selection, and graph connectivity as different signals
+- Weight answers by scene richness instead of overfitting sparse scenes
 
 **Action schema in prompt:**
 ```json
@@ -101,6 +108,8 @@ This enables the AI to:
 ```
 
 Note: `include_existing` uses `title` (not `nodeId`) — the AI doesn't know internal IDs. Title→nodeId resolution happens at parse time.
+
+The exact system-message text is intentionally not duplicated here; [AI chat API call composition](ai-chat-api-call-composition.md) is the implementation contract for prompt and provider-call details.
 
 ### D. Equation Support
 - AI can generate/edit LaTeX equations
@@ -259,40 +268,9 @@ type ShelfAction = CreateConnectedAction | IncludeExistingAction;
 
 ## System Prompt Structure
 
-The context builder assembles a dynamic system prompt:
+The context builder assembles one dynamic system prompt for typed messages and all AI commands. It summarizes the scene central node, currently selected node(s), current scene content, direct graph neighbors, and full-graph availability for shelf actions.
 
-```
-You are a learning companion helping explore a knowledge graph.
-
-## Current Situation
-- Central concept: "{nodeTitle}"
-- Description: "{nodeDescription}"
-- Tags: {nodeTags}
-- Equations: {nodeEquations}
-
-## Connected Concepts
-- Parents: {parentNodes}
-- Children: {childNodes}
-
-## Visible Scene
-{sceneNodes with brief descriptions}
-
-## Learning Journey
-- Previous concepts explored: {recentHistory}
-- Concepts with ongoing discussions: {nodesWithChats}
-
-## Your Role
-1. Answer questions about the current concept
-2. Explain relationships to connected concepts
-3. Suggest new concepts to explore (as structured actions)
-4. Help with equations when asked
-5. Identify gaps in the knowledge structure
-
-## Response Format
-Provide conversational response, then structured suggestions.
-Use the following JSON format for suggestions:
-[... action schema ...]
-```
+The preconfigured commands differ by their hidden user message, not by separate system prompts or provider modes. Exact prompt text and provider-call shape are defined in [AI chat API call composition](ai-chat-api-call-composition.md).
 
 ---
 

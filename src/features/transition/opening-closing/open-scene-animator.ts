@@ -12,6 +12,7 @@ import type { OpenSceneTimings } from '../../../config/transition-settings';
 import { graphStore } from '../../../storage/graph-store';
 import { getSetting } from '../../../config';
 import { StyleGenerator } from '../../../styles/style-generator';
+import { resolveSceneEdgeVisualState } from '../../../styles/edge-visual-resolver';
 
 type OpenStageKey = keyof OpenSceneTimings;
 
@@ -372,7 +373,7 @@ export class OpenSceneAnimator {
     let currentStylesheet = (this.#cy.style() as any).json();
     for (const edgeId of edgeIds) {
       const sceneEdgeData = scene.edges[edgeId];
-      if (!sceneEdgeData?.design) continue;
+      if (!StyleGenerator.hasEdgeStyleOverride(sceneEdgeData?.design)) continue;
 
       const edgeStyle = StyleGenerator.generateEdgeStyleForId(
         edgeId, sceneEdgeData.design, themeId
@@ -387,8 +388,13 @@ export class OpenSceneAnimator {
     const edges = this.#cy.collection();
     edgeIds.forEach(id => edges.merge(this.#cy.getElementById(id)));
     
-    edges.animate({ style: { opacity: 1 }, duration, easing: 'ease-out' });
+    edgeIds.forEach(id => {
+      const edge = this.#cy.getElementById(id);
+      const targetOpacity = this.#resolveEdgeTargetOpacity(id, scene);
+      edge.animate({ style: { opacity: targetOpacity }, duration, easing: 'ease-out' });
+    });
     await this.#delay(duration + delay);
+    edges.removeStyle('opacity');
   }
 
   // ==========================================================================
@@ -430,18 +436,31 @@ export class OpenSceneAnimator {
       });
       edgeEl.style('opacity', 0);
 
-      // Apply per-edge style if scene has design for this edge
-      if (sceneEdgeData?.design) {
+      // Apply per-edge style if scene has custom design for this edge
+      if (StyleGenerator.hasEdgeStyleOverride(sceneEdgeData?.design)) {
         let currentStylesheet = (this.#cy.style() as any).json();
         const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, sceneEdgeData.design, themeId);
         currentStylesheet = StyleGenerator.updateEdgeInStylesheet(currentStylesheet, edgeId, edgeStyle);
         this.#cy.style().fromJson(currentStylesheet).update();
       }
 
-      edgeEl.animate({ style: { opacity: 1 }, duration, easing: 'ease-out' });
+      const targetOpacity = this.#resolveEdgeTargetOpacity(edgeId, scene);
+      edgeEl.animate({ style: { opacity: targetOpacity }, duration, easing: 'ease-out' });
     }
 
     await this.#delay(duration);
+    this.#cy.edges().removeStyle('opacity');
+  }
+
+  #resolveEdgeTargetOpacity(edgeId: EdgeId, scene: Scene): number {
+    const edgeData = graphStore.edges.find(edge => edge.id === edgeId);
+    if (!edgeData) return 1;
+    return resolveSceneEdgeVisualState({
+      edge: edgeData,
+      scene,
+      edgeTypes: graphStore.edgeTypes,
+      themeId: scene.themeId || 'dark'
+    }).opacity;
   }
 
   /**

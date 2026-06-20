@@ -10,7 +10,7 @@ export const PATH_DB_NAME = 'knogra-paths';
 export const THEME_DB_NAME = 'knogra-themes';
 
 // IndexedDB schema versions
-export const GRAPH_DB_VERSION = 2;
+export const GRAPH_DB_VERSION = 3;
 export const CHAT_DB_VERSION = 1;
 export const PATH_DB_VERSION = 1;
 export const THEME_DB_VERSION = 1;
@@ -18,9 +18,10 @@ export const THEME_DB_VERSION = 1;
 // IndexedDB schemas (Dexie format)
 export const GRAPH_DB_SCHEMA = {
   nodes: '++id, title, tags',
-  edges: '++id, title, sourceId, targetId, tags',
+  edges: '++id, title, sourceId, targetId, typeId, tags',
   scenes: '++id, title',
-  backgroundImages: '++id, name'
+  backgroundImages: '++id, name',
+  edgeTypes: 'id, name'
 };
 
 export const CHAT_DB_SCHEMA = {

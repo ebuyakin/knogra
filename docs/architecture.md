@@ -2,8 +2,8 @@
 
 > **Status:** Current  
 > **Last reviewed:** 2026-06-14  
-> **Authority:** Main authoritative architecture document for layers, dependency direction, module responsibilities, persistence ownership, and coding standards. For detailed scene, fold, visibility, and transition terminology, defer to [Scene Transitions](scene-transitions.md).  
-> **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Scene transitions](scene-transitions.md)
+> **Authority:** Main authoritative architecture document for layers, dependency direction, module responsibilities, persistence ownership, and coding standards. For detailed scene, fold, visibility, and transition terminology, defer to [Scene Transitions](scene-transitions.md). For typed edge styling and scene-local edge type visibility, defer to [Edge Types Architecture](edge-types-architecture.md).  
+> **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Scene transitions](scene-transitions.md), [Edge Types Architecture](edge-types-architecture.md)
 
 ## Section 1. Core Philosophy
 
@@ -38,6 +38,7 @@ Some operations are not Cytoscape-derived scene mutations and therefore write th
 - Viewport settings (zoom, pan)
 - Background images
 - Fold state (which subtrees are collapsed)
+- Edge type visibility state
 
 **Key insight:** The same node can appear in multiple scenes with different positions and styles.
 
@@ -191,7 +192,7 @@ Application settings and user preferences.
 #### Graph Persistence
 
 **GraphStore** (`graph-store.ts`)
-- IndexedDB-backed cache of nodes, edges, scenes, and background images
+- IndexedDB-backed cache of nodes, edges, edge types, scenes, and background images
 - Read by Features, UI, Background, Styles, diagnostics, and storage workflows
 - Written by GraphSaver for Cytoscape-derived scene persistence; explicit storage workflows handle seeding, workspace import, Mermaid import, deletion cleanup, background image library changes, theme changes, and scene auto-creation
 
@@ -249,8 +250,12 @@ Application settings and user preferences.
 
 **StyleGenerator** (`style-generator.ts`)
 - Pure stylesheet generation and stylesheet-update helpers for Cytoscape
-- Owns node/edge style rule construction and central/selected selector rules
+- Owns node/edge style rule construction, edge type selector rules, visibility selector rules, and central/selected selector rules
 - Applies styles through `cy.style().fromJson(stylesheet).update()`
+
+**Edge visual resolver** (`edge-visual-resolver.ts`)
+- Resolves declarative edge visual state from theme, edge type, edge type override, scene edge override, and scene-local edge type visibility
+- Used by scene opening and transition paths so animations target resolved edge opacity rather than hardcoded visibility values
 
 **Themes** (`themes.ts`, `theme-store.ts`)
 - Built-in and custom color themes
@@ -403,6 +408,8 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 | `context-menu.ts` | Right-click menus |
 | `node-editor.ts` | Edit node modal |
 | `edge-editor.ts` | Edit edge modal |
+| `edge-type-manager.ts` | Workspace edge type registry and type-level style editor |
+| `edge-type-visibility-modal.ts` | Scene-local **Edges visibility** controls |
 | `node-manager.ts` | Node management and scene cleanup dialog ⚠️ |
 | `node-picker.ts` | Node selection dialog |
 | `scene-picker.ts` | Scene selection dialog |
@@ -463,7 +470,7 @@ Core
 
 | Layer | Constraint |
 |-------|------------|
-| **UI** | No direct Cytoscape access (only via Features) |
+| **UI** | May use Cytoscape for ephemeral interaction state such as selection, rendered positions, temporary input blocking, and overlay positioning. Domain mutations should go through Features or explicit storage services. |
 | **UI** | Domain mutations should go through Features or explicit storage services; direct store writes are technical debt unless the UI component is itself the storage workflow surface |
 | **Features** | Cytoscape-derived scene mutations should flow through Cytoscape and GraphSaver |
 | **Features** | Direct GraphStore writes are allowed only for named non-Cytoscape operations: scene auto-creation, theme/background persistence, graph deletion cleanup, workspace/Mermaid import, seeding, and diagnostics/validation workflows |

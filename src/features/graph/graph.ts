@@ -4,20 +4,62 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../core/main-types';
-import { graphStore } from '../storage/graph-store';
-import { isEditMode } from '../storage/app-mode';
-import { cascadeNodeDeletion } from '../storage/node-deletion';
-import { StyleGenerator } from '../styles/style-generator';
-import { circularSpreadSafe } from './utils/pure/position-expansion';
-import { getSetting } from '../config';
-import { isDebug } from '../config/debug-flags';
+import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../../core/main-types';
+import type { AnchorLinkResult } from './anchor-traversal';
+import type { GraphStatistics } from './statistics';
+import { graphStore } from '../../storage/graph-store';
+import { isEditMode } from '../../storage/app-mode';
+import { cascadeNodeDeletion } from '../../storage/node-deletion';
+import { StyleGenerator } from '../../styles/style-generator';
+import { circularSpreadSafe } from '../utils/pure/position-expansion';
+import { getSetting } from '../../config';
+import { getDefaultEdgeTypeId } from '../../config/edge-type-settings';
+import { AppStateManager } from '../../storage/app-state';
+import { isDebug } from '../../config/debug-flags';
+import { getAnchorDistances, getLinkToAnchor } from './anchor-traversal';
+import { buildGraphStatistics } from './statistics';
+
+export type { GraphStatistics, GraphStatisticBucket } from './statistics';
 
 export class Graph {
   #cy: Core;
 
   constructor(cy: Core) {
     this.#cy = cy;
+  }
+
+  getAnchorDistances(): Map<NodeId, number> {
+    return getAnchorDistances(graphStore.nodes, graphStore.edges);
+  }
+
+  getLinkToAnchor(nodeId: NodeId): AnchorLinkResult {
+    return getLinkToAnchor(nodeId, graphStore.nodes, graphStore.edges);
+  }
+
+  getGraphStatistics(): GraphStatistics {
+    return buildGraphStatistics({
+      nodes: graphStore.nodes,
+      edges: graphStore.edges,
+      edgeTypes: graphStore.edgeTypes,
+      scenes: graphStore.scenes,
+      backgroundImages: graphStore.backgroundImages
+    });
+  }
+
+  /**
+   * Find an existing node whose title matches the given one under meaningful
+   * (not technical) comparison: case-insensitive and whitespace-insensitive.
+   * Used to warn about duplicate titles before committing an edit.
+   *
+   * @param excludeId - node to skip (the one being edited)
+   * @returns the first conflicting node, or null if the title is unique
+   */
+  findNodeByTitle(title: string, excludeId?: NodeId): NodeData | null {
+    const normalized = normalizeTitle(title);
+    if (!normalized) return null;
+    return graphStore.nodes.find(
+      n => n.id !== excludeId && normalizeTitle(n.title) === normalized
+    ) ?? null;
   }
 
   /**
@@ -209,11 +251,16 @@ export class Graph {
 
     const edgeId = `e${Date.now()}` as EdgeId;
 
+    const rememberedEdgeTypeId = AppStateManager.getLastEdgeTypeId();
+    const edgeTypeId = rememberedEdgeTypeId && graphStore.edgeTypes.some(type => type.id === rememberedEdgeTypeId)
+      ? rememberedEdgeTypeId
+      : getDefaultEdgeTypeId();
     const edge: EdgeData = {
       id: edgeId,
       title,
       sourceId,
       targetId,
+      typeId: edgeTypeId,
       tags: [],
       properties: {},
       createdAt: new Date(),
@@ -273,13 +320,11 @@ export class Graph {
     }
 
     // Cascade delete: clean up related data in all stores
-    await cascadeNodeDeletion(nodeId);
+    const deletionResult = await cascadeNodeDeletion(nodeId);
 
-    // Find all connected edges and mark them for deletion
-    const connectedEdges = cyNode.connectedEdges();
+    // Mark all graph edges incident to this node for deletion
     const edgesToDelete = this.#cy.scratch('edgesToDelete') || [];
-    const edgeIds = connectedEdges.map(e => e.id());
-    this.#cy.scratch('edgesToDelete', [...edgesToDelete, ...edgeIds]);
+    this.#cy.scratch('edgesToDelete', [...edgesToDelete, ...deletionResult.incidentEdgeIds]);
 
     // Mark node for deletion from database
     const nodesToDelete = this.#cy.scratch('nodesToDelete') || [];
@@ -321,20 +366,17 @@ export class Graph {
     }
 
     // Cascade delete: clean up scenes, paths, chat, shelf
-    await cascadeNodeDeletion(nodeId);
+    const deletionResult = await cascadeNodeDeletion(nodeId);
 
-    // Delete connected edges from graphStore
-    const connectedEdges = graphStore.edges.filter(
-      e => e.sourceId === nodeId || e.targetId === nodeId
-    );
-    for (const edge of connectedEdges) {
-      await graphStore.deleteEdge(edge.id);
+    // Delete incident edges from graphStore
+    for (const edgeId of deletionResult.incidentEdgeIds) {
+      await graphStore.deleteEdge(edgeId);
     }
 
     // Delete the node from graphStore
     await graphStore.deleteNode(nodeId);
 
-    if (isDebug('d_store')) console.log(`[Graph.deleteNodeFromGraph] Deleted node ${nodeId} and ${connectedEdges.length} edges`);
+    if (isDebug('d_store')) console.log(`[Graph.deleteNodeFromGraph] Deleted node ${nodeId} and ${deletionResult.incidentEdgeIds.length} edges`);
     return { success: true };
   }
 
@@ -377,6 +419,7 @@ export class Graph {
     const nodes = graphStore.nodes;
     const edges = graphStore.edges;
     const scenes = graphStore.scenes;
+    const anchorDistances = this.getAnchorDistances();
     
     // Pre-compute scene membership for efficiency
     const nodeSceneCount = new Map<NodeId, number>();
@@ -409,7 +452,8 @@ export class Graph {
       sceneCount: nodeSceneCount.get(node.id) ?? 0,
       connectionCount: nodeConnectionCount.get(node.id) ?? 0,
       hasOwnScene: nodeHasOwnScene.has(node.id),
-      isInCurrentScene: nodesInCy.has(node.id)
+      isInCurrentScene: nodesInCy.has(node.id),
+      anchorDistance: anchorDistances.get(node.id) ?? null
     }));
   }
 
@@ -420,4 +464,13 @@ export class Graph {
   findSceneByCentralNode(nodeId: NodeId): Scene | null {
     return graphStore.scenes.find(s => s.centralNodeId === nodeId) ?? null;
   }
+}
+
+/**
+ * Normalize a node title for meaningful (non-technical) comparison:
+ * case-insensitive and whitespace-insensitive. Internal runs of whitespace
+ * collapse to a single space and surrounding whitespace is trimmed.
+ */
+function normalizeTitle(title: string): string {
+  return title.trim().replace(/\s+/g, ' ').toLowerCase();
 }

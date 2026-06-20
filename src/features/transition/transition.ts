@@ -21,6 +21,7 @@ import { isEditMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
 import { getTheme } from '../../styles/themes';
 import { StyleGenerator } from '../../styles/style-generator';
+import { resolveSceneEdgeVisualState } from '../../styles/edge-visual-resolver';
 import { eventBus } from '../../events/event-bus';
 
 import { findDirectlyConnected } from '../utils/pure/scene-calculations';
@@ -237,17 +238,10 @@ export class Transition {
 
       // Initialize base stylesheet with central/selected rules and edge style
       const baseStylesheet = [
-        {
-          selector: 'edge',
-          style: {
-            'width': 2,
-            'line-color': theme.edge.line.color,
-            'target-arrow-color': theme.edge.line.color,
-            'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier'
-          }
-        },
-        ...StyleGenerator.buildCentralAndSelectedRules(themeId)
+        StyleGenerator.generateEdgeStyle(themeId),
+        ...StyleGenerator.generateEdgeTypeStyles(graphStore.edgeTypes, themeId),
+        ...StyleGenerator.buildCentralAndSelectedRules(themeId),
+        ...StyleGenerator.generateEdgeTypeVisibilityStyles(scene.edgeTypeVisibility)
       ];
       this.#cy.style().fromJson(baseStylesheet).update();
 
@@ -268,17 +262,26 @@ export class Transition {
         // Apply fold state while everything is invisible — no flash
         await this.#foldStateHandler.apply(scene, themeId);
 
-        // Fade in only visible elements
+        // Fade in only visible elements. Edge targets come from scene visibility.
         const fadeDuration = 250;
-        const visible = this.#cy.elements().filter((ele: any) => ele.style('display') !== 'none');
-        const fadePromises = visible.map((ele: any) =>
+        const visibleNodes = this.#cy.nodes().filter((ele: any) => ele.style('display') !== 'none');
+        const visibleEdges = this.#cy.edges().filter((ele: any) => ele.style('display') !== 'none');
+        const nodeFadePromises = visibleNodes.map((ele: any) =>
           ele.animation({ style: { opacity: 1 }, duration: fadeDuration }).play().promise()
         );
+        const edgeFadePromises = visibleEdges.map((ele: any) => {
+          const edgeData = graphStore.edges.find(edge => edge.id === ele.id());
+          const targetOpacity = edgeData
+            ? resolveSceneEdgeVisualState({ edge: edgeData, scene, edgeTypes: graphStore.edgeTypes, themeId }).opacity
+            : 1;
+          return ele.animation({ style: { opacity: targetOpacity }, duration: fadeDuration }).play().promise();
+        });
         if (bgCanvas) {
           bgCanvas.style.transition = `opacity ${fadeDuration}ms ease`;
           bgCanvas.style.opacity = '1';
         }
-        await Promise.all(fadePromises);
+        await Promise.all([...nodeFadePromises, ...edgeFadePromises]);
+        this.#cy.edges().removeStyle('opacity');
         if (bgCanvas) bgCanvas.style.transition = '';
         checkSceneInvariant(this.#cy, scene, 'openScene:fade');
       } else {

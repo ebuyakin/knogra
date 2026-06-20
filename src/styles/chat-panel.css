@@ -4,17 +4,17 @@
 
 /* Quick Actions Bar */
 .quick-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
 }
 
 .quick-action-btn {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  min-width: 0;
   padding: 8px 12px;
   background: #21262d;
   border: 1px solid #30363d;
@@ -98,11 +98,6 @@
 
 .note-input::placeholder {
   color: #484f58;
-}
-
-.quick-action-icon {
-  font-size: 14px;
-  opacity: 0.8;
 }
 
 .quick-action-label {

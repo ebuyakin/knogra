@@ -1,4 +1,4 @@
-import type { Edge, Node, NodeId } from '../../core/main-types';
+import type { Edge, EdgeType, Node, NodeId } from '../../core/main-types';
 
 export interface ParsedMermaidNode {
   mermaidId: string;
@@ -23,10 +23,11 @@ interface NodeSpec {
   title?: string;
 }
 
-export function buildMermaidMarkdown(nodes: Node[], edges: Edge[]): string {
+export function buildMermaidMarkdown(nodes: Node[], edges: Edge[], edgeTypes: EdgeType[] = []): string {
   const validNodes = nodes.filter(node => typeof node.id === 'string');
   const nodeIds = new Set(validNodes.map(node => node.id));
   const mermaidIds = new Map<NodeId, string>();
+  const edgeTypeNames = new Map(edgeTypes.map(edgeType => [edgeType.id, edgeType.name]));
 
   validNodes.forEach((node, index) => {
     mermaidIds.set(node.id, `N${index + 1}`);
@@ -52,12 +53,8 @@ export function buildMermaidMarkdown(nodes: Node[], edges: Edge[]): string {
     const targetId = mermaidIds.get(edge.targetId);
     if (!sourceId || !targetId) continue;
 
-    const title = edge.title.trim();
-    if (title.length > 0) {
-      lines.push(`  ${sourceId} -->|${escapeEdgeLabel(title)}| ${targetId}`);
-    } else {
-      lines.push(`  ${sourceId} --> ${targetId}`);
-    }
+    const edgeTypeName = edgeTypeNames.get(edge.typeId)?.trim() || 'related';
+    lines.push(`  ${sourceId} -->|${escapeEdgeLabel(edgeTypeName)}| ${targetId}`);
   }
 
   lines.push('```', '');

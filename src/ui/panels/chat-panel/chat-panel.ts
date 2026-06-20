@@ -12,7 +12,7 @@ import type { SceneContext } from '../../../ai/context-builder';
 
 import { chatSession } from '../../../ai/chat-session';
 import { chatStore } from '../../../storage/chat-store';
-import { QUICK_ACTIONS } from '../../../ai/prompts';
+import { QUICK_ACTIONS, resolveQuickActionMessage } from '../../../ai/prompts';
 import { getSetting } from '../../../config';
 
 import {
@@ -115,13 +115,14 @@ export class ChatPanel {
       const button = document.createElement('button');
       button.className = 'quick-action-btn';
       button.title = action.id === 'clear' ? 'Clear chat history' : (action.displayText ?? action.prompt);
-      button.innerHTML = `<span class="quick-action-icon">${action.icon}</span><span class="quick-action-label">${action.label}</span>`;
+      button.innerHTML = `<span class="quick-action-label">${action.label}</span>`;
 
       button.addEventListener('click', () => {
         if (action.prompt === '__clear__') {
           this.#clearChat();
         } else {
-          this.#sendQuickAction(action.prompt, action.displayText);
+          const message = resolveQuickActionMessage(action);
+          this.#sendQuickAction(message.prompt, message.displayText);
         }
       });
 
@@ -391,6 +392,11 @@ export class ChatPanel {
       visibleNodeIds.push(node.id() as NodeId);
     });
 
+    const selectedNodeIds: NodeId[] = [];
+    this.#cy.nodes(':selected').forEach(node => {
+      selectedNodeIds.push(node.id() as NodeId);
+    });
+
     const nodesWithChats: NodeId[] = [];
     const navigationHistory: NodeId[] = [];
 
@@ -398,6 +404,7 @@ export class ChatPanel {
       centralNodeId,
       sceneId,
       visibleNodeIds,
+      selectedNodeIds,
       navigationHistory,
       nodesWithChats
     };

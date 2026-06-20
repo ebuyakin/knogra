@@ -17,6 +17,9 @@ export const NODE_DEFAULTS = {
   
   /** Default design to use when not inheriting (or no node selected) */
   defaultDesign: 'default-node' as DesignId,
+
+  /** Design to use when an editor workflow adds an equation to a node */
+  equationDesign: 'equation-compact-node' as DesignId,
   
   /** Design for shelf items that have an equation */
   shelfDesignWithEquation: 'equation-compact-node' as DesignId,

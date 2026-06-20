@@ -182,6 +182,7 @@ export class SceneBackground {
       const zoom = this.#cy.zoom();
       const pan = this.#cy.pan();
       this.#backgroundRenderer.redraw(zoom, pan);
+      this.#backgroundRenderer.getMainCanvas().style.opacity = '1';
       
       if (isDebug('d_background')) console.log('SceneBackground: Updated background image');
     }

@@ -4,14 +4,18 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { NodeId } from '../../core/main-types';
+import type { EdgeTypeId, NodeId } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
+import type { EdgeCreationMode } from '../edge-creation-mode';
 import type { NodeEditor, NodeEditorContext } from './node-editor';
 import type { EdgeEditor } from './edge-editor';
+import type { EdgeTypeManager } from './edge-type-manager';
+import type { EdgeTypeVisibilityModal } from './edge-type-visibility-modal';
 import type { NodePicker } from './node-picker';
 import type { NodeManager } from './node-manager';
 import type { BackgroundEditor } from './background-editor';
 import type { ThemeEditor } from './theme-editor';
+import type { AnchorLinkTooltip } from './anchor-link-tooltip';
 import { graphStore } from '../../storage/graph-store';
 import { getAppMode, isEditMode, setAppMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
@@ -19,6 +23,11 @@ import { exportWorkspace, showImportDialog, newWorkspace } from '../../storage/w
 import { exportMermaidGraph, showImportMermaidDialog } from '../../storage/mermaid';
 import { SettingsModal } from './settings-modal';
 import { generateEquationFromPrompt } from '../../ai/equation-generator';
+
+interface CopiedEdgeStyle {
+  typeId: EdgeTypeId;
+  params: Record<string, unknown> | null;
+}
 
 export interface MenuItem {
   label: string;
@@ -31,24 +40,32 @@ export class ContextMenu {
   #cy: Core;
   #container: HTMLElement;
   #features: FeatureAPI;
+  #edgeCreationMode: EdgeCreationMode;
   #nodeEditor: NodeEditor;
   #edgeEditor: EdgeEditor;
+  #edgeTypeManager: EdgeTypeManager;
+  #edgeTypeVisibilityModal: EdgeTypeVisibilityModal;
   #nodeManager: NodeManager;
   #backgroundEditor: BackgroundEditor;
   #themeEditor: ThemeEditor;
+  #anchorLinkTooltip: AnchorLinkTooltip;
   #menuElement: HTMLDivElement | null = null;
-  #copiedEdgeDesign: Record<string, unknown> | null = null;
+  #copiedEdgeStyle: CopiedEdgeStyle | null = null;
   #copiedNodeDesign: { design: { id: string; params: Record<string, unknown> }; scale: number } | null = null;
 
-  constructor(cy: Core, container: HTMLElement, features: FeatureAPI, nodeEditor: NodeEditor, edgeEditor: EdgeEditor, _nodePicker: NodePicker, nodeManager: NodeManager, backgroundEditor: BackgroundEditor, themeEditor: ThemeEditor) {
+  constructor(cy: Core, container: HTMLElement, features: FeatureAPI, edgeCreationMode: EdgeCreationMode, nodeEditor: NodeEditor, edgeEditor: EdgeEditor, edgeTypeManager: EdgeTypeManager, edgeTypeVisibilityModal: EdgeTypeVisibilityModal, _nodePicker: NodePicker, nodeManager: NodeManager, backgroundEditor: BackgroundEditor, themeEditor: ThemeEditor, anchorLinkTooltip: AnchorLinkTooltip) {
     this.#cy = cy;
     this.#container = container;
     this.#features = features;
+    this.#edgeCreationMode = edgeCreationMode;
     this.#nodeEditor = nodeEditor;
     this.#edgeEditor = edgeEditor;
+    this.#edgeTypeManager = edgeTypeManager;
+    this.#edgeTypeVisibilityModal = edgeTypeVisibilityModal;
     this.#nodeManager = nodeManager;
     this.#backgroundEditor = backgroundEditor;
     this.#themeEditor = themeEditor;
+    this.#anchorLinkTooltip = anchorLinkTooltip;
     this.#setupContextMenuListeners();
   }
 
@@ -110,6 +127,21 @@ export class ContextMenu {
         this.#closeMenu();
       }
     });
+
+    // Close stale custom menus when the browser window/tab stops being active.
+    window.addEventListener('blur', () => {
+      this.#closeMenu();
+    });
+
+    window.addEventListener('pagehide', () => {
+      this.#closeMenu();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') {
+        this.#closeMenu();
+      }
+    });
   }
 
   /**
@@ -134,13 +166,19 @@ export class ContextMenu {
 
     const items: MenuItem[] = [
       {
-        label: 'Go to scene (G)',
+        label: "Go to node's scene (G)",
         action: async () => {
           await this.#features.transition.goToSceneByNode(nodeId);
         }
       },
       {
-        label: 'Edit (E)',
+        label: 'Show link to anchor (I)',
+        action: () => {
+          this.#showLinkToAnchor(nodeId, position);
+        }
+      },
+      {
+        label: 'Edit node (E)',
         enabled: editMode,
         action: () => {
           this.#openNodeEditor(nodeId);
@@ -192,32 +230,16 @@ export class ContextMenu {
         };
       })(),
       {
-        label: 'Include all edges (S)',
-        enabled: editMode,
-        action: () => {
-          this.#features.scene.includeAllIncidentEdges(nodeId);
-        }
-      },
-      {
-        label: 'Add edge (L)',
-        enabled: editMode,
-        action: () => {
-          this.#container.style.cursor = 'crosshair';
-          
-          const handler = (event: any) => {
-            const targetId = event.target.id();
-            this.#features.graph.addEdge(nodeId, targetId);
-            this.#cy.off('tap', 'node', handler);
-            this.#container.style.cursor = 'default';
-          };
-          
-          this.#cy.on('tap', 'node', handler);
-        }
-      },
-      {
         label: 'Scene',
         enabled: editMode,
         children: [
+          {
+            label: 'Include all node edges (S)',
+            enabled: editMode,
+            action: () => {
+              this.#features.scene.includeAllIncidentEdges(nodeId);
+            }
+          },
           {
             label: 'Include neighbors (C)',
             enabled: editMode,
@@ -240,14 +262,14 @@ export class ContextMenu {
             }
           },
           {
-            label: 'Exclude descendants (⇧C)',
+            label: 'Exclude descendants (Shift+C)',
             enabled: editMode,
             action: async () => {
               await this.#features.scene.collapseNodeAnimated(nodeId);
             }
           },
           {
-            label: 'Exclude node (X)',
+            label: 'Exclude node + descendants (X)',
             action: async () => {
               await this.#features.scene.excludeNode(nodeId);
             },
@@ -267,10 +289,24 @@ export class ContextMenu {
             }
           },
           {
-            label: 'Add parent (⇧A)',
+            label: 'Add parent (Shift+A)',
             enabled: editMode,
             action: () => {
               this.#features.graph.addConnectedNode(nodeId, 'parent');
+            }
+          },
+          {
+            label: 'Add edge (L)',
+            enabled: editMode,
+            action: () => {
+              this.#edgeCreationMode.start(nodeId, false);
+            }
+          },
+          {
+            label: 'Add multiple edges (Shift+L)',
+            enabled: editMode,
+            action: () => {
+              this.#edgeCreationMode.start(nodeId, true);
             }
           },
           {
@@ -288,8 +324,7 @@ export class ContextMenu {
             enabled: editMode && isCentralNode && !isAnchor
           }
         ]
-      },
-      this.#createModeMenuItem()
+      }
     ];
 
     this.#showMenu(items, position);
@@ -331,7 +366,8 @@ export class ContextMenu {
       },
       async (request) => {
         return generateEquationFromPrompt(request);
-      }
+      },
+      (title) => this.#features.graph.findNodeByTitle(title, nodeId)
     );
   }
 
@@ -346,12 +382,20 @@ export class ContextMenu {
 
     this.#edgeEditor.show(
       edgeId,
-      context.design.params,
+      context.editableStyleParams,
       context,
-      (id, params) => {
-        this.#features.scene.updateEdgeStyle(id, params);
+      (id, payload) => {
+        this.#features.edge.update(id, { typeId: payload.typeId });
+        if (payload.params !== undefined) {
+          this.#features.scene.updateEdgeStyle(id, payload.params);
+        }
       }
     );
+  }
+
+  #showLinkToAnchor(nodeId: NodeId, position: { x: number; y: number }): void {
+    const result = this.#features.graph.getLinkToAnchor(nodeId);
+    this.#anchorLinkTooltip.showAtRenderedPosition(result, position);
   }
 
   /**
@@ -399,11 +443,17 @@ export class ContextMenu {
    */
   #showEdgeMenu(edgeId: string, position: { x: number; y: number }): void {
     const editMode = isEditMode();
+    const selectedEdges = this.#cy.edges(':selected');
+    const selectedEdgeIds = new Set(selectedEdges.map(edge => edge.id()));
+    const useSelectedEdgesAsPasteTargets = selectedEdges.length > 1 && selectedEdgeIds.has(edgeId);
+    const pasteTargets = useSelectedEdgesAsPasteTargets
+      ? selectedEdges
+      : this.#cy.getElementById(edgeId);
 
     const items: MenuItem[] = [
       {
-        label: 'Edit Edge',
-        enabled: editMode,
+        label: 'Edit edge',
+        enabled: editMode && !useSelectedEdgesAsPasteTargets,
         action: () => {
           // Get edge edit context from scene feature
           const context = this.#features.scene.getEdgeEditContext(edgeId);
@@ -415,17 +465,20 @@ export class ContextMenu {
           // Show edge editor with callback
           this.#edgeEditor.show(
             edgeId,
-            context.design.params,
+            context.editableStyleParams,
             context,
-            (edgeId, params) => {
-              // Save edge style via scene feature
-              this.#features.scene.updateEdgeStyle(edgeId, params);
+            (edgeId, payload) => {
+              this.#features.edge.update(edgeId, { typeId: payload.typeId });
+              if (payload.params !== undefined) {
+                // Save edge style via scene feature
+                this.#features.scene.updateEdgeStyle(edgeId, payload.params);
+              }
             }
           );
         }
       },
       {
-        label: 'Exclude from scene',
+        label: 'Exclude from scene (X)',
         enabled: editMode,
         action: () => {
           this.#features.scene.excludeEdge(edgeId);
@@ -433,22 +486,52 @@ export class ContextMenu {
       },
       {
         label: 'Copy style',
+        enabled: !useSelectedEdgesAsPasteTargets,
         action: () => {
           const context = this.#features.scene.getEdgeEditContext(edgeId);
           if (context) {
-            this.#copiedEdgeDesign = { ...context.design.params };
+            this.#copiedEdgeStyle = {
+              typeId: context.typeId,
+              params: context.hasStyleOverride ? { ...context.design.params } : null
+            };
           }
         }
       },
       {
-        label: 'Paste style',
-        enabled: editMode && this.#copiedEdgeDesign !== null,
-        action: () => {
-          this.#features.scene.updateEdgeStyle(edgeId, { ...this.#copiedEdgeDesign! });
+        label: useSelectedEdgesAsPasteTargets ? `Paste style to ${pasteTargets.length} edges` : 'Paste style',
+        enabled: editMode && this.#copiedEdgeStyle !== null,
+        action: async () => {
+          const copiedStyle = this.#copiedEdgeStyle;
+          if (!copiedStyle) return;
+
+          for (const edge of pasteTargets) {
+            const targetEdgeId = edge.id();
+            await this.#features.edge.update(targetEdgeId, { typeId: copiedStyle.typeId });
+            await this.#features.scene.updateEdgeStyle(
+              targetEdgeId,
+              copiedStyle.params ? { ...copiedStyle.params } : null
+            );
+          }
+
+          if (useSelectedEdgesAsPasteTargets) {
+            pasteTargets.select();
+          }
         }
       },
       {
-        label: 'Delete',
+        label: 'Edges visibility',
+        action: () => {
+          this.#edgeTypeVisibilityModal.show();
+        }
+      },
+      {
+        label: 'Manage edge types',
+        action: () => {
+          this.#edgeTypeManager.show();
+        }
+      },
+      {
+        label: 'Delete edge (D)',
         enabled: editMode,
         action: () => {
           this.#features.graph.deleteEdge(edgeId);
@@ -467,7 +550,7 @@ export class ContextMenu {
 
     const items: MenuItem[] = [
       {
-        label: 'Add free node',
+        label: 'Add node here',
         enabled: editMode,
         action: () => {
           // Convert screen position to graph coordinates
@@ -489,57 +572,80 @@ export class ContextMenu {
         }
       },
       {
-        label: 'Fit graph (F)',
-        action: () => {
-          this.#features.scene.fit();
-        }
-      },
-      {
-        label: 'Fit to image (⇧F)',
-        action: () => {
-          this.#features.sceneBackground.fitToBackground();
-        }
-      },
-      {
-        label: 'Edit image',
-        enabled: editMode,
-        action: async () => {
-          // Get current scene ID
-          const sceneId = this.#features.scene.getCurrentSceneId();
-          if (!sceneId) {
-            console.warn('No scene currently open');
-            return;
-          }
-
-          // Get scene from graphStore
-          const scene = graphStore.scenes.find(s => s.id === sceneId);
-          const currentImage = scene?.backgroundImages?.[0] || null;
-
-          // Show editor with callbacks
-          this.#backgroundEditor.show(
-            currentImage,
-            (imageId) => this.#features.sceneBackground.createConfig(imageId),
-            async (updates) => {
-              await this.#features.sceneBackground.updateForScene(sceneId, updates);
+        label: 'Scene',
+        children: [
+          {
+            label: 'Edges visibility',
+            action: () => {
+              this.#edgeTypeVisibilityModal.show();
             }
-          );
-        }
-      },
-      {
-        label: 'Edit theme',
-        enabled: editMode,
-        action: async () => {
-          const currentThemeId = this.#features.scene.getThemeId();
-          const containerRect = this.#container.getBoundingClientRect();
-          const selectedThemeId = await this.#themeEditor.show(currentThemeId, containerRect);
-          if (selectedThemeId) {
-            await this.#features.scene.setTheme(selectedThemeId);
-            const sceneId = this.#features.scene.getCurrentSceneId();
-            if (sceneId) {
-              await this.#features.transition.openScene(sceneId, { skipAnimation: true });
+          },
+          {
+            label: 'Include all scene edges (Shift+S)',
+            enabled: editMode,
+            action: () => {
+              this.#features.scene.includeAllSceneEdges();
+            }
+          },
+          {
+            label: 'Edit theme',
+            enabled: editMode,
+            action: async () => {
+              const currentThemeId = this.#features.scene.getThemeId();
+              const containerRect = this.#container.getBoundingClientRect();
+              const selectedThemeId = await this.#themeEditor.show(currentThemeId, containerRect);
+              if (selectedThemeId) {
+                await this.#features.scene.setTheme(selectedThemeId);
+                const sceneId = this.#features.scene.getCurrentSceneId();
+                if (sceneId) {
+                  await this.#features.transition.openScene(sceneId, { skipAnimation: true });
+                }
+              }
+            }
+          },
+          {
+            label: 'Edit background',
+            enabled: editMode,
+            action: async () => {
+              // Get current scene ID
+              const sceneId = this.#features.scene.getCurrentSceneId();
+              if (!sceneId) {
+                console.warn('No scene currently open');
+                return;
+              }
+
+              // Get scene from graphStore
+              const scene = graphStore.scenes.find(s => s.id === sceneId);
+              const currentImage = scene?.backgroundImages?.[0] || null;
+
+              // Show editor with callbacks
+              this.#backgroundEditor.show(
+                currentImage,
+                (imageId) => this.#features.sceneBackground.createConfig(imageId),
+                async (updates) => {
+                  await this.#features.sceneBackground.updateForScene(sceneId, updates);
+                }
+              );
             }
           }
-        }
+        ]
+      },
+      {
+        label: 'Zoom',
+        children: [
+          {
+            label: 'Fit graph (F)',
+            action: () => {
+              this.#features.scene.fit();
+            }
+          },
+          {
+            label: 'Fit to background (Shift+F)',
+            action: () => {
+              this.#features.sceneBackground.fitToBackground();
+            }
+          }
+        ]
       },
       this.#createModeMenuItem(),
       {
@@ -550,25 +656,20 @@ export class ContextMenu {
             action: () => { newWorkspace(); }
           },
           {
-            label: 'Export (⌘S)',
-            action: () => { exportWorkspace(); }
-          },
-          {
             label: 'Import (⌘O)',
             action: () => showImportDialog()
           },
           {
-            label: 'Mermaid',
-            children: [
-              {
-                label: 'Export',
-                action: () => { exportMermaidGraph(); }
-              },
-              {
-                label: 'Import',
-                action: () => { showImportMermaidDialog(); }
-              }
-            ]
+            label: 'Export (⌘S)',
+            action: () => { exportWorkspace(); }
+          },
+          {
+            label: 'Mermaid import',
+            action: () => { showImportMermaidDialog(); }
+          },
+          {
+            label: 'Mermaid export',
+            action: () => { exportMermaidGraph(); }
           }
         ]
       },
@@ -596,6 +697,11 @@ export class ContextMenu {
    * Show context menu at position
    */
   #showMenu(items: MenuItem[], position: { x: number; y: number }): void {
+    if (!document.hasFocus()) {
+      this.#closeMenu();
+      return;
+    }
+
     // Close existing menu
     this.#closeMenu();
 
@@ -609,11 +715,11 @@ export class ContextMenu {
     menu.style.border = '1px solid var(--border-primary, #30363d)';
     menu.style.borderRadius = '6px';
     menu.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.5)';
-    menu.style.padding = '4px';
+    menu.style.padding = '3px';
     menu.style.minWidth = '180px';
     menu.style.zIndex = '1000';
     menu.style.color = 'var(--text-primary, #e6edf3)';
-    menu.style.fontSize = '12px';
+    menu.style.fontSize = '13px';
 
     // Add menu items
     this.#renderMenuItems(menu, items);
@@ -646,10 +752,10 @@ export class ContextMenu {
     items.forEach(item => {
       const itemElement = document.createElement('div');
       itemElement.className = 'graph-context-menu-item';
-      itemElement.style.padding = '8px 12px';
-      itemElement.style.cursor = item.enabled === false ? 'not-allowed' : 'pointer';
+      itemElement.style.padding = '5px 10px';
+      itemElement.style.cursor = item.enabled === false ? 'default' : 'pointer';
       itemElement.style.opacity = item.enabled === false ? '0.5' : '1';
-      itemElement.style.borderRadius = '4px';
+      itemElement.style.borderRadius = '3px';
       itemElement.style.transition = 'background-color 0.15s ease';
       itemElement.style.position = 'relative';
       itemElement.style.display = 'flex';
@@ -686,7 +792,7 @@ export class ContextMenu {
         subMenu.style.border = '1px solid var(--border-primary, #30363d)';
         subMenu.style.borderRadius = '6px';
         subMenu.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.5)';
-        subMenu.style.padding = '4px';
+        subMenu.style.padding = '3px';
         subMenu.style.minWidth = '200px';
         subMenu.style.whiteSpace = 'nowrap';
         subMenu.style.display = 'none';
@@ -718,7 +824,7 @@ export class ContextMenu {
           hideTimeout = null;
         }
         if (item.enabled !== false) {
-          itemElement.style.backgroundColor = 'var(--bg-tertiary, #1c2128)';
+          itemElement.style.backgroundColor = 'rgba(88, 166, 255, 0.18)';
         }
         if (subMenu && item.enabled !== false) {
           subMenu.style.display = 'block';
@@ -742,16 +848,14 @@ export class ContextMenu {
         }
       });
       itemElement.addEventListener('mouseleave', () => {
+        itemElement.style.backgroundColor = 'transparent';
         if (subMenu) {
           // Delay hiding to allow mouse to move to submenu
           hideTimeout = setTimeout(() => {
             if (subMenu) {
               subMenu.style.display = 'none';
             }
-            itemElement.style.backgroundColor = 'transparent';
-          }, 150);
-        } else {
-          itemElement.style.backgroundColor = 'transparent';
+          }, 80);
         }
       });
 

@@ -14,6 +14,7 @@ import { getSetting } from '../../../config';
 import { isDebug } from '../../../config/debug-flags';
 import { BackgroundOperator } from './shared-core-animation/background-operator';
 import { StyleGenerator } from '../../../styles/style-generator';
+import { resolveSceneEdgeVisualState } from '../../../styles/edge-visual-resolver';
 import { TransitionAnalysisOperator, type TransitionAnalysis } from './shared-core-animation/transition-analysis-operator';
 import { GhostOperator } from './shared-core-animation/ghost-operator';
 import { waitForStep } from './scene-to-scene-orchestrator';
@@ -218,12 +219,18 @@ export class SharedCoreAnimator {
       updatedStylesheet[baseEdgeIndex] = baseEdgeRule;
     }
 
+    updatedStylesheet = StyleGenerator.updateEdgeTypesInStylesheet(
+      updatedStylesheet,
+      graphStore.edgeTypes,
+      themeId
+    );
+    updatedStylesheet = StyleGenerator.updateEdgeTypeVisibilityInStylesheet(
+      updatedStylesheet,
+      targetScene.edgeTypeVisibility
+    );
+
     for (const change of analysis.edges.crossfade) {
-      const newStyle = StyleGenerator.generateEdgeStyleForId(
-        change.edgeId,
-        change.newParams,
-        themeId
-      );
+      const newStyle = this.#resolveEdgeTargetStyle(change.edgeId, targetScene);
       updatedStylesheet = StyleGenerator.updateEdgeInStylesheet(
         updatedStylesheet,
         change.edgeId,
@@ -234,7 +241,8 @@ export class SharedCoreAnimator {
     // Update per-edge stylesheet rules for tween edges (new target style)
     for (const edgeId of analysis.edges.tween) {
       const targetDesign = targetScene.edges?.[edgeId]?.design;
-      const newStyle = StyleGenerator.generateEdgeStyleForId(edgeId, targetDesign, themeId);
+      if (!StyleGenerator.hasEdgeStyleOverride(targetDesign)) continue;
+      const newStyle = this.#resolveEdgeTargetStyle(edgeId, targetScene);
       updatedStylesheet = StyleGenerator.updateEdgeInStylesheet(
         updatedStylesheet,
         edgeId as any,
@@ -309,7 +317,7 @@ export class SharedCoreAnimator {
     }
     // Remove tween animation bypasses so stylesheet rules take over
     for (const edgeId of analysis.edges.tween) {
-      this.#cy.getElementById(edgeId).removeStyle('line-color width line-opacity target-arrow-color');
+      this.#cy.getElementById(edgeId).removeStyle('line-color width line-opacity target-arrow-color opacity');
     }
     this.#cy.endBatch();
   }
@@ -491,21 +499,20 @@ export class SharedCoreAnimator {
     timing: CrossfadeTiming
   ): Promise<void> {
     const promises: Promise<void>[] = [];
-    const themeId = targetScene.themeId || 'dark';
 
     // 1. Tween edges: animate color, width, opacity
     for (const edgeId of analysis.edges.tween) {
       const edge = this.#cy.getElementById(edgeId);
       if (edge.length === 0) continue;
 
-      const targetDesign = targetScene.edges?.[edgeId]?.design;
-      const targetStyle = StyleGenerator.generateEdgeStyleForId(edgeId, targetDesign, themeId);
+      const targetStyle = this.#resolveEdgeTargetStyle(edgeId, targetScene);
 
       const animStyle = {
         'line-color': targetStyle['line-color'],
         'width': targetStyle['width'],
         'line-opacity': targetStyle['line-opacity'] ?? 1,
-        'target-arrow-color': targetStyle['target-arrow-color']
+        'target-arrow-color': targetStyle['target-arrow-color'],
+        'opacity': typeof targetStyle.opacity === 'number' ? targetStyle.opacity : 1
       };
 
       promises.push(this.#runAnimation(edge, { style: animStyle }, duration));
@@ -523,7 +530,10 @@ export class SharedCoreAnimator {
       }
       if (realEdge.length > 0) {
         promises.push(this.#delayedFadeIn(
-          realEdge, timing.fadeInDelay, timing.fadeInDuration
+          realEdge,
+          timing.fadeInDelay,
+          timing.fadeInDuration,
+          this.#resolveEdgeTargetOpacity(change.edgeId, targetScene)
         ));
       }
     }
@@ -555,12 +565,28 @@ export class SharedCoreAnimator {
     });
   }
 
-  /** Wait, then fade element from opacity 0 → 1. Uses .animation().play() for clean timing. */
-  #delayedFadeIn(ele: any, delayMs: number, fadeDuration: number): Promise<void> {
+  #resolveEdgeTargetStyle(edgeId: string, scene: Scene): Record<string, unknown> {
+    const edgeData = graphStore.edges.find(edge => edge.id === edgeId);
+    if (!edgeData) return StyleGenerator.generateEdgeStyle(scene.themeId || 'dark').style;
+    return resolveSceneEdgeVisualState({
+      edge: edgeData,
+      scene,
+      edgeTypes: graphStore.edgeTypes,
+      themeId: scene.themeId || 'dark'
+    }).style;
+  }
+
+  #resolveEdgeTargetOpacity(edgeId: string, scene: Scene): number {
+    const targetStyle = this.#resolveEdgeTargetStyle(edgeId, scene);
+    return typeof targetStyle.opacity === 'number' ? targetStyle.opacity : 1;
+  }
+
+  /** Wait, then fade element from opacity 0 to its target opacity. Uses .animation().play() for clean timing. */
+  #delayedFadeIn(ele: any, delayMs: number, fadeDuration: number, targetOpacity = 1): Promise<void> {
     return new Promise(resolve => {
       setTimeout(() => {
         const fadeIn = ele.animation(
-          { style: { opacity: 1 } },
+          { style: { opacity: targetOpacity } },
           { duration: fadeDuration, easing: 'ease-out' }
         );
         fadeIn.play();

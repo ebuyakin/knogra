@@ -10,7 +10,7 @@ import type { Core } from 'cytoscape';
 import type { NodeId, EdgeId, Scene } from '../../../../core/main-types';
 import { graphStore } from '../../../../storage/graph-store';
 import { isDebug } from '../../../../config/debug-flags';
-import { StyleGenerator } from '../../../../styles/style-generator';
+import { resolveSceneEdgeVisualState } from '../../../../styles/edge-visual-resolver';
 
 export interface NodeChange {
   nodeId: NodeId;
@@ -124,12 +124,20 @@ export class TransitionAnalysisOperator {
         console.log(`[d_analyzer] ${edgeId}: cyData.design=`, cyEdge.data('design'), 'computedColor=', cyEdge.style('line-color'), 'computedCurve=', cyEdge.style('curve-style'));
       }
 
-      // Resolve both designs to effective styles (merging with defaults)
-      // so that explicit 'curve-style: bezier' vs implicit default bezier compare equal
       const oldThemeId = currentScene.themeId || 'dark';
       const newThemeId = targetScene.themeId || 'dark';
-      const oldResolved = StyleGenerator.generateEdgeStyleForId(edgeId, oldOverride ?? null, oldThemeId);
-      const newResolved = StyleGenerator.generateEdgeStyleForId(edgeId, newOverride ?? null, newThemeId);
+      const oldResolved = resolveSceneEdgeVisualState({
+        edge: edgeData,
+        scene: currentScene,
+        edgeTypes: graphStore.edgeTypes,
+        themeId: oldThemeId
+      }).style;
+      const newResolved = resolveSceneEdgeVisualState({
+        edge: edgeData,
+        scene: targetScene,
+        edgeTypes: graphStore.edgeTypes,
+        themeId: newThemeId
+      }).style;
 
       // Structural properties that require ghost-based crossfade (can't be tweened)
       const structuralProps: string[] = [

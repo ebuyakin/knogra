@@ -6,7 +6,7 @@
 
 // core imports
 import type { Core } from 'cytoscape';
-import type { SceneId, NodeId, EdgeId, FoldedNodeEntry } from '../../core/main-types';
+import type { EdgeTypeId, EdgeTypeVisibilityMode, SceneId, NodeId, EdgeId, FoldedNodeEntry } from '../../core/main-types';
 
 // app modules imports
 import { graphStore } from '../../storage/graph-store';
@@ -14,6 +14,8 @@ import { graphSaver } from '../../storage/graph-saver';
 import { isEditMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
 import { isDebug } from '../../config/debug-flags';
+import { StyleGenerator } from '../../styles/style-generator';
+import { resolveSceneEdgeVisualState } from '../../styles/edge-visual-resolver';
 
 // shared utilities imports
 import { collapseNodesCascading } from '../utils/cy/collapse-animator';
@@ -27,6 +29,13 @@ import { FoldManager } from './fold-manager';
 // re-export types for external consumers
 export type { NodeEditContext } from './node-ops';
 export type { EdgeEditContext } from './edge-ops';
+
+export interface EdgeTypeVisibilityEntry {
+  typeId: EdgeTypeId;
+  name: string;
+  count: number;
+  mode: EdgeTypeVisibilityMode;
+}
 
 export class Scene {
   #cy: Core;
@@ -175,13 +184,97 @@ export class Scene {
 
   async updateEdgeStyle(
     edgeId: EdgeId,
-    params: Record<string, unknown>
+    params: Record<string, unknown> | null
   ): Promise<void> {
     return this.#edgeOps.updateEdgeStyle(edgeId, params);
   }
 
+  async adjustEdgeBend(
+    edgeId: EdgeId,
+    command: 'strengthDown' | 'strengthUp' | 'positionTowardSource' | 'positionTowardTarget',
+    options?: { largeStep?: boolean }
+  ): Promise<boolean> {
+    return this.#edgeOps.adjustEdgeBend(edgeId, command, options);
+  }
+
+  async resetEdgeStyleOverride(edgeId: EdgeId): Promise<boolean> {
+    return this.#edgeOps.resetEdgeStyleOverride(edgeId);
+  }
+
   includeAllIncidentEdges(nodeId: NodeId): number {
     return this.#edgeOps.includeAllIncidentEdges(nodeId);
+  }
+
+  includeAllSceneEdges(): number {
+    return this.#edgeOps.includeAllSceneEdges();
+  }
+
+  getEdgeTypeVisibilityEntries(): EdgeTypeVisibilityEntry[] {
+    const sceneId = this.getCurrentSceneId();
+    const scene = sceneId ? graphStore.scenes.find(s => s.id === sceneId) : null;
+    const visibility = scene?.edgeTypeVisibility ?? {};
+    const counts = new Map<EdgeTypeId, number>();
+
+    this.#cy.edges().forEach(edge => {
+      const typeId = edge.data('typeId') as EdgeTypeId | undefined;
+      if (!typeId) return;
+      counts.set(typeId, (counts.get(typeId) ?? 0) + 1);
+    });
+
+    return [...counts.entries()]
+      .map(([typeId, count]) => {
+        const edgeType = graphStore.edgeTypes.find(type => type.id === typeId);
+        return {
+          typeId,
+          name: edgeType?.name ?? typeId,
+          count,
+          mode: visibility[typeId] ?? 'show'
+        };
+      })
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async updateEdgeTypeVisibility(
+    updates: Record<EdgeTypeId, EdgeTypeVisibilityMode>
+  ): Promise<void> {
+    const sceneId = this.getCurrentSceneId();
+    if (!sceneId) return;
+
+    const scene = graphStore.scenes.find(s => s.id === sceneId);
+    if (!scene) return;
+
+    const visibility = Object.fromEntries(
+      Object.entries(updates).filter((entry): entry is [EdgeTypeId, EdgeTypeVisibilityMode] => entry[1] !== 'show')
+    ) as Record<EdgeTypeId, EdgeTypeVisibilityMode>;
+
+    scene.edgeTypeVisibility = Object.keys(visibility).length > 0 ? visibility : undefined;
+    await graphStore.updateScene(scene);
+
+    const stylesheet = (this.#cy.style() as any).json();
+    const updatedStylesheet = StyleGenerator.updateEdgeTypeVisibilityInStylesheet(
+      stylesheet,
+      scene.edgeTypeVisibility
+    );
+    this.#cy.style().fromJson(updatedStylesheet).update();
+    this.#cy.edges().forEach(edge => {
+      const edgeData = graphStore.edges.find(graphEdge => graphEdge.id === edge.id());
+      if (!edgeData) return;
+      const targetOpacity = resolveSceneEdgeVisualState({
+        edge: edgeData,
+        scene,
+        edgeTypes: graphStore.edgeTypes,
+        themeId: scene.themeId || 'dark'
+      }).opacity;
+      edge.stop();
+      edge.animate(
+        { style: { opacity: targetOpacity } },
+        {
+          duration: 150,
+          easing: 'ease-out',
+          complete: () => edge.removeStyle('opacity')
+        }
+      );
+    });
   }
 
   // ==========================================================================

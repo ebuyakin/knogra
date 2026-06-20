@@ -4,9 +4,51 @@
  * getTheme() returns fully populated theme by merging with defaults
  */
 
-import type { ColorTheme } from '../core/style-types';
+import type { ColorTheme, EdgeStyle } from '../core/style-types';
 import { getSetting } from '../config';
 import { themeStore } from '../storage/theme-store';
+
+function makeEdgeStyle(
+  lineColor: string,
+  lineSecondaryColor: string,
+  labelColor: string,
+  _width: number,
+  opacity = 1,
+  arrowShape = 'triangle',
+  _arrowScale = 1,
+  _curveStyle = 'bezier'
+): EdgeStyle {
+  return {
+    line: { color: lineColor, opacity, brightness: 1, saturation: 1, hue: 0, gradient: { type: 'solid' } },
+    lineSecondary: { color: lineSecondaryColor, opacity, brightness: 1, saturation: 1, hue: 0, gradient: { type: 'solid' } },
+    arrow: { color: lineColor, opacity, brightness: 1, saturation: 1, hue: 0, gradient: { type: 'solid' } },
+    label: { color: labelColor, opacity: 1 },
+    width: 2,
+    arrowShape,
+    arrowScale: 1,
+    curveStyle: 'bezier'
+  };
+}
+
+function makeStrongEdgeStyle(
+  lineColor: string,
+  lineSecondaryColor: string,
+  labelColor: string,
+  width: number,
+  opacity = 1
+): EdgeStyle {
+  return makeEdgeStyle(lineColor, lineSecondaryColor, labelColor, width, opacity, 'diamond');
+}
+
+function makeSecondaryEdgeStyle(
+  lineColor: string,
+  lineSecondaryColor: string,
+  labelColor: string,
+  width: number,
+  opacity = 1
+): EdgeStyle {
+  return makeEdgeStyle(lineColor, lineSecondaryColor, labelColor, width, opacity, 'circle');
+}
 
 // =============================================================================
 // DEFAULT THEME (etalon - all properties defined)
@@ -36,6 +78,11 @@ const DEFAULT_THEME: ColorTheme = {
     arrow: { color: '#7d8590', opacity: 1, brightness: 1, saturation: 1, hue: 0, gradient: { type: 'solid' } },
     label: { color: '#7d8590', opacity: 1 },
     width: 2
+  },
+  edgeStyleSlots: {
+    'edge-style-1': makeEdgeStyle('#9aa4af', '#4d5662', '#9aa4af', 2, 0.8),
+    'edge-style-2': makeStrongEdgeStyle('#f0f3f6', '#8b949e', '#f0f3f6', 2, 0.96),
+    'edge-style-3': makeSecondaryEdgeStyle('#c9d1d9', '#6e7681', '#c9d1d9', 2, 0.86)
   },
   decoration: {
     background: { color: '#161b22', opacity: 1, brightness: 1, saturation: 1, hue: 0, gradient: { type: 'solid' } },
@@ -98,6 +145,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       background: {
         vignette: { strength: 0.25, spread: 40, blur: 180, color: '#000000' }
       }
+    },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#9aa4af', '#4d5662', '#9aa4af', 2),
+      'edge-style-2': makeStrongEdgeStyle('#f0f3f6', '#8b949e', '#f0f3f6', 2),
+      'edge-style-3': makeSecondaryEdgeStyle('#c9d1d9', '#6e7681', '#c9d1d9', 2)
     }
   },
 
@@ -114,6 +166,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     node: {
       background: { color: '#0e2844', opacity: 0.5 },
       backgroundAlt: { color: '#1e3a5f', opacity: 0.5 }
+    },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#84a6d4', '#385a7c', '#84a6d4', 2, 0.82),
+      'edge-style-2': makeStrongEdgeStyle('#4fd1ff', '#1679a8', '#4fd1ff', 3.25, 0.96),
+      'edge-style-3': makeSecondaryEdgeStyle('#f2b15f', '#a45a18', '#f2b15f', 2.5, 0.88)
     }
   },
 
@@ -144,6 +201,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       arrow: { color: '#4f545b' },
       label: { color: '#4f545b' },
       width: 2
+    },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#5a6068', '#afb8c1', '#5a6068', 2, 0.78),
+      'edge-style-2': makeStrongEdgeStyle('#0969da', '#54aeff', '#0969da', 3, 0.94),
+      'edge-style-3': makeSecondaryEdgeStyle('#bf8700', '#d4a72c', '#7d4e00', 2.5, 0.84)
     },
     decoration: {
       background: { color: '#f6f8fa' },
@@ -178,6 +240,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       arrow: { color: '#ffffff' },
       label: { color: '#ffffff' }
     },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#f0f3f6', '#8b949e', '#f0f3f6', 2.5, 0.92),
+      'edge-style-2': makeStrongEdgeStyle('#7cff00', '#00aa00', '#7cff00', 4, 1),
+      'edge-style-3': makeSecondaryEdgeStyle('#ffd94a', '#aa8800', '#ffd94a', 3, 0.94)
+    },
     decoration: {
       background: { color: '#1a1d24' },
       text: { color: '#ffffff' }
@@ -211,6 +278,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       arrow: { color: '#8a6848' },
       label: { color: '#a08060' }
     },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#a17056', '#5a4530', '#a08060', 2, 0.8),
+      'edge-style-2': makeStrongEdgeStyle('#e8a848', '#9a5f18', '#e8a848', 3.25, 0.95),
+      'edge-style-3': makeSecondaryEdgeStyle('#e06040', '#8c2f22', '#e06040', 2.5, 0.87)
+    },
     decoration: {
       background: { color: '#1e1410' },
       text: { color: '#a08060' }
@@ -243,6 +315,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       lineSecondary: { color: '#305860' },
       arrow: { color: '#508890' },
       label: { color: '#6a9ca0' }
+    },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#5f98a0', '#305860', '#6a9ca0', 2, 0.8),
+      'edge-style-2': makeStrongEdgeStyle('#40d8c0', '#168a7a', '#40d8c0', 3.25, 0.95),
+      'edge-style-3': makeSecondaryEdgeStyle('#e06b66', '#94352f', '#e06b66', 2.5, 0.86)
     },
     decoration: {
       background: { color: '#0e2024' },
@@ -278,6 +355,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       arrow: { color: '#7060a0' },
       label: { color: '#8878a8' }
     },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#8a7dc0', '#484068', '#8878a8', 2, 0.8),
+      'edge-style-2': makeStrongEdgeStyle('#b080f0', '#7048b8', '#b080f0', 3.25, 0.95),
+      'edge-style-3': makeSecondaryEdgeStyle('#d86d8a', '#8f2f38', '#d86d8a', 2.5, 0.86)
+    },
     decoration: {
       background: { color: '#140e24' },
       text: { color: '#8878a8' }
@@ -310,6 +392,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       lineSecondary: { color: '#305838' },
       arrow: { color: '#508858' },
       label: { color: '#6a9870' }
+    },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#6f8f72', '#305838', '#6a9870', 2, 0.8),
+      'edge-style-2': makeStrongEdgeStyle('#50c870', '#2b8740', '#50c870', 3.25, 0.95),
+      'edge-style-3': makeSecondaryEdgeStyle('#d8a030', '#8d6412', '#d8a030', 2.5, 0.86)
     },
     decoration: {
       background: { color: '#0e1e14' },
@@ -344,6 +431,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       arrow: { color: '#606878' },
       label: { color: '#808898' }
     },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#7a8494', '#404650', '#808898', 2, 0.8),
+      'edge-style-2': makeStrongEdgeStyle('#80a0d0', '#4f6f9e', '#80a0d0', 3.25, 0.94),
+      'edge-style-3': makeSecondaryEdgeStyle('#d07a64', '#8e3d34', '#d07a64', 2.5, 0.86)
+    },
     decoration: {
       background: { color: '#181a20' },
       text: { color: '#808898' }
@@ -376,6 +468,11 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
       lineSecondary: { color: '#583830' },
       arrow: { color: '#905848' },
       label: { color: '#a07068' }
+    },
+    edgeStyleSlots: {
+      'edge-style-1': makeEdgeStyle('#a56e5d', '#583830', '#a07068', 2, 0.8),
+      'edge-style-2': makeStrongEdgeStyle('#f07040', '#a23b20', '#f07040', 3.25, 0.95),
+      'edge-style-3': makeSecondaryEdgeStyle('#f0a030', '#9c6316', '#f0a030', 2.5, 0.86)
     },
     decoration: {
       background: { color: '#1e100e' },

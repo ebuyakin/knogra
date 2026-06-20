@@ -10,9 +10,12 @@ import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
 import { validateScenes } from '../../storage/workspace/validate';
 import { cascadeSceneDeletion } from '../../storage/scene-deletion';
+import { GraphStatisticsModal } from './graph-statistics-modal';
 import '../../styles/node-manager.css';
 
 type NodeManagerStatusFilter = 'all' | 'ok' | 'errors' | 'unchecked';
+type NodeManagerSortKey = 'default' | 'title' | 'nodeId' | 'sceneCount' | 'connectionCount' | 'anchorDistance' | 'hasOwnScene' | 'isInCurrentScene' | 'status';
+type NodeManagerSortDirection = 'asc' | 'desc';
 
 export class NodeManager {
   #dialog: HTMLDialogElement | null = null;
@@ -22,6 +25,9 @@ export class NodeManager {
   #filteredNodesInfo: NodeInfo[] = [];
   #sceneValidation: Map<SceneId, string[]> | null = null;
   #statusFilter: NodeManagerStatusFilter = 'all';
+  #sortKey: NodeManagerSortKey = 'default';
+  #sortDirection: NodeManagerSortDirection = 'asc';
+  #statisticsModal = new GraphStatisticsModal();
   #isDragging = false;
   #dragOffsetX = 0;
   #dragOffsetY = 0;
@@ -38,9 +44,9 @@ export class NodeManager {
     void graphPosition;
     this.#selectedNodes.clear();
     
-    // Load node data from features layer and sort
-    this.#allNodesInfo = this.#sortNodes(this.#features.graph.getAllNodesInfo());
-    this.#filteredNodesInfo = [...this.#allNodesInfo];
+    // Load node data from features layer
+    this.#allNodesInfo = this.#features.graph.getAllNodesInfo();
+    this.#filteredNodesInfo = this.#applySort(this.#allNodesInfo);
     
     this.#renderDialog();
     this.#renderTableBody();
@@ -52,7 +58,10 @@ export class NodeManager {
    * Sort nodes: 1) anchor first, 2) isInCurrentScene, 3) alphabetically by title
    */
   #sortNodes(nodes: NodeInfo[]): NodeInfo[] {
-    return [...nodes].sort((a, b) => {
+    return [...nodes].sort((a, b) => this.#compareDefault(a, b));
+  }
+
+  #compareDefault(a: NodeInfo, b: NodeInfo): number {
       // First priority: anchor node comes first
       const aIsAnchor = a.node.isAnchor === true;
       const bIsAnchor = b.node.isAnchor === true;
@@ -65,7 +74,6 @@ export class NodeManager {
       }
       // Third priority: alphabetical by title
       return a.node.title.localeCompare(b.node.title);
-    });
   }
 
   /**
@@ -119,14 +127,15 @@ export class NodeManager {
           <table class="node-manager-table">
             <thead>
               <tr>
-                <th class="col-checkbox"><input type="checkbox" class="select-all" /></th>
-                <th class="col-title">Title</th>
-                <th class="col-node-id">Node ID</th>
-                <th class="col-scenes">Scenes</th>
-                <th class="col-connections">Conn</th>
-                <th class="col-own-scene">Own</th>
-                <th class="col-in-scene">Here</th>
-                <th class="col-status" title="Scene integrity status">Status</th>
+                <th class="col-checkbox" title="Select rows for bulk actions"><input type="checkbox" class="select-all" /></th>
+                <th class="col-title sortable" data-sort-key="title" title="Node title. (A) marks the graph anchor."><span class="node-manager-th-content">Title <span class="sort-indicator"></span></span></th>
+                <th class="col-node-id sortable" data-sort-key="nodeId" title="Internal stable node identifier"><span class="node-manager-th-content">Node ID <span class="sort-indicator"></span></span></th>
+                <th class="col-scenes sortable" data-sort-key="sceneCount" title="Number of scenes that include this node"><span class="node-manager-th-content">Scenes <span class="sort-indicator"></span></span></th>
+                <th class="col-connections sortable" data-sort-key="connectionCount" title="Number of graph edges connected to this node"><span class="node-manager-th-content">Conn <span class="sort-indicator"></span></span></th>
+                <th class="col-anchor-distance sortable" data-sort-key="anchorDistance" title="Shortest graph distance from the anchor node; — means disconnected"><span class="node-manager-th-content">Dist <span class="sort-indicator"></span></span></th>
+                <th class="col-own-scene sortable" data-sort-key="hasOwnScene" title="Whether this node has its own scene as the central node"><span class="node-manager-th-content">Own <span class="sort-indicator"></span></span></th>
+                <th class="col-in-scene sortable" data-sort-key="isInCurrentScene" title="Whether this node is included in the current scene"><span class="node-manager-th-content">Here <span class="sort-indicator"></span></span></th>
+                <th class="col-status sortable" data-sort-key="status" title="Scene integrity status for this node's own scene"><span class="node-manager-th-content">Status <span class="sort-indicator"></span></span></th>
               </tr>
             </thead>
             <tbody class="node-manager-body">
@@ -150,6 +159,7 @@ export class NodeManager {
           <div class="node-manager-actions">
             <button class="btn-open-scene" disabled>Open Scene</button>
             <button class="btn-include" disabled>Include in Scene</button>
+            <button class="btn-statistics">Stat</button>
             <button class="btn-validate">Validate Data</button>
             <button class="btn-copy-list" title="Copy checked rows; if none checked, copies the filtered list">Copy List</button>
             <button class="btn-clear-scenes" disabled>Clear Scenes</button>
@@ -165,6 +175,7 @@ export class NodeManager {
 
     // Wire up event handlers
     this.#attachEventHandlers();
+    this.#updateSortIndicators();
   }
 
   #renderTableBody(): void {
@@ -174,7 +185,7 @@ export class NodeManager {
     if (this.#filteredNodesInfo.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="8" class="node-manager-empty">No nodes found</td>
+          <td colspan="9" class="node-manager-empty">No nodes found</td>
         </tr>
       `;
       return;
@@ -183,6 +194,7 @@ export class NodeManager {
     tbody.innerHTML = this.#filteredNodesInfo.map(info => {
       const anchorMarker = info.node.isAnchor ? ' <span class="anchor-marker">(A)</span>' : '';
       const statusCell = this.#renderStatusCell(info);
+      const anchorDistance = info.anchorDistance ?? '—';
       return `
       <tr data-node-id="${info.node.id}" class="${this.#selectedNodes.has(info.node.id) ? 'selected' : ''}">
         <td class="col-checkbox">
@@ -196,6 +208,7 @@ export class NodeManager {
         </td>
         <td class="col-scenes">${info.sceneCount}</td>
         <td class="col-connections">${info.connectionCount}</td>
+        <td class="col-anchor-distance ${info.anchorDistance === null ? 'disconnected' : ''}">${anchorDistance}</td>
         <td class="col-own-scene">
           <span class="indicator ${info.hasOwnScene ? 'active' : ''}"></span>
         </td>
@@ -246,9 +259,49 @@ export class NodeManager {
     if (this.#statusFilter !== 'all') {
       result = result.filter(info => this.#matchesStatusFilter(info));
     }
-    this.#filteredNodesInfo = [...result];
+    this.#filteredNodesInfo = this.#applySort(result);
 
     this.#renderTableBody();
+  }
+
+  #applySort(nodes: NodeInfo[]): NodeInfo[] {
+    if (this.#sortKey === 'default') return this.#sortNodes(nodes);
+
+    const direction = this.#sortDirection === 'asc' ? 1 : -1;
+    return [...nodes].sort((left, right) => {
+      const comparison = this.#compareBySortKey(left, right, this.#sortKey);
+      if (comparison !== 0) return comparison * direction;
+      return this.#compareDefault(left, right);
+    });
+  }
+
+  #compareBySortKey(left: NodeInfo, right: NodeInfo, sortKey: NodeManagerSortKey): number {
+    switch (sortKey) {
+      case 'title': return left.node.title.localeCompare(right.node.title);
+      case 'nodeId': return left.node.id.localeCompare(right.node.id);
+      case 'sceneCount': return left.sceneCount - right.sceneCount;
+      case 'connectionCount': return left.connectionCount - right.connectionCount;
+      case 'anchorDistance': return this.#compareNullableNumbers(left.anchorDistance, right.anchorDistance);
+      case 'hasOwnScene': return Number(left.hasOwnScene) - Number(right.hasOwnScene);
+      case 'isInCurrentScene': return Number(left.isInCurrentScene) - Number(right.isInCurrentScene);
+      case 'status': return this.#statusRank(left) - this.#statusRank(right);
+      default: return this.#compareDefault(left, right);
+    }
+  }
+
+  #compareNullableNumbers(left: number | null, right: number | null): number {
+    if (left === null && right === null) return 0;
+    if (left === null) return 1;
+    if (right === null) return -1;
+    return left - right;
+  }
+
+  #statusRank(info: NodeInfo): number {
+    const status = this.#getSceneStatus(info);
+    if (status === 'errors') return 0;
+    if (status === 'unchecked') return 1;
+    if (status === 'ok') return 2;
+    return 3;
   }
 
   /** True if the node matches the current Status dropdown filter. */
@@ -303,6 +356,10 @@ export class NodeManager {
     const validateBtn = this.#dialog.querySelector('.btn-validate');
     validateBtn?.addEventListener('click', () => this.#handleValidateScenes());
 
+    // Graph statistics button
+    const statisticsBtn = this.#dialog.querySelector('.btn-statistics');
+    statisticsBtn?.addEventListener('click', () => this.#statisticsModal.show(this.#features.graph.getGraphStatistics()));
+
     // Clear Scenes button
     const clearScenesBtn = this.#dialog.querySelector('.btn-clear-scenes');
     clearScenesBtn?.addEventListener('click', () => this.#handleClearScenes());
@@ -347,6 +404,13 @@ export class NodeManager {
       this.#selectAll(checked);
     });
 
+    // Sortable column headers
+    this.#dialog.querySelectorAll('th.sortable[data-sort-key]').forEach(header => {
+      header.addEventListener('click', () => {
+        this.#handleSortHeaderClick((header as HTMLElement).dataset.sortKey as NodeManagerSortKey);
+      });
+    });
+
     // Individual row checkboxes (delegated)
     const tbody = this.#dialog.querySelector('.node-manager-body');
     tbody?.addEventListener('change', (e) => {
@@ -382,6 +446,33 @@ export class NodeManager {
       if (nodeId) {
         this.#toggleNodeSelection(nodeId);
       }
+    });
+  }
+
+  #handleSortHeaderClick(sortKey: NodeManagerSortKey): void {
+    if (this.#sortKey !== sortKey) {
+      this.#sortKey = sortKey;
+      this.#sortDirection = 'asc';
+    } else if (this.#sortDirection === 'asc') {
+      this.#sortDirection = this.#sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.#sortKey = 'default';
+      this.#sortDirection = 'asc';
+    }
+
+    const searchInput = this.#dialog?.querySelector('.node-manager-search-input') as HTMLInputElement;
+    this.#filterNodes(searchInput?.value ?? '');
+    this.#updateSelectionUI();
+    this.#updateSortIndicators();
+  }
+
+  #updateSortIndicators(): void {
+    this.#dialog?.querySelectorAll('th.sortable[data-sort-key]').forEach(header => {
+      const element = header as HTMLElement;
+      const isActive = element.dataset.sortKey === this.#sortKey;
+      element.classList.toggle('sorted', isActive);
+      const indicator = element.querySelector('.sort-indicator');
+      if (indicator) indicator.textContent = isActive ? (this.#sortDirection === 'asc' ? '▲' : '▼') : '';
     });
   }
 
@@ -487,6 +578,8 @@ export class NodeManager {
     this.#filteredNodesInfo = [];
     this.#sceneValidation = null;
     this.#statusFilter = 'all';
+    this.#sortKey = 'default';
+    this.#sortDirection = 'asc';
   }
 
   // ==========================================================================
@@ -723,8 +816,8 @@ export class NodeManager {
     // Clear selection
     this.#selectedNodes.clear();
 
-    // Reload and sort data
-    this.#allNodesInfo = this.#sortNodes(this.#features.graph.getAllNodesInfo());
+    // Reload data
+    this.#allNodesInfo = this.#features.graph.getAllNodesInfo();
 
     // Re-apply current filters (search + errors-only) and redraw
     const searchInput = this.#dialog?.querySelector('.node-manager-search-input') as HTMLInputElement;

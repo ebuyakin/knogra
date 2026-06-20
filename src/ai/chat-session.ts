@@ -317,6 +317,7 @@ export class ChatSession {
       centralNodeId: this.#currentNodeId!,
       sceneId: this.#currentSceneId!,
       visibleNodeIds: [this.#currentNodeId!],
+      selectedNodeIds: [],
       navigationHistory: [],
       nodesWithChats: []
     };

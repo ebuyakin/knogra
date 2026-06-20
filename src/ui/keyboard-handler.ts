@@ -5,12 +5,14 @@
 
 import type cytoscape from 'cytoscape';
 import type { Core } from 'cytoscape';
-import type { NodeId } from '../core/main-types';
+import type { EdgeId, NodeId } from '../core/main-types';
 import type { FeatureAPI } from '../features/feature-api';
 import type { ConnectionBadgeManager } from './components/connection-badge';
+import type { EdgeCreationMode } from './edge-creation-mode';
 import { isDebug } from '../config/debug-flags';
 import type { NodeEditor, NodeEditorContext } from './components/node-editor';
 import type { NodeManager } from './components/node-manager';
+import type { AnchorLinkTooltip } from './components/anchor-link-tooltip';
 import { SettingsModal } from './components/settings-modal';
 import { ShortcutOverlay } from './components/shortcut-overlay';
 import { getAppMode, isEditMode, setAppMode } from '../storage/app-mode';
@@ -20,10 +22,12 @@ import { generateEquationFromPrompt } from '../ai/equation-generator';
 export class KeyboardHandler {
   #cy: Core;
   #features: FeatureAPI;
+  #edgeCreationMode: EdgeCreationMode | null = null;
   #badgeManager: ConnectionBadgeManager | null;
   #nodeEditor: NodeEditor | null;
   #nodeManager: NodeManager | null;
   #container: HTMLElement | null;
+  #anchorLinkTooltip: AnchorLinkTooltip | null;
   #settingsModal: SettingsModal;
   #shortcutOverlay: ShortcutOverlay;
   #enabled: boolean = true;
@@ -35,7 +39,8 @@ export class KeyboardHandler {
     badgeManager: ConnectionBadgeManager | null = null,
     nodeEditor: NodeEditor | null = null,
     nodeManager: NodeManager | null = null,
-    container: HTMLElement | null = null
+    container: HTMLElement | null = null,
+    anchorLinkTooltip: AnchorLinkTooltip | null = null
   ) {
     this.#cy = cy;
     this.#features = features;
@@ -43,6 +48,7 @@ export class KeyboardHandler {
     this.#nodeEditor = nodeEditor;
     this.#nodeManager = nodeManager;
     this.#container = container;
+    this.#anchorLinkTooltip = anchorLinkTooltip;
     this.#settingsModal = new SettingsModal();
     this.#shortcutOverlay = new ShortcutOverlay();
     
@@ -54,6 +60,8 @@ export class KeyboardHandler {
       
       // Handle Escape from chat input (before the input field check)
       if (key === 'escape') {
+        this.#edgeCreationMode?.cancel();
+
         // Close shortcut overlay if open
         if (this.#shortcutOverlay.isOpen()) {
           event.preventDefault();
@@ -145,6 +153,14 @@ export class KeyboardHandler {
       return;
     }
 
+    if (!ctrl && ['h', 'j', 'k', 'l', 'r'].includes(key)) {
+      const handled = await this.#handleSelectedEdgeBendShortcut(key, event.shiftKey);
+      if (handled) {
+        event.preventDefault();
+        return;
+      }
+    }
+
     // H - Toggle hidden connection badges
     if (key === 'h' && !ctrl) {
       event.preventDefault();
@@ -170,6 +186,13 @@ export class KeyboardHandler {
         };
         this.#nodeManager.show(graphCenter);
       }
+      return;
+    }
+
+    // I - Show selected node's link to the anchor
+    if (key === 'i' && !ctrl) {
+      event.preventDefault();
+      this.#showSelectedNodeLinkToAnchor();
       return;
     }
 
@@ -251,15 +274,10 @@ export class KeyboardHandler {
       return;
     }
 
-    // Delete/Backspace - Delete selected nodes
+    // Delete/Backspace - Delete selected node or edge
     if (key === 'delete' || key === 'backspace') {
       event.preventDefault();
-      if (!isEditMode()) return;
-      const selected = this.#cy.$('node:selected');
-      if (selected.length > 0) {
-        const nodeId = selected.first().id() as NodeId;
-        await this.#features.graph.deleteNode(nodeId);
-      }
+      await this.#deleteSelectedNodeOrEdge();
       return;
     }
 
@@ -370,42 +388,48 @@ export class KeyboardHandler {
       return;
     }
 
-    // X - Exclude from scene
+    // X - Exclude selected node or edge from scene
     if (key === 'x' && !ctrl) {
       event.preventDefault();
-      if (!isEditMode()) return;
-      const selected = this.#cy.$('node:selected');
-      if (selected.length > 0) {
-        const nodeId = selected.first().id() as NodeId;
-        // Don't exclude central node
-        const centralNodeId = this.#features.scene.getCentralNodeId();
-        if (nodeId !== centralNodeId) {
-          await this.#features.scene.excludeNode(nodeId);
-        }
-      }
+      await this.#excludeSelectedNodeOrEdgeFromScene();
       return;
     }
 
-    // D - Delete node
+    // D - Delete selected node or edge
     if (key === 'd' && !ctrl) {
       event.preventDefault();
+      await this.#deleteSelectedNodeOrEdge();
+      return;
+    }
+
+    // Shift+S - Include all graph edges between nodes already in the scene
+    if (key === 's' && event.shiftKey && !ctrl) {
+      event.preventDefault();
       if (!isEditMode()) return;
-      const selected = this.#cy.$('node:selected');
-      if (selected.length > 0) {
-        const nodeId = selected.first().id() as NodeId;
-        await this.#features.graph.deleteNode(nodeId);
-      }
+      this.#features.scene.includeAllSceneEdges();
       return;
     }
 
     // S - Include all incident edges from graph into the scene
-    if (key === 's' && !ctrl) {
+    if (key === 's' && !event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       const selected = this.#cy.$('node:selected');
       if (selected.length > 0) {
         const nodeId = selected.first().id() as NodeId;
         this.#features.scene.includeAllIncidentEdges(nodeId);
+      }
+      return;
+    }
+
+    // Shift+L - Add edges repeatedly from the selected node
+    if (key === 'l' && event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      const selected = this.#cy.$('node:selected');
+      if (selected.length > 0) {
+        const sourceId = selected.first().id() as NodeId;
+        this.#edgeCreationMode?.start(sourceId, true);
       }
       return;
     }
@@ -417,23 +441,7 @@ export class KeyboardHandler {
       const selected = this.#cy.$('node:selected');
       if (selected.length > 0) {
         const sourceId = selected.first().id() as NodeId;
-        // Enter edge creation mode
-        if (this.#container) {
-          this.#container.style.cursor = 'crosshair';
-        }
-        
-        const handler = (event: any) => {
-          const targetId = event.target.id() as NodeId;
-          if (targetId !== sourceId) {
-            this.#features.graph.addEdge(sourceId, targetId);
-          }
-          this.#cy.off('tap', 'node', handler);
-          if (this.#container) {
-            this.#container.style.cursor = 'default';
-          }
-        };
-        
-        this.#cy.on('tap', 'node', handler);
+        this.#edgeCreationMode?.start(sourceId, false);
       }
       return;
     }
@@ -448,6 +456,79 @@ export class KeyboardHandler {
 
   #toggleAppMode(): void {
     setAppMode(getAppMode() === 'view' ? 'edit' : 'view');
+  }
+
+  async #handleSelectedEdgeBendShortcut(key: string, largeStep: boolean): Promise<boolean> {
+    if (!isEditMode()) return false;
+
+    const edgeId = this.#getSingleSelectedEdgeId();
+    if (!edgeId) return false;
+
+    if (key === 'r') {
+      return this.#features.scene.resetEdgeStyleOverride(edgeId);
+    }
+
+    const commands = {
+      h: 'positionTowardSource',
+      j: 'strengthDown',
+      k: 'strengthUp',
+      l: 'positionTowardTarget'
+    } as const;
+    const command = commands[key as keyof typeof commands];
+    if (!command) return false;
+
+    await this.#features.scene.adjustEdgeBend(edgeId, command, { largeStep });
+    return true;
+  }
+
+  async #excludeSelectedNodeOrEdgeFromScene(): Promise<void> {
+    if (!isEditMode()) return;
+
+    const selectedNode = this.#cy.$('node:selected');
+    if (selectedNode.length > 0) {
+      const nodeId = selectedNode.first().id() as NodeId;
+      const centralNodeId = this.#features.scene.getCentralNodeId();
+      if (nodeId !== centralNodeId) {
+        await this.#features.scene.excludeNode(nodeId);
+      }
+      return;
+    }
+
+    const edgeId = this.#getSingleSelectedEdgeId();
+    if (edgeId) {
+      this.#features.scene.excludeEdge(edgeId);
+    }
+  }
+
+  async #deleteSelectedNodeOrEdge(): Promise<void> {
+    if (!isEditMode()) return;
+
+    const selectedNode = this.#cy.$('node:selected');
+    if (selectedNode.length > 0) {
+      const nodeId = selectedNode.first().id() as NodeId;
+      await this.#features.graph.deleteNode(nodeId);
+      return;
+    }
+
+    const edgeId = this.#getSingleSelectedEdgeId();
+    if (edgeId) {
+      this.#features.graph.deleteEdge(edgeId);
+    }
+  }
+
+  #getSingleSelectedEdgeId(): EdgeId | null {
+    const selectedEdges = this.#cy.edges(':selected');
+    if (selectedEdges.length !== 1 || this.#cy.nodes(':selected').length > 0) return null;
+    return selectedEdges.first().id() as EdgeId;
+  }
+
+  #showSelectedNodeLinkToAnchor(): void {
+    const selected = this.#cy.$('node:selected');
+    if (selected.length === 0 || !this.#anchorLinkTooltip) return;
+
+    const nodeId = selected.first().id() as NodeId;
+    const result = this.#features.graph.getLinkToAnchor(nodeId);
+    this.#anchorLinkTooltip.showForNode(result, nodeId);
   }
 
   /**
@@ -546,6 +627,13 @@ export class KeyboardHandler {
   }
 
   /**
+   * Set edge creation mode (for late binding)
+   */
+  setEdgeCreationMode(mode: EdgeCreationMode): void {
+    this.#edgeCreationMode = mode;
+  }
+
+  /**
    * Enable/disable keyboard shortcuts
    */
   setEnabled(enabled: boolean): void {
@@ -592,7 +680,8 @@ export class KeyboardHandler {
       },
       async (request) => {
         return generateEquationFromPrompt(request);
-      }
+      },
+      (title) => this.#features.graph.findNodeByTitle(title, nodeId)
     );
   }
 

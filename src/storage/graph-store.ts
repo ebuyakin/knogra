@@ -1,8 +1,9 @@
 // repository
 
 import Dexie from 'dexie'
-import type { Node, Edge, Scene, SceneId, NodeId, EdgeId, BackgroundImage, BackgroundImageId } from '../core/main-types'
+import type { Node, Edge, EdgeType, EdgeTypeId, Scene, SceneId, NodeId, EdgeId, BackgroundImage, BackgroundImageId } from '../core/main-types'
 import { GRAPH_DB_NAME, GRAPH_DB_VERSION, GRAPH_DB_SCHEMA } from '../config/storage-config'
+import { createStarterEdgeTypes, getDefaultEdgeTypeId } from '../config/edge-type-settings'
 import { isDebug } from '../config/debug-flags'
 import { recordPersistedPositions } from '../utils/diagnostics/recorder'
 
@@ -12,6 +13,7 @@ class GraphDataStore {
     // In-memory cache
     nodes: Node[] = [];
     edges: Edge[] = [];
+    edgeTypes: EdgeType[] = [];
     scenes: Scene[] = [];
     backgroundImages: BackgroundImage[] = [];
 
@@ -26,15 +28,28 @@ class GraphDataStore {
             backgroundImages: '++id, name'
         })
 
-        // Version 3: explicit string IDs (no auto-increment)
-        // Dexie cannot change autoIncrement flag in-place, so we must
-        // re-declare stores without ++ to drop the flag on upgrade.
+        // Version 3: edge type object store and typeId edge index.
         this.#db.version(GRAPH_DB_VERSION).stores(GRAPH_DB_SCHEMA)
     }
 
     async init(): Promise<void> {
         this.nodes = await this.#db.table('nodes').toArray();
-        this.edges = await this.#db.table('edges').toArray();
+        this.edgeTypes = await this.#db.table('edgeTypes').toArray();
+        if (this.edgeTypes.length === 0) {
+            this.edgeTypes = createStarterEdgeTypes();
+            await this.#db.table('edgeTypes').bulkPut(this.edgeTypes);
+        }
+
+        const rawEdges = await this.#db.table('edges').toArray() as Edge[];
+        let edgesChanged = false;
+        this.edges = rawEdges.map(edge => {
+            const normalized = this.#withValidEdgeType(edge);
+            if (normalized !== edge) edgesChanged = true;
+            return normalized;
+        });
+        if (edgesChanged) {
+            await this.#db.table('edges').bulkPut(this.edges);
+        }
         this.scenes = await this.#db.table('scenes').toArray();
         this.backgroundImages = await this.#db.table('backgroundImages').toArray();
         
@@ -67,18 +82,20 @@ class GraphDataStore {
     }
 
     async createEdge(edge: Edge): Promise<EdgeId> {
-        const edgeId = await this.#db.table('edges').add(edge) as EdgeId;
-        this.edges.push({...edge, id: edgeId});
+        const normalizedEdge = this.#withValidEdgeType(edge);
+        const edgeId = await this.#db.table('edges').add(normalizedEdge) as EdgeId;
+        this.edges.push({...normalizedEdge, id: edgeId});
         return edgeId;
     }
 
     async updateEdge(edge: Edge): Promise<void> {
-        await this.#db.table('edges').put(edge);
-        const index = this.edges.findIndex(e => e.id === edge.id);
+        const normalizedEdge = this.#withValidEdgeType(edge);
+        await this.#db.table('edges').put(normalizedEdge);
+        const index = this.edges.findIndex(e => e.id === normalizedEdge.id);
         if (index >= 0) {
-            this.edges[index] = edge;
+            this.edges[index] = normalizedEdge;
         } else {
-            this.edges.push(edge);
+            this.edges.push(normalizedEdge);
         }
     }
 
@@ -87,6 +104,22 @@ class GraphDataStore {
         const index = this.edges.findIndex(e => e.id === edgeId);
         if (index >= 0) {
             this.edges.splice(index, 1);
+        }
+    }
+
+    async createEdgeType(edgeType: EdgeType): Promise<EdgeTypeId> {
+        await this.#db.table('edgeTypes').add(edgeType);
+        this.edgeTypes.push(edgeType);
+        return edgeType.id;
+    }
+
+    async updateEdgeType(edgeType: EdgeType): Promise<void> {
+        await this.#db.table('edgeTypes').put(edgeType);
+        const index = this.edgeTypes.findIndex(existing => existing.id === edgeType.id);
+        if (index >= 0) {
+            this.edgeTypes[index] = edgeType;
+        } else {
+            this.edgeTypes.push(edgeType);
         }
     }
 
@@ -141,6 +174,15 @@ class GraphDataStore {
         if (index >= 0) {
             this.backgroundImages.splice(index, 1);
         }
+    }
+
+    #withValidEdgeType(edge: Edge): Edge {
+        if (this.#isKnownEdgeType(edge.typeId)) return edge;
+        return { ...edge, typeId: getDefaultEdgeTypeId() };
+    }
+
+    #isKnownEdgeType(edgeTypeId: EdgeTypeId | undefined): boolean {
+        return !!edgeTypeId && this.edgeTypes.some(edgeType => edgeType.id === edgeTypeId);
     }
 
 }

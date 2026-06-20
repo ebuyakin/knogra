@@ -5,12 +5,30 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { SceneId, NodeId, EdgeId, DesignId } from '../../core/main-types';
+import type { SceneId, NodeId, EdgeId, DesignId, Edge, EdgeType, EdgeTypeId } from '../../core/main-types';
 
 import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
 import { StyleGenerator } from '../../styles/style-generator';
 import { isDebug } from '../../config/debug-flags';
+import { getSetting } from '../../config';
+import { getDefaultEdgeTypeId } from '../../config/edge-type-settings';
+
+type EdgeBendCommand = 'strengthDown' | 'strengthUp' | 'positionTowardSource' | 'positionTowardTarget' | 'resetOverride';
+
+interface EdgeBendOptions {
+  largeStep?: boolean;
+}
+
+const EDGE_BEND_DISTANCE_STEP = 25;
+const EDGE_BEND_DISTANCE_LARGE_STEP = 100;
+const EDGE_BEND_DISTANCE_MIN = -1200;
+const EDGE_BEND_DISTANCE_MAX = 1200;
+const EDGE_BEND_WEIGHT_STEP = 0.05;
+const EDGE_BEND_WEIGHT_LARGE_STEP = 0.2;
+const EDGE_BEND_WEIGHT_MIN = 0.02;
+const EDGE_BEND_WEIGHT_MAX = 0.98;
+const EDGE_BEND_DEFAULT_WEIGHT = 0.5;
 
 /**
  * Context needed to open EdgeEditor for a specific edge
@@ -18,6 +36,10 @@ import { isDebug } from '../../config/debug-flags';
 export interface EdgeEditContext {
   edgeId: EdgeId;
   design: { id: DesignId; params: Record<string, unknown> };
+  editableStyleParams: Record<string, unknown>;
+  hasStyleOverride: boolean;
+  typeId: EdgeTypeId;
+  edgeTypes: EdgeType[];
   sourceNode: { id: NodeId; title: string };
   targetNode: { id: NodeId; title: string };
   sceneId: SceneId;
@@ -72,6 +94,17 @@ export class SceneEdgeOps {
     }
 
     const design = cyEdge.data('design') || { id: 'default', params: {} };
+    const typeId = cyEdge.data('typeId') || getDefaultEdgeTypeId();
+    const edgeType = graphStore.edgeTypes.find(type => type.id === typeId);
+    const themeId = this.#getThemeId();
+    const thematicStyle = edgeType
+      ? StyleGenerator.generateEdgeStyleForType(edgeType, themeId)
+      : StyleGenerator.generateEdgeStyle(themeId).style;
+    const editableStyleParams = {
+      ...thematicStyle,
+      ...(design.params ?? {})
+    };
+    const hasStyleOverride = StyleGenerator.hasEdgeStyleOverride(design);
 
     const sourceNode = cyEdge.source();
     const targetNode = cyEdge.target();
@@ -96,6 +129,10 @@ export class SceneEdgeOps {
     return {
       edgeId,
       design,
+      editableStyleParams,
+      hasStyleOverride,
+      typeId,
+      edgeTypes: graphStore.edgeTypes,
       sourceNode: sourceInfo,
       targetNode: targetInfo,
       sceneId,
@@ -108,7 +145,7 @@ export class SceneEdgeOps {
    */
   async updateEdgeStyle(
     edgeId: EdgeId,
-    params: Record<string, unknown>
+    params: Record<string, unknown> | null
   ): Promise<void> {
     if (!isEditMode()) {
       console.warn('Cannot update edge style in View mode');
@@ -134,6 +171,15 @@ export class SceneEdgeOps {
       };
       console.log(`[DIAG updateEdgeStyle] ${edgeId} BEFORE: bypasses=[${bypassesBefore}] computed=`, computedBefore);
       console.log(`[DIAG updateEdgeStyle] ${edgeId} params=`, params);
+    }
+
+    if (params === null) {
+      cyEdge.data('design', { id: 'default' as DesignId, params: {} });
+      const stylesheet = (this.#cy.style() as any).json();
+      const updatedStylesheet = StyleGenerator.removeEdgeFromStylesheet(stylesheet, edgeId);
+      this.#cy.style().fromJson(updatedStylesheet).update();
+      if (isDebug('d_scene')) console.log(`Scene: Cleared edge ${edgeId} style override`);
+      return;
     }
 
     const design = { id: 'custom' as DesignId, params };
@@ -177,6 +223,95 @@ export class SceneEdgeOps {
     if (isDebug('d_scene')) console.log(`Scene: Updated edge ${edgeId} style (custom params)`);
   }
 
+  async adjustEdgeBend(
+    edgeId: EdgeId,
+    command: EdgeBendCommand,
+    options: EdgeBendOptions = {}
+  ): Promise<boolean> {
+    if (command === 'resetOverride') {
+      return this.resetEdgeStyleOverride(edgeId);
+    }
+
+    const params = this.#buildBentEdgeParams(edgeId, command, options.largeStep === true);
+    if (!params) return false;
+
+    await this.updateEdgeStyle(edgeId, params);
+    return true;
+  }
+
+  async resetEdgeStyleOverride(edgeId: EdgeId): Promise<boolean> {
+    if (!isEditMode()) return false;
+
+    const cyEdge = this.#cy.getElementById(edgeId);
+    if (cyEdge.length === 0) return false;
+
+    await this.updateEdgeStyle(edgeId, null);
+    return true;
+  }
+
+  #buildBentEdgeParams(
+    edgeId: EdgeId,
+    command: Exclude<EdgeBendCommand, 'resetOverride'>,
+    largeStep: boolean
+  ): Record<string, unknown> | null {
+    if (!isEditMode()) return null;
+
+    const context = this.getEdgeEditContext(edgeId);
+    if (!context) return null;
+
+    const params = { ...context.editableStyleParams };
+    const distanceStep = largeStep ? EDGE_BEND_DISTANCE_LARGE_STEP : EDGE_BEND_DISTANCE_STEP;
+    const weightStep = largeStep ? EDGE_BEND_WEIGHT_LARGE_STEP : EDGE_BEND_WEIGHT_STEP;
+    const curveStyle = typeof params['curve-style'] === 'string'
+      ? params['curve-style']
+      : getSetting('edge.defaultCurveStyle');
+    if (curveStyle !== 'bezier' && curveStyle !== 'unbundled-bezier') return null;
+
+    const distanceFallback = curveStyle === 'unbundled-bezier'
+      ? getSetting('edge.bezierControlDistances')
+      : [0];
+    const weightFallback = [EDGE_BEND_DEFAULT_WEIGHT];
+    const distances = this.#readNumericArrayParam(params['control-point-distances'], distanceFallback);
+    const weights = this.#readNumericArrayParam(params['control-point-weights'], weightFallback);
+    const nextDistances = distances.length > 0 ? [...distances] : [0];
+    const nextWeights = weights.length > 0 ? [...weights] : [EDGE_BEND_DEFAULT_WEIGHT];
+    const pointCount = Math.max(nextDistances.length, nextWeights.length, 1);
+    while (nextDistances.length < pointCount) nextDistances.push(0);
+    while (nextWeights.length < pointCount) nextWeights.push(EDGE_BEND_DEFAULT_WEIGHT);
+
+    switch (command) {
+      case 'strengthDown':
+        nextDistances[0] = this.#clamp(nextDistances[0] - distanceStep, EDGE_BEND_DISTANCE_MIN, EDGE_BEND_DISTANCE_MAX);
+        break;
+      case 'strengthUp':
+        nextDistances[0] = this.#clamp(nextDistances[0] + distanceStep, EDGE_BEND_DISTANCE_MIN, EDGE_BEND_DISTANCE_MAX);
+        break;
+      case 'positionTowardSource':
+        nextWeights[0] = this.#clamp(nextWeights[0] - weightStep, EDGE_BEND_WEIGHT_MIN, EDGE_BEND_WEIGHT_MAX);
+        break;
+      case 'positionTowardTarget':
+        nextWeights[0] = this.#clamp(nextWeights[0] + weightStep, EDGE_BEND_WEIGHT_MIN, EDGE_BEND_WEIGHT_MAX);
+        break;
+    }
+
+    params['curve-style'] = 'unbundled-bezier';
+    params['control-point-distances'] = nextDistances;
+    params['control-point-weights'] = nextWeights;
+
+    return params;
+  }
+
+  #readNumericArrayParam(value: unknown, fallback: number[]): number[] {
+    const source = Array.isArray(value) ? value : fallback;
+    return source
+      .map(item => (typeof item === 'number' ? item : parseFloat(String(item))))
+      .filter(item => !Number.isNaN(item));
+  }
+
+  #clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+
   /**
    * Include into the current scene every graph edge incident to `nodeId`
    * whose other endpoint is already in cy. Edges are pulled from
@@ -205,6 +340,43 @@ export class SceneEdgeOps {
       return 0;
     }
 
+    const addedCount = this.#includeMatchingSceneEdges(edge =>
+      edge.sourceId === nodeId || edge.targetId === nodeId
+    );
+
+    if (addedCount === 0) {
+      if (isDebug('d_scene')) console.log(`No new incident edges to include for node ${nodeId}`);
+      return 0;
+    }
+
+    if (isDebug('d_scene')) console.log(`Scene: Included ${addedCount} incident edges for node ${nodeId}`);
+    return addedCount;
+  }
+
+  /**
+   * Include into the current scene every graph edge whose endpoints are both
+   * already represented by nodes in cy.
+   *
+   * Returns the number of edges added.
+   */
+  includeAllSceneEdges(): number {
+    if (!isEditMode()) {
+      console.warn('Cannot include edges in View mode');
+      return 0;
+    }
+
+    const addedCount = this.#includeMatchingSceneEdges(() => true);
+
+    if (addedCount === 0) {
+      if (isDebug('d_scene')) console.log('No new scene edges to include');
+      return 0;
+    }
+
+    if (isDebug('d_scene')) console.log(`Scene: Included ${addedCount} scene edges`);
+    return addedCount;
+  }
+
+  #includeMatchingSceneEdges(matchesEdge: (edge: Edge) => boolean): number {
     const nodesInCy = new Set<NodeId>(
       this.#cy.nodes().map(n => n.id() as NodeId)
     );
@@ -213,14 +385,13 @@ export class SceneEdgeOps {
     );
 
     const toAdd = graphStore.edges.filter(edge =>
-      (edge.sourceId === nodeId || edge.targetId === nodeId) &&
+      matchesEdge(edge) &&
       nodesInCy.has(edge.sourceId) &&
       nodesInCy.has(edge.targetId) &&
       !edgesInCy.has(edge.id)
     );
 
     if (toAdd.length === 0) {
-      if (isDebug('d_scene')) console.log(`No new incident edges to include for node ${nodeId}`);
       return 0;
     }
 
@@ -236,7 +407,6 @@ export class SceneEdgeOps {
       });
     }
 
-    if (isDebug('d_scene')) console.log(`Scene: Included ${toAdd.length} incident edges for node ${nodeId}`);
     return toAdd.length;
   }
 }

@@ -9,6 +9,7 @@ import type { Core } from 'cytoscape';
 import type { Scene } from '../../../../core/main-types';
 import { graphStore } from '../../../../storage/graph-store';
 import { StyleGenerator } from '../../../../styles/style-generator';
+import { resolveSceneEdgeVisualState } from '../../../../styles/edge-visual-resolver';
 import type { TransitionAnalysis } from './transition-analysis-operator';
 
 export class GhostOperator {
@@ -103,13 +104,15 @@ export class GhostOperator {
       const ghostTargetId = this.#ghostMap.get(targetId) || targetId;
       
       const ghostId = `ghost_edge_${change.edgeId}_${Date.now()}`;
+      const edgeData = graphStore.edges.find(edge => edge.id === change.edgeId);
+      if (!edgeData) continue;
       
-      // Calculate OLD style
-      const oldStyle = StyleGenerator.generateEdgeStyleForId(
-        change.edgeId,
-        change.oldParams,
+      const oldStyle = resolveSceneEdgeVisualState({
+        edge: edgeData,
+        scene: currentScene,
+        edgeTypes: graphStore.edgeTypes,
         themeId
-      );
+      }).style;
       
       // Add Ghost Edge — visual style via stylesheet, only opacity as bypass
       this.#cy.add({
@@ -180,7 +183,8 @@ export class GhostOperator {
     for (const id of this.#ghostIds) {
       const el = this.#cy.getElementById(id);
       if (el.length > 0) {
-        el.style('opacity', 1);
+        const opacity = this.#ghostStyles.get(id)?.opacity;
+        el.style('opacity', typeof opacity === 'number' ? opacity : 1);
       }
     }
   }

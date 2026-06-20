@@ -21,6 +21,8 @@ export interface SceneContext {
   sceneId: SceneId;
   /** IDs of nodes visible in the scene */
   visibleNodeIds: NodeId[];
+  /** IDs of nodes selected in the current scene */
+  selectedNodeIds: NodeId[];
   /** Recent navigation history (node IDs) */
   navigationHistory: NodeId[];
   /** IDs of nodes that have ongoing conversations */
@@ -35,7 +37,7 @@ export interface SceneContext {
  * Build system prompt from scene context
  */
 export function buildSystemPrompt(context: SceneContext): string {
-  const { centralNodeId, sceneId, visibleNodeIds } = context;
+  const { centralNodeId, sceneId, visibleNodeIds, selectedNodeIds } = context;
 
   // Get central node
   const centralNode = graphStore.nodes.find(n => n.id === centralNodeId);
@@ -55,6 +57,9 @@ export function buildSystemPrompt(context: SceneContext): string {
     .filter((n): n is Node => n !== undefined);
   const sceneNodeIds = new Set(visibleNodeIds);
   const sceneEdges = getSceneEdges(scene, sceneNodeIds);
+  const selectedNodes = selectedNodeIds
+    .map(id => graphStore.nodes.find(n => n.id === id))
+    .filter((n): n is Node => n !== undefined);
 
   // Build the prompt from sections
   const sections: string[] = [];
@@ -62,8 +67,13 @@ export function buildSystemPrompt(context: SceneContext): string {
   // Role
   sections.push(SYSTEM_PROMPT.role);
 
-  // Focus node
-  sections.push(renderCurrentConceptSection(centralNode));
+  // Scene central node
+  sections.push(renderCentralNodeSection(centralNode));
+
+  // Runtime selection inside the scene
+  if (selectedNodes.length > 0) {
+    sections.push(renderSelectedNodesSection(selectedNodes, centralNodeId));
+  }
 
   // Current scene
   sections.push(renderVisibleSceneSection(visibleNodes, centralNodeId, scene, sceneEdges));
@@ -98,7 +108,7 @@ export function buildSystemPrompt(context: SceneContext): string {
 // SECTION RENDERERS
 // ============================================================================
 
-function renderCurrentConceptSection(node: Node): string {
+function renderCentralNodeSection(node: Node): string {
   const data: Record<string, string> = {
     title: node.title
   };
@@ -122,7 +132,15 @@ function renderCurrentConceptSection(node: Node): string {
     }
   }
 
-  return renderTemplate(SYSTEM_PROMPT.currentConceptTemplate, data);
+  return renderTemplate(SYSTEM_PROMPT.centralNodeTemplate, data);
+}
+
+function renderSelectedNodesSection(selectedNodes: Node[], centralNodeId: NodeId): string {
+  return renderTemplate(SYSTEM_PROMPT.selectedNodesTemplate, {
+    selectedNodes: selectedNodes
+      .map(n => formatNodeForPrompt(n, { centralNodeId }))
+      .join('\n')
+  });
 }
 
 function renderConnectedConceptsSection(
@@ -260,13 +278,13 @@ function calculateSceneContextStrength(
   sceneEdges: Edge[],
   centralNodeId: NodeId
 ): string {
-  const nonFocusNodeCount = sceneNodes.filter(node => node.id !== centralNodeId).length;
-  if (nonFocusNodeCount === 0) {
-    return 'weak (focus node only)';
+  const nonCentralNodeCount = sceneNodes.filter(node => node.id !== centralNodeId).length;
+  if (nonCentralNodeCount === 0) {
+    return 'weak (central node only)';
   }
 
   if (sceneEdges.length === 0) {
-    return nonFocusNodeCount <= 2
+    return nonCentralNodeCount <= 2
       ? 'weak (sparse scene, no scene edges)'
       : 'moderate (nodes present, no scene edges)';
   }
@@ -275,11 +293,11 @@ function calculateSceneContextStrength(
     edge.sourceId === centralNodeId || edge.targetId === centralNodeId
   ).length;
 
-  if (nonFocusNodeCount >= 4 && sceneEdges.length >= 3 && centralEdgeCount >= 2) {
+  if (nonCentralNodeCount >= 4 && sceneEdges.length >= 3 && centralEdgeCount >= 2) {
     return 'strong (detailed, relationship-rich scene)';
   }
 
-  if (nonFocusNodeCount >= 2 && sceneEdges.length >= 1) {
+  if (nonCentralNodeCount >= 2 && sceneEdges.length >= 1) {
     return 'moderate (some local scene structure)';
   }
 
@@ -293,7 +311,7 @@ function formatNodeForPrompt(
   const details: string[] = [];
 
   if (options.centralNodeId === node.id) {
-    details.push('focus node');
+    details.push('central node');
   }
 
   if (options.sceneNodeIds) {

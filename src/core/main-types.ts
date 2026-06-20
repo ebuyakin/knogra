@@ -52,6 +52,8 @@ export type NodeId = string;
 export type NodePropertyId = string;
 export type EdgeId = string;
 export type EdgePropertyId = string;
+export type EdgeTypeId = string;
+export type EdgeStyleSlotId = 'edge-style-1' | 'edge-style-2' | 'edge-style-3';
 export type SceneId = string;
 export type PathId = string;
 export type ThemeId = string;
@@ -94,11 +96,26 @@ export interface Edge {
   title: string;
   sourceId: NodeId;
   targetId: NodeId;
+  typeId: EdgeTypeId;
   tags: string[];
   properties: Record<EdgePropertyId, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface EdgeType {
+  id: EdgeTypeId;
+  name: string;
+  description?: string;
+  forwardLabel?: string;
+  inverseLabel?: string;
+  thematicStyleSlotId: EdgeStyleSlotId;
+  styleOverride?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type EdgeTypeVisibilityMode = 'show' | 'dim' | 'hide';
 
 /** A node hidden by a fold operation, with its offset from the fold root */
 export interface FoldedNodeEntry {
@@ -127,6 +144,8 @@ export interface Scene {
   viewport: {zoom: number, pan: {x: number, y: number}}
   /** Fold state: fold-root NodeId → array of hidden nodes with relative offsets */
   foldedNodes?: Record<NodeId, FoldedNodeEntry[]>;
+  /** Scene-local edge type display state. Does not change scene composition. */
+  edgeTypeVisibility?: Record<EdgeTypeId, EdgeTypeVisibilityMode>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -162,6 +181,7 @@ export interface NodeInfo {
   connectionCount: number;   // How many edges connect to this node
   hasOwnScene: boolean;      // Does a scene exist with this node as central
   isInCurrentScene: boolean; // Is node currently visible in Cytoscape
+  anchorDistance: number | null; // Shortest graph distance from anchor; null when disconnected
 }
 
 export interface BackgroundImage {
@@ -185,5 +205,6 @@ interface AIArtifact { }
 export interface GraphState {
   nodes: Map<NodeId, Node>;
   edges: Map<EdgeId, Edge>;
+  edgeTypes: Map<EdgeTypeId, EdgeType>;
   scenes: Map<SceneId, Scene>;
 }

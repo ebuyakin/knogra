@@ -1,7 +1,7 @@
 # Knogra Documentation Map
 
 > **Status:** Current index  
-> **Last reviewed:** 2026-06-14  
+> **Last reviewed:** 2026-06-25  
 > **Authority:** Use this file to orient within `docs/`. It classifies documents by current usefulness and points to the canonical sources when older documents overlap.
 
 ## Status Legend
@@ -33,8 +33,9 @@
 | [workspace-architecture.md](workspace-architecture.md) | Current | Workspace export/import model. |
 | [paths-architecture.md](paths-architecture.md) | Current | Paths feature model and implementation history. |
 | [chat-panel-architecture.md](chat-panel-architecture.md) | Current | Chat, notes, tutorial timeline, and chat storage model. |
-| [ai-assistant-vision.md](ai-assistant-vision.md) | Current | AI assistant behavior and architecture; read with chat panel doc for UI details. |
-| [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md) | Current with caveats | Current AI chat API call composition, quick-action prompt contract, and scene-context caveats. |
+| [ai-assistant-vision.md](ai-assistant-vision.md) | Current | AI assistant behavior, architecture, graph-action flow, and preconfigured Scene/Node/Suggest/Connect command model. |
+| [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md) | Current | Authoritative AI chat API call composition, quick-action prompt contract, and scene/node request behavior. |
+| [edge-types-architecture.md](edge-types-architecture.md) | Current | Workspace-specific edge types, theme-aware type styles, scene-local edge visibility, selected-edge affordances, and current AI context boundary. |
 | [telemetry-design.md](telemetry-design.md) | Current | Anonymous usage-counting design and privacy constraints. |
 | [landing-app-interaction.md](landing-app-interaction.md) | Current | User-facing landing/app scenarios and implementation status. |
 

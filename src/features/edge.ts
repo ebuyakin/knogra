@@ -6,6 +6,7 @@
 import type { Core } from 'cytoscape';
 import type { Edge as EdgeData, EdgeId } from '../core/main-types';
 import { isEditMode } from '../storage/app-mode';
+import { AppStateManager } from '../storage/app-state';
 
 export class Edge {
   #cy: Core;
@@ -47,6 +48,10 @@ export class Edge {
       ...updates,
       updatedAt: new Date()
     });
+    // Persist last-used edge type if caller changed it
+    if (updates.typeId) {
+      AppStateManager.saveLastEdgeTypeId(updates.typeId);
+    }
     
     // Note: Edge styles are currently scene-wide, not per-edge
     // If design changes are needed in future, implement per-edge styling

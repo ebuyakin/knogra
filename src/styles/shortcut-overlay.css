@@ -12,9 +12,9 @@
   border: 1px solid #30363d;
   border-radius: 10px;
   padding: 20px 24px;
-  width: 860px;
+  width: 1040px;
   max-width: calc(100vw - 40px);
-  max-height: 80vh;
+  max-height: calc(100vh - 40px);
   overflow-y: auto;
   color: #e6edf3;
   font-size: 13px;
@@ -25,6 +25,7 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
+  cursor: move;
 }
 
 .shortcut-hint {
@@ -83,7 +84,7 @@
 
 .shortcut-key {
   flex-shrink: 0;
-  min-width: 72px;
+  width: 104px;
   text-align: right;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
   font-size: 12px;

@@ -5,50 +5,99 @@
  * Edit these to tune AI behavior without changing code logic.
  */
 
+import { getSetting } from '../config';
+
 // ============================================================================
 // QUICK ACTIONS
 // ============================================================================
 
+export type QuickActionId = 'scene' | 'node' | 'suggest' | 'connect' | 'clear';
+type CustomizableQuickActionId = Exclude<QuickActionId, 'clear'>;
+
 export interface QuickAction {
-  id: string;
+  id: QuickActionId;
   label: string;
-  icon: string;
   prompt: string;
   displayText?: string;
 }
 
+export interface ResolvedQuickActionMessage {
+  prompt: string;
+  displayText?: string;
+}
+
+type QuickActionInstructionSettingKey =
+  | 'ai.scenePromptInstructions'
+  | 'ai.nodePromptInstructions'
+  | 'ai.suggestPromptInstructions'
+  | 'ai.connectPromptInstructions';
+
+const QUICK_ACTION_INSTRUCTION_SETTINGS: Record<CustomizableQuickActionId, QuickActionInstructionSettingKey> = {
+  scene: 'ai.scenePromptInstructions',
+  node: 'ai.nodePromptInstructions',
+  suggest: 'ai.suggestPromptInstructions',
+  connect: 'ai.connectPromptInstructions'
+};
+
 /**
  * Quick action buttons shown in chat panel
- * Icons use simple Unicode symbols for minimalist look
  */
 export const QUICK_ACTIONS: QuickAction[] = [
   {
-    id: 'explain',
-    label: 'Explain',
-    icon: '◈',
-    prompt: 'Explain this concept to me. What is it and why is it important?'
+    id: 'scene',
+    label: 'Scene',
+    displayText: 'Discuss the current scene.',
+    prompt: 'Discuss the subject of the current scene as a whole.\n\nThe scene central node is the main topic. Use the visible nodes and edges as clues about the user\'s current angle, depth, and stage of exploration, then explain and develop the substance of that topic through the scene content. If the scene is rich, use its relationships to structure a more specific discussion. If the scene is sparse or contains only the central node, treat it as an early exploration and give a useful orientation to the topic without assuming the missing context is intentional.\n\nDo not concentrate on any currently selected node unless it is clearly central to the scene structure. Avoid mostly describing the scene as an artifact or narrating the user\'s construction process; respond to the topic itself as illuminated by this scene.\n\nDo not propose graph actions or include a JSON action block unless additions or changes would be genuinely useful for this scene-level discussion.'
+  },
+  {
+    id: 'node',
+    label: 'Node',
+    displayText: 'Explain the selected node(s).',
+    prompt: 'Explain the node or nodes identified for this request.\n\nConcentrate on what the requested node(s) mean, why they matter, and how they help illuminate the subject of this scene. Use the main topic of the scene, visible scene nodes, and scene edges as context for the explanation. Start with the concept itself, not with interface status or a description of where the node appears.\n\nIf the requested node is also the main topic of the scene, explain the topic directly, using the scene contents to infer what kind of explanation the user is looking for. If multiple nodes are requested, explain them together and compare their roles in the scene. If no node is identified for this request, explain the main topic of the scene in its scene context.\n\nAvoid turning this into a full scene review except where scene context clarifies the requested node(s). Do not propose graph actions or include a JSON action block unless additions or changes would be genuinely useful for this node-level explanation.'
   },
   {
     id: 'suggest',
     label: 'Suggest',
-    icon: '◇',
     displayText: 'Suggest new concepts to add to my knowledge graph.',
-    prompt: 'Suggest new concepts related to the current node that are NOT already in my knowledge graph. Only suggest brand new concepts to create — do not suggest including existing nodes.'
+    prompt: 'Suggest new concepts related to the scene central node that are NOT already in my knowledge graph. Only suggest brand new concepts to create — do not suggest including existing nodes. Return each suggested new concept as a create_connected action so it appears on the node shelf.'
   },
   {
     id: 'connect',
     label: 'Connect',
-    icon: '▽',
     displayText: 'Find existing concepts that belong in this scene.',
-    prompt: 'Look at concepts in my knowledge graph that are NOT in the current scene. Identify ones that are relevant to the current node and should be included in this scene. Only suggest existing nodes to include — do not create new ones.'
+    prompt: 'Look at concepts in my knowledge graph that are NOT in the current scene. Identify ones that are relevant to the scene central node and should be included in this scene. Only suggest existing nodes to include — do not create new ones. Return each suggested existing concept as an include_existing action so it appears on the node shelf.'
   },
   {
     id: 'clear',
     label: 'Clear',
-    icon: '○',
     prompt: '__clear__'  // Special command, handled by ChatPanel
   }
 ];
+
+export function resolveQuickActionMessage(action: QuickAction): ResolvedQuickActionMessage {
+  if (!isCustomizableQuickActionId(action.id)) {
+    return { prompt: action.prompt, displayText: action.displayText };
+  }
+
+  const instructions = getQuickActionInstructions(action.id);
+  if (!instructions) {
+    return { prompt: action.prompt, displayText: action.displayText };
+  }
+
+  return {
+    prompt: `${action.prompt}\n\nAdditional instructions for this shortcut:\n${instructions}`,
+    displayText: action.displayText ?? action.prompt
+  };
+}
+
+function isCustomizableQuickActionId(id: QuickActionId): id is CustomizableQuickActionId {
+  return id in QUICK_ACTION_INSTRUCTION_SETTINGS;
+}
+
+function getQuickActionInstructions(id: CustomizableQuickActionId): string {
+  const value = getSetting(QUICK_ACTION_INSTRUCTION_SETTINGS[id]);
+  return typeof value === 'string' ? value.replace(/^\s+|\s+$/g, '') : '';
+}
 
 // ============================================================================
 // SYSTEM PROMPT TEMPLATES
@@ -66,20 +115,20 @@ export const SYSTEM_PROMPT = {
 
 The graph contains nodes, each representing an idea, concept, topic, entity, or other unit of meaning. Edges represent relationships between nodes.
 
-Ground your response in the context below. The focus node is the main subject of the current conversation. The current scene shows the user's local working frame around that node. The full graph shows the user's evolving larger project.
+Ground your response in the context below. The scene central node is the main topic of the current scene. The current scene shows the user's curated working frame for exploring that central node. The full graph shows the user's evolving larger project. Currently selected node(s), when present, identify the requested subject for the Node quick action. Use section labels to interpret the context, but do not repeat app labels such as "central node" or "selected node" in the response unless the user asks about the app state.
 
-Scene membership and graph connection are different signals. A node may be directly connected to the focus node in the full graph, included in the current scene, both, or neither. Direct graph connections show explicit semantic relationships. Scene inclusion shows what the user has chosen to consider together right now, even when some included nodes are indirect neighbors or not connected to the focus node.
+Scene membership and graph connection are different signals. A node may be directly connected to the central node in the full graph, included in the current scene, both, or neither. Direct graph connections show explicit semantic relationships. Scene inclusion shows what the user has chosen to consider together right now, even when some included nodes are indirect neighbors or not connected to the central node.
 
-Answer the user's latest request directly. Treat scene context strength as a weighting signal: the more detailed, coherent, and relationship-rich the current scene is, the more it should shape your emphasis. If the scene is empty, sparse, weakly connected, or mixed, do not be confused and do not overfit; rely more on the focus node and full graph.
+Answer the user's latest request directly. Treat scene context strength as a weighting signal: the more detailed, coherent, and relationship-rich the current scene is, the more it should shape your emphasis. If the scene is empty, sparse, weakly connected, or mixed, do not be confused and do not overfit; rely more on the central node and full graph.
 
 When helping with equations, write equations in LaTeX syntax, for example \\frac{a}{b}, \\alpha, x^{2}; the app renders equations with MathJax.`,
 
   /**
-   * Template for focus node section
+   * Template for central node section
    * Placeholders: {{title}}, {{tags}}, {{equation}}, {{properties}}
    */
-  currentConceptTemplate: `## Focus Node
-The main node this conversation is about. Answer about this node unless the user asks otherwise.
+  centralNodeTemplate: `## Scene Central Node
+The main topic of this scene. The scene exists to explore, study, question, or develop this node through the visible nodes and edges.
 
 **Title:** {{title}}
 {{#if tags}}**Tags:** {{tags}}{{/if}}
@@ -87,11 +136,20 @@ The main node this conversation is about. Answer about this node unless the user
 {{#if properties}}**Other properties:** {{properties}}{{/if}}`,
 
   /**
+   * Template for selected nodes section
+   * Placeholders: {{selectedNodes}}
+   */
+  selectedNodesTemplate: `## Currently Selected Node(s)
+Use these node(s) as the requested subject when the latest request uses the Node quick action. This section is routing context; do not mention selection state in the response unless the user asks about it.
+
+{{selectedNodes}}`,
+
+  /**
    * Template for directly connected nodes section
    * Placeholders: {{parents}}, {{children}}
    */
-  connectedConceptsTemplate: `## Directly Connected Nodes
-Nodes with explicit graph edges to the focus node. This is graph structure, not scene membership: some of these nodes may be in the current scene, and some may only exist elsewhere in the full graph.
+  connectedConceptsTemplate: `## Directly Connected To Central Node
+Nodes with explicit graph edges to the scene central node. This is graph structure, not scene membership: some of these nodes may be in the current scene, and some may only exist elsewhere in the full graph.
 
 {{#if parents}}**Broader or parent nodes:**
 {{parents}}{{/if}}
@@ -103,7 +161,7 @@ Nodes with explicit graph edges to the focus node. This is graph structure, not 
    * Placeholders: {{sceneDescription}}, {{sceneContextStrength}}, {{sceneConcepts}}, {{sceneRelationships}}
    */
   visibleSceneTemplate: `## Current Scene
-A curated working view: a subset of graph nodes and scene-included edges selected around the focus node. Scene inclusion is a framing signal: these are nodes the user is considering together right now, whether or not each one is directly connected to the focus node. Like the full graph, the scene is evolving; it may contain only the focus node, a simple loose context, or a detailed local structure.
+A curated working view: a subset of graph nodes and scene-included edges selected around the central node. Scene inclusion is a framing signal: these are nodes the user is considering together right now, whether or not each one is directly connected to the central node. Like the full graph, the scene is evolving; it may contain only the central node, a simple loose context, or a detailed local structure.
 
 {{#if sceneDescription}}**Scene note:** {{sceneDescription}}{{/if}}
 **Context strength:** {{sceneContextStrength}}
@@ -131,7 +189,7 @@ The user's evolving graph as it currently exists, including nodes both inside an
    */
   actionSchema: `## Response Format
 
-When suggesting actions for the knowledge graph, include them in a JSON code block at the end of your response:
+When suggesting actions for the knowledge graph, include them in a JSON code block at the end of your response. The node shelf is populated only from this JSON action block:
 
 \`\`\`json
 [
@@ -151,15 +209,18 @@ When suggesting actions for the knowledge graph, include them in a JSON code blo
 \`\`\`
 
 Action types:
-- \`create_connected\`: Create a new node connected to the focus node
+- \`create_connected\`: Create a new node connected to the scene central node
 - \`include_existing\`: Include an existing node from the graph into the current scene
 
 IMPORTANT:
 - Follow the user's latest request. Scene context should improve relevance, not override what the user asked for.
+- If you recommend adding a brand-new concept, include a matching \`create_connected\` action in the JSON block. Do not present recommended new concepts only in prose.
+- If you recommend including an existing concept in the current scene, include a matching \`include_existing\` action in the JSON block. Do not present recommended existing concepts only in prose.
+- You may briefly explain why suggested actions are useful in the conversational response, but every actionable concept mentioned there must also appear in the JSON block.
 - Use \`create_connected\` only for brand-new nodes that do not already exist in the Full Graph.
 - Use \`include_existing\` to suggest an existing Full Graph node that should be added to the current scene.
 - For \`include_existing\`, choose only nodes listed under "Full Graph nodes not included in the current scene; available to include" and use the exact listed title.
-- Only suggest actions when relevant. Focus on being a helpful collaborator first.
+- Only suggest actions when relevant. Prioritize being a helpful collaborator first.
 - When a node has an equation, write it in LaTeX syntax. Never use Unicode math symbols or informal notation.`,
 
 

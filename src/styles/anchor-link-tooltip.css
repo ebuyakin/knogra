@@ -1,0 +1,27 @@
+.anchor-link-tooltip {
+  position: absolute;
+  z-index: 1100;
+  max-width: min(520px, calc(100% - 24px));
+  padding: 8px 11px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 6px;
+  background: var(--bg-secondary, #161b22);
+  opacity: 0.85;
+  color: var(--text-primary, #e6edf3);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+}
+
+.anchor-link-tooltip-linked {
+  border-color: rgba(88, 166, 255, 0.7);
+}
+
+.anchor-link-tooltip-no-anchor,
+.anchor-link-tooltip-missing-target,
+.anchor-link-tooltip-disconnected {
+  color: var(--text-secondary, #8b949e);
+}

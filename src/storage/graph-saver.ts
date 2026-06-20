@@ -10,6 +10,7 @@
 import type { Core } from 'cytoscape';
 import type { Scene, Node, Edge, NodeId, EdgeId, SceneId } from '../core/main-types';
 import { graphStore } from './graph-store';
+import { getDefaultEdgeTypeId } from '../config/edge-type-settings';
 import { isDebug } from '../config/debug-flags';
 import { recordSaverEvent } from '../utils/diagnostics/recorder';
 
@@ -183,6 +184,7 @@ class GraphSaver {
       },
       backgroundImages: existingScene?.backgroundImages || [],
       foldedNodes: (this.#cy.scratch('foldedNodes') as Scene['foldedNodes']) || undefined,
+      edgeTypeVisibility: existingScene?.edgeTypeVisibility,
       createdAt: existingScene?.createdAt || new Date(),
       updatedAt: new Date()
     };
@@ -242,6 +244,7 @@ class GraphSaver {
       title: data.title || '',
       sourceId: data.source,
       targetId: data.target,
+      typeId: data.typeId || getDefaultEdgeTypeId(),
       tags: data.tags || [],
       properties: data.properties || {},
       createdAt: data.createdAt || new Date(),

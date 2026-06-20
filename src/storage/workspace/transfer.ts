@@ -1,4 +1,6 @@
 import Dexie from 'dexie';
+import type { EdgeType, EdgeTypeId } from '../../core/main-types';
+import { createStarterEdgeTypes, getDefaultEdgeStyleSlotId, getDefaultEdgeTypeId, isEdgeStyleSlotId } from '../../config/edge-type-settings';
 
 import {
   GRAPH_DB_NAME,
@@ -21,6 +23,7 @@ import {
 export interface GraphData {
   nodes: unknown[];
   edges: unknown[];
+  edgeTypes?: unknown[];
   scenes: unknown[];
 }
 
@@ -56,13 +59,14 @@ export async function exportGraphData(): Promise<GraphData> {
   const db = new Dexie(GRAPH_DB_NAME);
   db.version(GRAPH_DB_VERSION).stores(GRAPH_DB_SCHEMA);
 
-  const [nodes, edges, scenes] = await Promise.all([
+  const [nodes, edges, edgeTypes, scenes] = await Promise.all([
     db.table('nodes').toArray(),
     db.table('edges').toArray(),
+    db.table('edgeTypes').toArray(),
     db.table('scenes').toArray(),
   ]);
 
-  return { nodes, edges, scenes };
+  return { nodes, edges, edgeTypes, scenes };
 }
 
 export function exportSettings(): Record<string, unknown> {
@@ -121,6 +125,7 @@ export async function clearAllData(keepSettings = false): Promise<void> {
   graphDb.version(GRAPH_DB_VERSION).stores(GRAPH_DB_SCHEMA);
   await graphDb.table('nodes').clear();
   await graphDb.table('edges').clear();
+  await graphDb.table('edgeTypes').clear();
   await graphDb.table('scenes').clear();
   await graphDb.table('backgroundImages').clear();
 
@@ -148,11 +153,18 @@ export async function importGraphData(graph: GraphData, images: unknown[]): Prom
   const db = new Dexie(GRAPH_DB_NAME);
   db.version(GRAPH_DB_VERSION).stores(GRAPH_DB_SCHEMA);
 
+  const edgeTypes = normalizeEdgeTypes(graph.edgeTypes);
+  const edgeTypeIds = new Set(edgeTypes.map(edgeType => edgeType.id));
+  const edges = graph.edges.map(edge => normalizeImportedEdge(edge, edgeTypeIds));
+
   if (graph.nodes.length > 0) {
     await db.table('nodes').bulkPut(graph.nodes);
   }
-  if (graph.edges.length > 0) {
-    await db.table('edges').bulkPut(graph.edges);
+  if (edgeTypes.length > 0) {
+    await db.table('edgeTypes').bulkPut(edgeTypes);
+  }
+  if (edges.length > 0) {
+    await db.table('edges').bulkPut(edges);
   }
   if (graph.scenes.length > 0) {
     await db.table('scenes').bulkPut(graph.scenes);
@@ -160,6 +172,66 @@ export async function importGraphData(graph: GraphData, images: unknown[]): Prom
   if (images.length > 0) {
     await db.table('backgroundImages').bulkPut(images);
   }
+}
+
+function normalizeEdgeTypes(edgeTypes: unknown[] | undefined): EdgeType[] {
+  const starterTypes = createStarterEdgeTypes();
+  if (!edgeTypes || edgeTypes.length === 0) return starterTypes;
+
+  const normalized: EdgeType[] = [];
+  const seenIds = new Set<EdgeTypeId>();
+  const now = new Date();
+
+  for (const value of edgeTypes) {
+    if (!isPlainRecord(value)) continue;
+    if (typeof value.id !== 'string' || typeof value.name !== 'string') continue;
+
+    const edgeTypeId = value.id as EdgeTypeId;
+    if (seenIds.has(edgeTypeId)) continue;
+
+    normalized.push({
+      id: edgeTypeId,
+      name: value.name,
+      description: typeof value.description === 'string' ? value.description : undefined,
+      forwardLabel: typeof value.forwardLabel === 'string' ? value.forwardLabel : undefined,
+      inverseLabel: typeof value.inverseLabel === 'string' ? value.inverseLabel : undefined,
+      thematicStyleSlotId: isEdgeStyleSlotId(value.thematicStyleSlotId)
+        ? value.thematicStyleSlotId
+        : getDefaultEdgeStyleSlotId(),
+      styleOverride: isPlainRecord(value.styleOverride) ? value.styleOverride : undefined,
+      createdAt: parseDateLike(value.createdAt, now),
+      updatedAt: parseDateLike(value.updatedAt, now),
+    });
+    seenIds.add(edgeTypeId);
+  }
+
+  const defaultEdgeTypeId = getDefaultEdgeTypeId();
+  if (!seenIds.has(defaultEdgeTypeId)) {
+    normalized.unshift(starterTypes.find(edgeType => edgeType.id === defaultEdgeTypeId)!);
+  }
+
+  return normalized.length > 0 ? normalized : starterTypes;
+}
+
+function normalizeImportedEdge(edge: unknown, edgeTypeIds: Set<EdgeTypeId>): unknown {
+  if (!isPlainRecord(edge)) return edge;
+  const typeId = typeof edge.typeId === 'string' && edgeTypeIds.has(edge.typeId as EdgeTypeId)
+    ? edge.typeId
+    : getDefaultEdgeTypeId();
+  return { ...edge, typeId };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseDateLike(value: unknown, fallback: Date): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return fallback;
 }
 
 /** Read current API key values from localStorage before they are cleared. */

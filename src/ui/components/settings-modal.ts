@@ -521,7 +521,7 @@ export class SettingsModal {
         textarea.className = 'settings-input-textarea';
         textarea.value = String(currentValue);
         textarea.rows = 5;
-        textarea.placeholder = 'e.g. Respond in a Socratic style, or: Assume I have a PhD in physics';
+        textarea.placeholder = setting.placeholder ?? 'e.g. Respond in a Socratic style, or: Assume I have a PhD in physics';
         textarea.addEventListener('change', () => {
           this.#pendingChanges.set(setting.key, textarea.value);
         });

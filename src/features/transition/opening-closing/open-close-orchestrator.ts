@@ -13,6 +13,7 @@ import { graphStore } from '../../../storage/graph-store';
 import { getSetting } from '../../../config';
 import { isDebug } from '../../../config/debug-flags';
 import { StyleGenerator } from '../../../styles/style-generator';
+import { resolveSceneEdgeVisualState } from '../../../styles/edge-visual-resolver';
 import { OpenSceneAnimator } from './open-scene-animator';
 import { CloseSceneAnimator } from './close-scene-animator';
 import { getHiddenNodeIds } from '../element-classification-utils';
@@ -99,7 +100,7 @@ export class OpenCloseOrchestrator {
         }
       });
 
-      if (sceneEdgeData?.design) {
+      if (StyleGenerator.hasEdgeStyleOverride(sceneEdgeData?.design)) {
         const edgeStyle = StyleGenerator.generateEdgeStyleForId(
           edgeId, sceneEdgeData.design, themeId
         );
@@ -253,9 +254,17 @@ export class OpenCloseOrchestrator {
 
     // Fade everything in
     const fadeDuration = 250;
-    const fadePromises = elements.map((ele: any) =>
-      ele.animation({ style: { opacity: 1 }, duration: fadeDuration }).play().promise()
-    );
+    const fadePromises = elements.map((ele: any) => {
+      if (!ele.isEdge?.()) {
+        return ele.animation({ style: { opacity: 1 }, duration: fadeDuration }).play().promise();
+      }
+
+      const edgeData = graphStore.edges.find(edge => edge.id === ele.id());
+      const targetOpacity = edgeData
+        ? resolveSceneEdgeVisualState({ edge: edgeData, scene, edgeTypes: graphStore.edgeTypes, themeId }).opacity
+        : 1;
+      return ele.animation({ style: { opacity: targetOpacity }, duration: fadeDuration }).play().promise();
+    });
 
     // Fade background in parallel
     if (bgCanvas) {
@@ -264,6 +273,7 @@ export class OpenCloseOrchestrator {
     }
 
     await Promise.all(fadePromises);
+    this.#cy.edges().removeStyle('opacity');
 
     if (bgCanvas) {
       bgCanvas.style.transition = '';

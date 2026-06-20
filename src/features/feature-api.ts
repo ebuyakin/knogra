@@ -9,7 +9,7 @@ import { Scene } from './scene/scene';
 import { SceneBackground } from './scene-background';
 import { Node } from './node';
 import { Edge } from './edge';
-import { Graph } from './graph';
+import { Graph } from './graph/graph';
 import { Transition } from './transition/transition';
 import { Path } from './path/path';
 

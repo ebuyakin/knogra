@@ -46,7 +46,11 @@ type SettingsObject = typeof ALL_DEFAULTS;
 type SettingValue<K extends SettingKey> = 
   K extends `fold.${infer S}` ? S extends keyof typeof FOLD_DEFAULTS ? typeof FOLD_DEFAULTS[S] : never :
   K extends `transition.${infer S}` ? S extends keyof typeof TRANSITION_DEFAULTS ? typeof TRANSITION_DEFAULTS[S] : never :
+  K extends `ai.${infer S}` ? S extends keyof typeof AI_DEFAULTS ? typeof AI_DEFAULTS[S] : never :
+  K extends `node.${infer S}` ? S extends keyof typeof NODE_DEFAULTS ? typeof NODE_DEFAULTS[S] : never :
   K extends `edge.${infer S}` ? S extends keyof typeof EDGE_DEFAULTS ? typeof EDGE_DEFAULTS[S] : never :
+  K extends `customTheme.${infer S}` ? S extends keyof typeof CUSTOM_THEME_DEFAULTS ? typeof CUSTOM_THEME_DEFAULTS[S] : never :
+  K extends `interaction.${infer S}` ? S extends keyof typeof INTERACTION_DEFAULTS ? typeof INTERACTION_DEFAULTS[S] : never :
   never;
 
 /**

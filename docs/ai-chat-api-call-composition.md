@@ -35,9 +35,15 @@ The user API key and selected provider/model come from local settings. Knogra do
 
 The system prompt is built dynamically by `buildSystemPrompt()` in `src/ai/context-builder.ts` from the current `SceneContext` and `graphStore`.
 
-The same system prompt is used for typed messages and for Explain, Suggest, and Connect. Those buttons only provide prewritten user messages; they do not select a different provider mode or command-specific system prompt.
+The same system prompt is used for typed messages and for quick actions. Quick-action buttons only provide prewritten user messages; they do not select a different provider mode or command-specific system prompt.
 
 The current system prompt uses the canonical structure below, including scene relationships and scene context strength.
+
+Terminology matters for this contract:
+
+- **Central node** means the node that owns the current scene. The scene is a curated exploration of that node/topic.
+- **Currently selected node(s)** means the user's runtime Cytoscape selection inside the current scene. Selection is not persisted and may contain one node, several nodes, or no nodes.
+- Prompt text should use these terms consistently: central node for the scene owner, and currently selected node(s) for runtime selection.
 
 ## Canonical System Message
 
@@ -50,24 +56,29 @@ You are an AI collaborator inside Knogra, a graph-based workspace where users wo
 
 The graph contains nodes, each representing an idea, concept, topic, entity, or other unit of meaning. Edges represent relationships between nodes.
 
-Ground your response in the context below. The focus node is the main subject of the current conversation. The current scene shows the user's local working frame around that node. The full graph shows the user's evolving larger project.
+Ground your response in the context below. The scene central node is the main topic of the current scene. The current scene shows the user's curated working frame for exploring that central node. The full graph shows the user's evolving larger project. Currently selected node(s), when present, identify the requested subject for the Node quick action. Use section labels to interpret the context, but do not repeat app labels such as "central node" or "selected node" in the response unless the user asks about the app state.
 
-Scene membership and graph connection are different signals. A node may be directly connected to the focus node in the full graph, included in the current scene, both, or neither. Direct graph connections show explicit semantic relationships. Scene inclusion shows what the user has chosen to consider together right now, even when some included nodes are indirect neighbors or not connected to the focus node.
+Scene membership and graph connection are different signals. A node may be directly connected to the central node in the full graph, included in the current scene, both, or neither. Direct graph connections show explicit semantic relationships. Scene inclusion shows what the user has chosen to consider together right now, even when some included nodes are indirect neighbors or not connected to the central node.
 
-Answer the user's latest request directly. Treat scene context strength as a weighting signal: the more detailed, coherent, and relationship-rich the current scene is, the more it should shape your emphasis. If the scene is empty, sparse, weakly connected, or mixed, do not be confused and do not overfit; rely more on the focus node and full graph.
+Answer the user's latest request directly. Treat scene context strength as a weighting signal: the more detailed, coherent, and relationship-rich the current scene is, the more it should shape your emphasis. If the scene is empty, sparse, weakly connected, or mixed, do not be confused and do not overfit; rely more on the central node and full graph.
 
 When helping with equations, write equations in LaTeX syntax, for example \frac{a}{b}, \alpha, x^{2}; the app renders equations with MathJax.
 
-## Focus Node
-The main node this conversation is about. Answer about this node unless the user asks otherwise.
+## Scene Central Node
+The main topic of this scene. The scene exists to explore, study, question, or develop this node through the visible nodes and edges.
 
 **Title:** {{title}}
 {{#if tags}}**Tags:** {{tags}}{{/if}}
 {{#if equation}}**Equation:** {{equation}}{{/if}}
 {{#if properties}}**Other properties:** {{properties}}{{/if}}
 
+{{#if selectedNodes}}## Currently Selected Node(s)
+Use these node(s) as the requested subject when the latest request uses the Node quick action. This section is routing context; do not mention selection state in the response unless the user asks about it.
+
+{{selectedNodes}}{{/if}}
+
 ## Current Scene
-A curated working view: a subset of graph nodes and scene-included edges selected around the focus node. Scene inclusion is a framing signal: these are nodes the user is considering together right now, whether or not each one is directly connected to the focus node. Like the full graph, the scene is evolving; it may contain only the focus node, a simple loose context, or a detailed local structure.
+A curated working view: a subset of graph nodes and scene-included edges selected around the central node. Scene inclusion is a framing signal: these are nodes the user is considering together right now, whether or not each one is directly connected to the central node. Like the full graph, the scene is evolving; it may contain only the central node, a simple loose context, or a detailed local structure.
 
 {{#if sceneDescription}}**Scene note:** {{sceneDescription}}{{/if}}
 **Context strength:** {{sceneContextStrength}}
@@ -78,8 +89,8 @@ A curated working view: a subset of graph nodes and scene-included edges selecte
 {{#if sceneRelationships}}**Edges in this scene:**
 {{sceneRelationships}}{{/if}}
 
-## Directly Connected Nodes
-Nodes with explicit graph edges to the focus node. This is graph structure, not scene membership: some of these nodes may be in the current scene, and some may only exist elsewhere in the full graph.
+## Directly Connected To Central Node
+Nodes with explicit graph edges to the scene central node. This is graph structure, not scene membership: some of these nodes may be in the current scene, and some may only exist elsewhere in the full graph.
 
 {{#if parents}}**Broader or parent nodes:**
 {{parents}}{{/if}}
@@ -97,7 +108,7 @@ The user's evolving graph as it currently exists, including nodes both inside an
 
 ## Response Format
 
-When suggesting actions for the knowledge graph, include them in a JSON code block at the end of your response:
+When suggesting actions for the knowledge graph, include them in a JSON code block at the end of your response. The node shelf is populated only from this JSON action block:
 
 ```json
 [
@@ -118,10 +129,13 @@ When suggesting actions for the knowledge graph, include them in a JSON code blo
 
 Action rules:
 - Follow the user's latest request. Scene context should improve relevance, not override what the user asked for.
+- If you recommend adding a brand-new concept, include a matching `create_connected` action in the JSON block. Do not present recommended new concepts only in prose.
+- If you recommend including an existing concept in the current scene, include a matching `include_existing` action in the JSON block. Do not present recommended existing concepts only in prose.
+- You may briefly explain why suggested actions are useful in the conversational response, but every actionable concept mentioned there must also appear in the JSON block.
 - Use `create_connected` only for brand-new nodes that do not already exist in the Full Graph.
 - Use `include_existing` to suggest an existing Full Graph node that should be added to the current scene.
 - For `include_existing`, choose only nodes listed under "Full Graph nodes not included in the current scene; available to include" and use the exact listed title.
-- Only suggest actions when relevant. Focus on being a helpful collaborator first.
+- Only suggest actions when relevant. Prioritize being a helpful collaborator first.
 - When a node has an equation, write it in LaTeX syntax. Never use Unicode math symbols or informal notation.
 
 ======================= END SYSTEM MESSAGE =======================
@@ -157,17 +171,18 @@ If no custom instructions are configured, this section is omitted.
 
 This section explains fields in the prompt. It is documentation for developers, not system-message text.
 
-- **Focus node** means the central node of the current scene and the node whose chat conversation is active.
-- **Other properties** are arbitrary saved properties on the focus node, except `equation`, which is shown separately because equations have special rendering and prompt rules.
+- **Central node** means the node that owns the current scene and the node whose chat conversation is active.
+- **Currently selected node(s)** are the user's runtime Cytoscape selection inside the current scene. They are not persisted and can differ from the central node.
+- **Other properties** are arbitrary saved properties on the central node, except `equation`, which is shown separately because equations have special rendering and prompt rules.
 - **Scene note** comes from `Scene.description` if the scene record has a description. Many scenes may not have one.
 - **Scene context strength** is a coarse label based on scene node count and scene edge density.
-- **Nodes in this scene** are nodes in the user's focused local scene. They are not necessarily direct neighbors of the focus node.
+- **Nodes in this scene** are nodes in the user's curated local scene. They are not necessarily direct neighbors of the central node.
 - **Edges in this scene** are edges present in the current scene. They help indicate whether the scene is sparse, loose, or coherent.
-- **Directly connected nodes** are direct parents and children of the focus node in the full graph. They are not the same as scene nodes.
+- **Directly connected to central node** lists direct parents and children of the central node in the full graph. They are not the same as scene nodes.
 - **Full Graph nodes already included in the current scene** and **Full Graph nodes not included in the current scene** split the full graph by scene membership. They are operational lists for graph actions, especially duplicate avoidance and include-existing suggestions.
-- The current implementation lists all concepts that are in the current scene, but caps the out-of-scene list at 200 concepts.
+- The system lists all concepts that are in the current scene, but caps the out-of-scene list at 200 concepts.
 
-Scene inclusion and direct graph connection are independent axes. A node can be directly connected to the focus node and included in the scene, directly connected but outside the scene, not directly connected but included in the scene, or neither. The prompt describes the axes rather than listing all four categories in the system message.
+Scene inclusion and direct graph connection are independent axes. A node can be directly connected to the central node and included in the scene, directly connected but outside the scene, not directly connected but included in the scene, or neither. The prompt describes the axes rather than listing all four categories in the system message.
 
 ## User Messages
 
@@ -183,11 +198,67 @@ For quick actions, the visible chat text can differ from the hidden prompt sent 
 
 | Command | Prompt sent to LLM | Text shown/stored in chat |
 |---|---|---|
-| Explain | `Explain this concept to me. What is it and why is it important?` | Same as prompt |
-| Suggest | `Suggest new concepts related to the current node that are NOT already in my knowledge graph. Only suggest brand new concepts to create — do not suggest including existing nodes.` | `Suggest new concepts to add to my knowledge graph.` |
-| Connect | `Look at concepts in my knowledge graph that are NOT in the current scene. Identify ones that are relevant to the current node and should be included in this scene. Only suggest existing nodes to include — do not create new ones.` | `Find existing concepts that belong in this scene.` |
+| Scene | See [Canonical Scene Message](#canonical-scene-message). | `Discuss the current scene.` |
+| Node | See [Canonical Node Message](#canonical-node-message). | `Explain the selected node(s).` |
+| Suggest | `Suggest new concepts related to the scene central node that are NOT already in my knowledge graph. Only suggest brand new concepts to create — do not suggest including existing nodes. Return each suggested new concept as a create_connected action so it appears on the node shelf.` | `Suggest new concepts to add to my knowledge graph.` |
+| Connect | `Look at concepts in my knowledge graph that are NOT in the current scene. Identify ones that are relevant to the scene central node and should be included in this scene. Only suggest existing nodes to include — do not create new ones. Return each suggested existing concept as an include_existing action so it appears on the node shelf.` | `Find existing concepts that belong in this scene.` |
 
 This means Suggest and Connect have explicit command intent in the user message. The system prompt should improve their relevance, but should not change their action type.
+
+Scene and Node provide two different explanatory shortcuts: Scene asks about the scene-level construction around the central node, while Node asks about the currently selected node(s) in the context of that central node and scene.
+
+### Canonical Scene Message
+
+The Scene quick action asks the assistant to interpret the whole current scene. It should not be redirected by the currently selected node(s), except when the selection is obviously important to understanding the scene structure.
+
+The text between the boundary lines is sent as the latest user message for the Scene quick action, with shortcut-specific additions appended afterward if configured.
+
+```md
+====================== BEGIN SCENE MESSAGE ======================
+
+Discuss the subject of the current scene as a whole.
+
+The scene central node is the main topic. Use the visible nodes and edges as clues about the user's current angle, depth, and stage of exploration, then explain and develop the substance of that topic through the scene content. If the scene is rich, use its relationships to structure a more specific discussion. If the scene is sparse or contains only the central node, treat it as an early exploration and give a useful orientation to the topic without assuming the missing context is intentional.
+
+Do not concentrate on any currently selected node unless it is clearly central to the scene structure. Avoid mostly describing the scene as an artifact or narrating the user's construction process; respond to the topic itself as illuminated by this scene.
+
+Do not propose graph actions or include a JSON action block unless additions or changes would be genuinely useful for this scene-level discussion.
+
+======================= END SCENE MESSAGE =======================
+```
+
+### Canonical Node Message
+
+The Node quick action asks about the currently selected node(s), not necessarily the central node. It uses the requested node(s) as the primary subject and the scene's main topic as the interpretive context.
+
+If no node is selected, Node falls back to explaining the main topic of the scene. If the requested node is also the main topic, Node explains that topic using scene content to infer what kind of explanation the user is looking for.
+
+The text between the boundary lines is sent as the latest user message for the Node quick action, with shortcut-specific additions appended afterward if configured.
+
+```md
+======================= BEGIN NODE MESSAGE =======================
+
+Explain the node or nodes identified for this request.
+
+Concentrate on what the requested node(s) mean, why they matter, and how they help illuminate the subject of this scene. Use the main topic of the scene, visible scene nodes, and scene edges as context for the explanation. Start with the concept itself, not with interface status or a description of where the node appears.
+
+If the requested node is also the main topic of the scene, explain the topic directly, using the scene contents to infer what kind of explanation the user is looking for. If multiple nodes are requested, explain them together and compare their roles in the scene. If no node is identified for this request, explain the main topic of the scene in its scene context.
+
+Avoid turning this into a full scene review except where scene context clarifies the requested node(s). Do not propose graph actions or include a JSON action block unless additions or changes would be genuinely useful for this node-level explanation.
+
+======================== END NODE MESSAGE ========================
+```
+
+Quick actions may also have user-configured shortcut additions in settings. These additions are appended to the quick action's hidden prompt sent to the LLM, not to the global system prompt. The visible chat text remains the base display text so the timeline stays readable.
+
+```md
+{{base quick-action prompt}}
+
+Additional instructions for this shortcut:
+{{configured shortcut additions}}
+```
+
+The configured additions are intentionally additive. They should bias or narrow the shortcut behavior without replacing the base command intent.
 
 ## Assistant Messages
 
@@ -197,6 +268,8 @@ The provider response may contain two parts:
 - an optional JSON action block
 
 Provider adapters parse the JSON block and return actions separately from cleaned conversational content. The cleaned assistant content is saved into the node's conversation.
+
+Recommendations that should become graph or scene changes must be represented as JSON actions, not prose-only suggestions. The assistant may explain the rationale for an action in the conversational response, but the shelf will only show actions parsed from the final JSON block.
 
 Only shelf-supported actions are routed to the node shelf:
 

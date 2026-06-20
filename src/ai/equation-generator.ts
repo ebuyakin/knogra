@@ -43,6 +43,8 @@ If the description does not appear to correspond to a meaningful equation, retur
 When returning an equation, the latex value must be a MathJax-compatible LaTeX body.
 Do not include dollar delimiters, explanations, Unicode math symbols, or multiple alternatives in the latex value.
 Use standard LaTeX commands such as \\frac, \\sqrt, \\sum, \\int, \\partial, and \\nabla.
+Because the response is JSON, every LaTeX command backslash in the JSON string must be escaped as two backslashes: write "\\\\frac{a}{b}", never "\\frac{a}{b}".
+The parsed latex value must contain ordinary LaTeX commands for MathJax, not control characters or Unicode lookalikes.
 Prefer a canonical compact form unless the user's prompt requests a specific form.`;
 
 export async function generateEquationFromPrompt(request: EquationGenerationRequest): Promise<EquationGenerationResult> {
@@ -164,13 +166,14 @@ function extractJsonObject(text: string): string {
 function sanitizeJson(json: string): string {
   const placeholder = '\x00ESC\x00';
   let result = json.split('\\\\').join(placeholder);
+  result = result.replace(/\\(?=[A-Za-z])/g, '\\\\');
   result = result.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
   result = result.split(placeholder).join('\\\\');
   return result.replace(/,\s*([}\]])/g, '$1');
 }
 
 function extractLatexEquation(content: string): string {
-  let text = content.trim();
+  let text = repairLatexControlEscapes(content).trim();
   if (!text) return '';
 
   const fenced = text.match(/```(?:latex|tex|math)?\s*([\s\S]*?)```/i);
@@ -195,6 +198,19 @@ function extractLatexEquation(content: string): string {
 
   const equation = stripTrailingSentencePunctuation(stripWrappingQuotes(stripMathDelimiters(text.trim())));
   return containsEquationSyntax(equation) ? equation : '';
+}
+
+function repairLatexControlEscapes(text: string): string {
+  return text.replace(/[\b\t\n\f\r](?=[A-Za-z])/g, char => {
+    switch (char) {
+      case '\b': return '\\b';
+      case '\t': return '\\t';
+      case '\n': return '\\n';
+      case '\f': return '\\f';
+      case '\r': return '\\r';
+      default: return char;
+    }
+  });
 }
 
 function extractEquationFromJson(text: string): string {

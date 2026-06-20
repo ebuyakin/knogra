@@ -4,6 +4,7 @@
  */
 
 import type { Node, NodeId, DesignId, SceneId } from '../../core/main-types';
+import { getSetting } from '../../config';
 import { AVAILABLE_DESIGNS } from '../../styles/designs/design-registry';
 import { getTheme } from '../../styles/themes';
 import '../../styles/node-editor.css';
@@ -47,11 +48,33 @@ export type NodeEditorOnGenerateEquation = (
   request: NodeEditorEquationRequest
 ) => Promise<NodeEditorEquationResult | NodeEditorEquationClarification>;
 
+/**
+ * Checks whether a candidate title collides with another existing node.
+ * Returns the conflicting node's id/title, or null when the title is unique.
+ */
+export type NodeEditorCheckTitleConflict = (
+  title: string
+) => { id: NodeId; title: string } | null;
+
+interface DefaultNodeLayoutControls {
+  container: HTMLDivElement;
+  fontSizeInput: HTMLInputElement;
+  minWidthInput: HTMLInputElement;
+  aspectRatioInput: HTMLInputElement;
+  fixedAspectInput: HTMLInputElement;
+}
+
+const DEFAULT_NODE_FONT_SIZE = 14;
+const DEFAULT_NODE_MIN_WIDTH = 100;
+const DEFAULT_NODE_ASPECT_RATIO = 16 / 9;
+
 export class NodeEditor {
   #modalElement: HTMLDivElement | null = null;
   #nodeId: NodeId | null = null;
   #onSave: NodeEditorOnSave | null = null;
   #onGenerateEquation: NodeEditorOnGenerateEquation | null = null;
+  #checkTitleConflict: NodeEditorCheckTitleConflict | null = null;
+  #originalTitle = '';
   #containerRect: DOMRect | null = null;
   #isDragging = false;
   #dragOffsetX = 0;
@@ -63,11 +86,14 @@ export class NodeEditor {
     currentDesign: { id: DesignId; params: Record<string, unknown> },
     context: NodeEditorContext,
     onSave: NodeEditorOnSave,
-    onGenerateEquation?: NodeEditorOnGenerateEquation
+    onGenerateEquation?: NodeEditorOnGenerateEquation,
+    checkTitleConflict?: NodeEditorCheckTitleConflict
   ): void {
     this.#nodeId = nodeId;
     this.#onSave = onSave;
     this.#onGenerateEquation = onGenerateEquation ?? null;
+    this.#checkTitleConflict = checkTitleConflict ?? null;
+    this.#originalTitle = currentData.title;
     this.#render(currentData, currentDesign, context);
   }
 
@@ -78,6 +104,7 @@ export class NodeEditor {
       this.#nodeId = null;
       this.#onSave = null;
       this.#onGenerateEquation = null;
+      this.#checkTitleConflict = null;
       this.#containerRect = null;
     }
   }
@@ -128,7 +155,7 @@ export class NodeEditor {
     delete propsWithoutEq?.equation;
     const propsJson = Object.keys(propsWithoutEq || {}).length > 0 ? JSON.stringify(propsWithoutEq, null, 2) : '';
     const propertiesInput = this.#createTextarea('', propsJson, '{\n  "key": "value"\n}', 4);
-    middle.appendChild(this.#createFoldable('Properties (JSON)', propertiesInput.container, false));
+    middle.appendChild(this.#createFoldable('Properties (JSON)', propertiesInput.container, true));
 
     // Section 2: Design Type + Scale — always visible (not foldable)
     const designIdSelect = this.#createSelect('Design Type', currentDesign.id, AVAILABLE_DESIGNS.map(d => d.id));
@@ -161,8 +188,18 @@ export class NodeEditor {
     scaleContainer.append(scaleLabel, scaleNumInput, scaleSliderInput);
     middle.append(designIdSelect.container, scaleContainer);
 
-    // Section 3: Colors & Opacity — foldable, starts expanded
     const params = currentDesign.params || {};
+    const defaultNodeLayoutControls = this.#createDefaultNodeLayoutControls(params);
+    const defaultNodeLayoutSection = this.#createFoldable('Default Node Layout', defaultNodeLayoutControls.container, false);
+    defaultNodeLayoutSection.classList.add('node-editor-default-layout-section');
+    const syncDefaultNodeLayoutVisibility = (): void => {
+      defaultNodeLayoutSection.style.display = designIdSelect.select.value === 'default-node' ? '' : 'none';
+    };
+    designIdSelect.select.addEventListener('change', syncDefaultNodeLayoutVisibility);
+    syncDefaultNodeLayoutVisibility();
+    middle.appendChild(defaultNodeLayoutSection);
+
+    // Section 3: Colors & Opacity — foldable, starts expanded
     const colorOverrides = (params.colorOverrides as Record<string, string>) || {};
     const effects = (params.effects as Record<string, number>) || {};
 
@@ -217,6 +254,11 @@ export class NodeEditor {
           async (equation) => {
             equationInput.input.value = equation;
             equationBtn.textContent = this.#getEquationButtonLabel(equationInput.input.value);
+            const equationDesignId = getSetting('node.equationDesign');
+            if (this.#hasDesignOption(designIdSelect.select, equationDesignId)) {
+              designIdSelect.select.value = equationDesignId;
+              syncDefaultNodeLayoutVisibility();
+            }
             equationInput.input.focus();
           }
         );
@@ -250,7 +292,8 @@ export class NodeEditor {
         textRow.getColor(),
         bgRow.getOpacity(),
         bgAltRow.getOpacity(),
-        textRow.getOpacity()
+        textRow.getOpacity(),
+        defaultNodeLayoutControls
       );
     });
 
@@ -284,6 +327,10 @@ export class NodeEditor {
 
   #getEquationButtonLabel(equation: string): string {
     return equation.trim() ? 'Replace Equation' : 'Add Equation';
+  }
+
+  #hasDesignOption(select: HTMLSelectElement, designId: DesignId): boolean {
+    return Array.from(select.options).some(option => option.value === designId);
   }
 
   #showEquationPromptDialog(
@@ -320,7 +367,7 @@ export class NodeEditor {
     const footer = this.#el('div', 'node-editor-equation-footer');
     const cancelBtn = this.#text('button', 'Cancel') as HTMLButtonElement;
     cancelBtn.className = 'node-editor-btn node-editor-btn-cancel';
-    const generateBtn = this.#text('button', 'Generate') as HTMLButtonElement;
+    const generateBtn = this.#text('button', 'Generate (Ctrl+↵)') as HTMLButtonElement;
     generateBtn.className = 'node-editor-btn node-editor-btn-save';
 
     const close = (): void => overlay.remove();
@@ -346,7 +393,7 @@ export class NodeEditor {
           generateBtn.disabled = false;
           cancelBtn.disabled = false;
           promptInput.input.disabled = false;
-          generateBtn.textContent = 'Generate';
+          generateBtn.textContent = 'Generate (Ctrl+↵)';
           promptInput.input.focus();
           return;
         }
@@ -359,7 +406,7 @@ export class NodeEditor {
         generateBtn.disabled = false;
         cancelBtn.disabled = false;
         promptInput.input.disabled = false;
-        generateBtn.textContent = 'Generate';
+        generateBtn.textContent = 'Generate (Ctrl+↵)';
         promptInput.input.focus();
       }
     };
@@ -451,6 +498,84 @@ export class NodeEditor {
     }
     container.appendChild(select);
     return { container, select };
+  }
+
+  #createDefaultNodeLayoutControls(params: Record<string, unknown>): DefaultNodeLayoutControls {
+    const container = this.#el('div', 'node-editor-layout-controls');
+    const fontSizeInput = this.#createNumberInput(
+      'Font size',
+      this.#numberParam(params.fontSize, DEFAULT_NODE_FONT_SIZE),
+      '6',
+      '48',
+      '1'
+    );
+    const minWidthInput = this.#createNumberInput(
+      'Min Width',
+      this.#numberParam(params.minWidth, DEFAULT_NODE_MIN_WIDTH),
+      '40',
+      '600',
+      '5'
+    );
+    const aspectRatioInput = this.#createNumberInput(
+      'Aspect ratio',
+      this.#numberParam(params.aspectRatio, DEFAULT_NODE_ASPECT_RATIO),
+      '0.3',
+      '5',
+      '0.05'
+    );
+    const fixedAspectRow = document.createElement('label');
+    fixedAspectRow.className = 'node-editor-checkbox-row node-editor-layout-cell';
+    const fixedAspectInput = document.createElement('input');
+    fixedAspectInput.type = 'checkbox';
+    fixedAspectInput.checked = params.fixedAspect === true;
+    const fixedAspectLabel = this.#text('span', 'Fixed Aspect');
+    fixedAspectLabel.className = 'node-editor-color-label';
+    fixedAspectRow.append(fixedAspectLabel, fixedAspectInput);
+
+    fontSizeInput.container.classList.add('node-editor-layout-cell');
+    aspectRatioInput.container.classList.add('node-editor-layout-cell');
+    minWidthInput.container.classList.add('node-editor-layout-cell');
+
+    container.append(
+      fixedAspectRow,
+      aspectRatioInput.container,
+      fontSizeInput.container,
+      minWidthInput.container
+    );
+
+    return {
+      container,
+      fontSizeInput: fontSizeInput.input,
+      minWidthInput: minWidthInput.input,
+      aspectRatioInput: aspectRatioInput.input,
+      fixedAspectInput
+    };
+  }
+
+  #createNumberInput(
+    label: string,
+    value: number,
+    min: string,
+    max: string,
+    step: string
+  ): { container: HTMLLabelElement; input: HTMLInputElement } {
+    const container = document.createElement('label');
+    container.className = 'node-editor-number-row';
+    const labelEl = this.#text('span', label);
+    labelEl.className = 'node-editor-color-label';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'node-editor-scale-input';
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    input.value = String(value);
+    container.append(labelEl, input);
+    return { container, input };
+  }
+
+  #numberParam(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   }
 
   #createFoldable(title: string, content: HTMLElement, startCollapsed: boolean): HTMLDivElement {
@@ -555,7 +680,8 @@ export class NodeEditor {
     textColor: string | undefined,
     bgOpacity: number,
     bgAltOpacity: number,
-    textOpacity: number
+    textOpacity: number,
+    defaultNodeLayoutControls: DefaultNodeLayoutControls
   ): void {
     if (!this.#nodeId || !this.#onSave) return;
 
@@ -601,14 +727,82 @@ export class NodeEditor {
       delete designParams.effects;
     }
 
+    if (designId === 'default-node') {
+      const defaultNodeParams = this.#readDefaultNodeLayoutParams(defaultNodeLayoutControls);
+      if (!defaultNodeParams) return;
+      this.#mergeDefaultNodeLayoutParams(designParams, defaultNodeParams);
+    }
+
     const contentUpdates: Partial<Node> = {
       title,
       tags: tags.length > 0 ? tags : undefined,
       properties: Object.keys(properties).length > 0 ? properties : undefined
     };
 
+    const conflict = this.#checkTitleConflict?.(title) ?? null;
+    if (conflict && title !== this.#originalTitle) {
+      const proceed = confirm(
+        `A node titled "${conflict.title}" already exists.\n\nSave this node with the same title anyway?`
+      );
+      if (!proceed) return;
+    }
+
     this.#onSave(this.#nodeId, contentUpdates, { id: designId as DesignId, params: designParams }, scale);
     this.hide();
+  }
+
+  #readDefaultNodeLayoutParams(controls: DefaultNodeLayoutControls): {
+    fontSize: number;
+    minWidth: number;
+    aspectRatio: number;
+    fixedAspect: boolean;
+  } | null {
+    const fontSize = this.#readNumberInput(controls.fontSizeInput, 'Font size');
+    const minWidth = this.#readNumberInput(controls.minWidthInput, 'Minimum width');
+    const aspectRatio = this.#readNumberInput(controls.aspectRatioInput, 'Aspect ratio');
+
+    if (fontSize === null || minWidth === null || aspectRatio === null) return null;
+
+    return {
+      fontSize,
+      minWidth,
+      aspectRatio,
+      fixedAspect: controls.fixedAspectInput.checked
+    };
+  }
+
+  #readNumberInput(input: HTMLInputElement, label: string): number | null {
+    const value = input.valueAsNumber;
+    const min = input.min ? Number(input.min) : -Infinity;
+    const max = input.max ? Number(input.max) : Infinity;
+    if (!Number.isFinite(value) || value < min || value > max) {
+      alert(`${label} must be a number between ${input.min} and ${input.max}.`);
+      input.focus();
+      return null;
+    }
+    return value;
+  }
+
+  #mergeDefaultNodeLayoutParams(
+    designParams: Record<string, unknown>,
+    params: { fontSize: number; minWidth: number; aspectRatio: number; fixedAspect: boolean }
+  ): void {
+    this.#setNumberParam(designParams, 'fontSize', Math.round(params.fontSize), DEFAULT_NODE_FONT_SIZE);
+    this.#setNumberParam(designParams, 'minWidth', params.minWidth, DEFAULT_NODE_MIN_WIDTH);
+    this.#setNumberParam(designParams, 'aspectRatio', params.aspectRatio, DEFAULT_NODE_ASPECT_RATIO);
+    if (params.fixedAspect) {
+      designParams.fixedAspect = true;
+    } else {
+      delete designParams.fixedAspect;
+    }
+  }
+
+  #setNumberParam(designParams: Record<string, unknown>, key: string, value: number, defaultValue: number): void {
+    if (Math.abs(value - defaultValue) > 0.0001) {
+      designParams[key] = value;
+    } else {
+      delete designParams[key];
+    }
   }
 
   // ===========================================================================

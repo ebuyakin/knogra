@@ -4,6 +4,7 @@
  * Returns selected themeId via Promise (picker pattern)
  */
 
+import type { EdgeStyle } from '../../core/style-types';
 import { getAvailableThemes, getTheme, isBuiltInTheme } from '../../styles/themes';
 import '../../styles/theme-editor.css';
 
@@ -17,6 +18,9 @@ export class ThemeEditor {
   #resolve: ((themeId: string | null) => void) | null = null;
   #selectedThemeId: string = 'dark';
   #originalThemeId: string = 'dark';
+  #isDragging = false;
+  #dragOffsetX = 0;
+  #dragOffsetY = 0;
 
   // ===========================================================================
   // PUBLIC API
@@ -68,6 +72,7 @@ export class ThemeEditor {
 
     // Header
     const header = this.#createHeader();
+    this.#setupDrag(header);
     
     // Body
     const body = this.#createBody();
@@ -171,10 +176,57 @@ export class ThemeEditor {
     ], isBuiltIn));
 
     // Edge section
-    container.appendChild(this.#createColorSection('Edge', [
+    const edgeSection = this.#createColorSection('Edge', [
       { label: 'Line', value: theme.edge.line.color },
       { label: 'Arrow', value: theme.edge.arrow.color }
-    ], isBuiltIn));
+    ], isBuiltIn);
+    edgeSection.appendChild(this.#createEdgeStyleSlotsPreview(theme.edgeStyleSlots ?? {
+      'edge-style-1': theme.edge,
+      'edge-style-2': theme.edge,
+      'edge-style-3': theme.edge
+    }));
+    container.appendChild(edgeSection);
+  }
+
+  #createEdgeStyleSlotsPreview(edgeStyleSlots: Record<string, EdgeStyle>): HTMLDivElement {
+    const container = document.createElement('div');
+    container.className = 'edge-style-slots-preview';
+
+    const title = document.createElement('div');
+    title.className = 'edge-style-slots-title';
+    title.textContent = 'Thematic Edge Styles';
+    container.appendChild(title);
+
+    const slotIds = ['edge-style-1', 'edge-style-2', 'edge-style-3'];
+    slotIds.forEach((slotId, index) => {
+      const edgeStyle = edgeStyleSlots[slotId];
+      if (!edgeStyle) return;
+
+      const row = document.createElement('div');
+      row.className = 'edge-style-slot-row';
+
+      const label = document.createElement('span');
+      label.className = 'edge-style-slot-label';
+      label.textContent = `Style ${index + 1}`;
+
+      const sample = document.createElement('span');
+      sample.className = 'edge-style-slot-sample';
+      sample.style.setProperty('--edge-style-color', edgeStyle.line.color);
+      sample.style.setProperty('--edge-style-width', `${edgeStyle.width ?? 2}px`);
+      sample.classList.toggle('edge-style-slot-sample-straight', (edgeStyle.curveStyle ?? 'bezier') === 'straight');
+      sample.classList.add(`edge-style-slot-arrow-${edgeStyle.arrowShape ?? 'triangle'}`);
+
+      const meta = document.createElement('span');
+      meta.className = 'edge-style-slot-meta';
+      meta.textContent = `${edgeStyle.line.color} / ${edgeStyle.width ?? 2}px / ${edgeStyle.arrowShape ?? 'triangle'} / ${edgeStyle.arrowScale ?? 1}x / ${edgeStyle.curveStyle ?? 'bezier'}`;
+
+      row.appendChild(label);
+      row.appendChild(sample);
+      row.appendChild(meta);
+      container.appendChild(row);
+    });
+
+    return container;
   }
 
   #createColorSection(
@@ -290,12 +342,45 @@ export class ThemeEditor {
     }
   };
 
+  #setupDrag(handle: HTMLElement): void {
+    handle.addEventListener('mousedown', (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest('button')) return;
+      if (!this.#modal) return;
+
+      this.#isDragging = true;
+      const rect = this.#modal.getBoundingClientRect();
+      this.#dragOffsetX = event.clientX - rect.left;
+      this.#dragOffsetY = event.clientY - rect.top;
+      this.#modal.style.transform = '';
+      document.body.style.cursor = 'move';
+      event.preventDefault();
+    });
+
+    document.addEventListener('mousemove', this.#handleMouseMove);
+    document.addEventListener('mouseup', this.#handleMouseUp);
+  }
+
+  #handleMouseMove = (event: MouseEvent): void => {
+    if (!this.#isDragging || !this.#modal) return;
+    this.#modal.style.left = `${event.clientX - this.#dragOffsetX}px`;
+    this.#modal.style.top = `${event.clientY - this.#dragOffsetY}px`;
+  };
+
+  #handleMouseUp = (): void => {
+    this.#isDragging = false;
+    document.body.style.cursor = '';
+  };
+
   // ===========================================================================
   // CLEANUP
   // ===========================================================================
 
   #cleanup(): void {
     document.removeEventListener('keydown', this.#handleKeydown);
+    document.removeEventListener('mousemove', this.#handleMouseMove);
+    document.removeEventListener('mouseup', this.#handleMouseUp);
+    this.#isDragging = false;
+    document.body.style.cursor = '';
     
     if (this.#overlay) {
       this.#overlay.remove();

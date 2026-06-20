@@ -297,6 +297,7 @@ export async function expandNodeConnections(
       cy.add({
         group: 'edges',
         data: {
+          ...edge,
           id: edge.id,
           source: edge.sourceId,
           target: edge.targetId
@@ -348,6 +349,7 @@ export async function expandNodeConnections(
       cy.add({
         group: 'edges',
         data: {
+            ...edge,
           id: edge.id,
           source: edge.sourceId,
           target: edge.targetId

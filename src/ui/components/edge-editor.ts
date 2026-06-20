@@ -7,18 +7,23 @@
  * - Bottom (fixed): Cancel/Save buttons
  */
 
-import type { EdgeId } from '../../core/main-types';
+import type { EdgeId, EdgeTypeId } from '../../core/main-types';
 import type { EdgeEditContext } from '../../features/scene/scene';
 import { el } from '../dom-utils';
 import { getSetting } from '../../config';
 import '../../styles/edge-editor.css';
+
+export interface EdgeEditorSavePayload {
+  typeId: EdgeTypeId;
+  params?: Record<string, unknown> | null;
+}
 
 /**
  * Callback with edge style parameter updates
  */
 export type EdgeEditorOnSave = (
   edgeId: EdgeId,
-  params: Record<string, unknown>
+  payload: EdgeEditorSavePayload
 ) => void;
 
 export class EdgeEditor {
@@ -33,6 +38,11 @@ export class EdgeEditor {
   #arrowShapeSelect: HTMLSelectElement | null = null;
   #arrowScaleInput: HTMLInputElement | null = null;
   #curveStyleSelect: HTMLSelectElement | null = null;
+  #typeSelect: HTMLSelectElement | null = null;
+  #overrideCheckbox: HTMLInputElement | null = null;
+  #initialTypeId: EdgeTypeId | null = null;
+  #initialParams: Record<string, unknown> | null = null;
+  #hasInitialStyleOverride = false;
 
   // Middle section container
   #middleSection: HTMLDivElement | null = null;
@@ -61,6 +71,9 @@ export class EdgeEditor {
   ): void {
     this.#edgeId = edgeId;
     this.#onSave = onSave;
+    this.#initialTypeId = context.typeId;
+    this.#initialParams = null;
+    this.#hasInitialStyleOverride = context.hasStyleOverride;
 
     // Initialize bezier state from params
     this.#controlPointDistances = this.#parseArrayParam(
@@ -73,6 +86,7 @@ export class EdgeEditor {
     );
 
     this.#render(currentParams, context);
+    this.#initialParams = this.#collectParams();
   }
 
   /**
@@ -84,6 +98,11 @@ export class EdgeEditor {
       this.#modalElement = null;
       this.#edgeId = null;
       this.#onSave = null;
+      this.#typeSelect = null;
+      this.#overrideCheckbox = null;
+      this.#initialTypeId = null;
+      this.#initialParams = null;
+      this.#hasInitialStyleOverride = false;
     }
   }
 
@@ -113,6 +132,7 @@ export class EdgeEditor {
 
     // Render initial style section
     this.#updateMiddleSection(params);
+    this.#setStyleControlsEnabled(context.hasStyleOverride);
 
     // === BOTTOM SECTION ===
     dialog.appendChild(this.#createBottomSection());
@@ -161,11 +181,13 @@ export class EdgeEditor {
 
     // Basic controls grid
     const grid = el('div', 'edge-editor-basic-grid', {}, [
-        this.#createColorControl(params),
-        this.#createOpacityControl(params),
-        this.#createWidthControl(params),
-        this.#createArrowShapeControl(params),
-        this.#createArrowScaleControl(params)
+      this.#createEdgeTypeControl(context),
+      this.#createOverrideControl(context),
+      this.#createColorControl(params),
+      this.#createOpacityControl(params),
+      this.#createWidthControl(params),
+      this.#createArrowShapeControl(params),
+      this.#createArrowScaleControl(params)
     ]);
 
     // Style type selector (full width)
@@ -199,6 +221,40 @@ export class EdgeEditor {
     return el('div', 'edge-editor-control inline', {}, [
         el('label', 'edge-editor-label', {}, ['Color']),
         this.#colorInput
+    ]);
+  }
+
+  #createEdgeTypeControl(context: EdgeEditContext): HTMLDivElement {
+    this.#typeSelect = el('select', 'edge-editor-select');
+
+    for (const edgeType of context.edgeTypes) {
+      this.#typeSelect.appendChild(
+        el('option', '', {
+          value: edgeType.id,
+          selected: edgeType.id === context.typeId
+        }, [edgeType.name])
+      );
+    }
+
+    return el('div', 'edge-editor-control', {}, [
+      el('label', 'edge-editor-label', {}, ['Type']),
+      this.#typeSelect
+    ]);
+  }
+
+  #createOverrideControl(context: EdgeEditContext): HTMLLabelElement {
+    this.#overrideCheckbox = el('input', '', {
+      type: 'checkbox',
+      checked: context.hasStyleOverride
+    });
+
+    this.#overrideCheckbox.addEventListener('change', () => {
+      this.#setStyleControlsEnabled(this.#overrideCheckbox?.checked ?? false);
+    });
+
+    return el('label', 'edge-editor-control edge-editor-override-control', {}, [
+      el('span', 'edge-editor-label', {}, ['Override style']),
+      this.#overrideCheckbox
     ]);
   }
 
@@ -287,7 +343,7 @@ export class EdgeEditor {
         valueSpan.textContent = parseFloat(this.#arrowScaleInput!.value).toFixed(1);
     });
 
-    return el('div', 'edge-editor-control full-width', {}, [
+    return el('div', 'edge-editor-control full-width edge-editor-arrow-size-control', {}, [
         el('label', 'edge-editor-label', {}, ['Arrow Size']),
         el('div', 'edge-editor-slider-container', {}, [
             this.#arrowScaleInput,
@@ -321,7 +377,7 @@ export class EdgeEditor {
       this.#updateMiddleSection(params);
     });
 
-    return el('div', 'edge-editor-control', {}, [
+    return el('div', 'edge-editor-control edge-editor-curve-style-control', {}, [
         el('label', 'edge-editor-label', {}, ['Curve Style']),
         this.#curveStyleSelect
     ]);
@@ -393,6 +449,12 @@ export class EdgeEditor {
 
     return el('div', 'edge-editor-style-section active', {}, [
         el('h4', '', {}, ['Control Points']),
+        el('div', 'edge-editor-point-header', {}, [
+          el('span', '', {}, ['#']),
+          el('span', '', { title: 'Absolute bend distance from the straight source-to-target line.' }, ['Bend strength']),
+          el('span', '', { title: 'Clockwise or counterclockwise from the directed source-to-target edge.' }, ['Direction']),
+          el('span', '', { title: 'Position along the edge: 0 is source, 1 is target.' }, ['Bend position'])
+        ]),
         pointsList,
         el('div', 'edge-editor-points-buttons', {}, [addBtn, removeBtn])
     ]);
@@ -402,26 +464,44 @@ export class EdgeEditor {
     container.innerHTML = '';
 
     this.#controlPointDistances.forEach((dist, idx) => {
-      const distInput = el('input', 'edge-editor-number-input compact', {
-          type: 'number', value: String(dist), step: '10',
-          placeholder: 'Distance', title: 'Distance from line (px)'
+      const strengthInput = el('input', 'edge-editor-number-input compact', {
+          type: 'number', value: String(Math.abs(dist)), min: '0', step: '100',
+          placeholder: 'Strength', title: 'Absolute bend distance from the straight source-to-target line.'
       });
-      distInput.addEventListener('change', () => {
-        this.#controlPointDistances[idx] = parseFloat(distInput.value) || 0;
+
+      const directionSelect = el('select', 'edge-editor-select edge-editor-direction-select', {
+          title: 'Direction from the directed source-to-target edge.'
       });
+      directionSelect.appendChild(el('option', '', {
+          value: 'clockwise', selected: dist < 0
+      }, ['Clockwise']));
+      directionSelect.appendChild(el('option', '', {
+          value: 'counterclockwise', selected: dist >= 0
+      }, ['Counterclockwise']));
+
+      const updateDistance = (): void => {
+        const strength = parseFloat(strengthInput.value) || 0;
+        this.#controlPointDistances[idx] = directionSelect.value === 'clockwise' && strength !== 0
+          ? -strength
+          : strength;
+      };
+
+      strengthInput.addEventListener('input', updateDistance);
+      directionSelect.addEventListener('change', updateDistance);
 
       const weightInput = el('input', 'edge-editor-number-input compact', {
           type: 'number', value: String(this.#controlPointWeights[idx]), 
-          min: '0', max: '1', step: '0.05', 
-          placeholder: 'Weight', title: 'Position along edge (0=source, 1=target)'
+          min: '0', max: '1', step: '0.1', 
+          placeholder: 'Position', title: 'Position along edge (0=source, 1=target)'
       });
-      weightInput.addEventListener('change', () => {
+      weightInput.addEventListener('input', () => {
         this.#controlPointWeights[idx] = parseFloat(weightInput.value) || 0.5;
       });
 
       container.appendChild(el('div', 'edge-editor-point-row', {}, [
           el('span', 'edge-editor-point-label', {}, [`#${idx + 1}`]),
-          distInput,
+          strengthInput,
+          directionSelect,
           weightInput
       ]));
     });
@@ -526,6 +606,23 @@ export class EdgeEditor {
   #handleSave(): void {
     if (!this.#onSave || !this.#edgeId) return;
 
+    const params = this.#collectParams();
+    const overrideEnabled = this.#overrideCheckbox?.checked ?? false;
+    const payload: EdgeEditorSavePayload = {
+      typeId: (this.#typeSelect?.value || this.#initialTypeId || '') as EdgeTypeId
+    };
+
+    if (overrideEnabled) {
+      payload.params = params;
+    } else if (this.#hasInitialStyleOverride) {
+      payload.params = null;
+    }
+
+    this.#onSave(this.#edgeId, payload);
+    this.hide();
+  }
+
+  #collectParams(): Record<string, unknown> {
     const params: Record<string, unknown> = {};
 
     // Basic styling
@@ -571,13 +668,29 @@ export class EdgeEditor {
       }
     }
 
-    this.#onSave(this.#edgeId, params);
-    this.hide();
+    return params;
   }
 
   // ===========================================================================
   // UTILITIES
   // ===========================================================================
+
+  #setStyleControlsEnabled(enabled: boolean): void {
+    [
+      this.#colorInput,
+      this.#opacityInput,
+      this.#widthInput,
+      this.#arrowShapeSelect,
+      this.#arrowScaleInput,
+      this.#curveStyleSelect
+    ].forEach(control => {
+      if (control) control.disabled = !enabled;
+    });
+
+    this.#middleSection?.querySelectorAll('input, select, button').forEach(control => {
+      (control as HTMLInputElement | HTMLSelectElement | HTMLButtonElement).disabled = !enabled;
+    });
+  }
 
   #parseArrayParam(param: unknown, defaultValue: number[]): number[] {
     if (Array.isArray(param)) {

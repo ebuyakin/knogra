@@ -1,18 +1,20 @@
-import type { Edge, EdgeId, Node, NodeId, Scene, SceneId } from '../core/main-types';
+import type { Edge, EdgeId, EdgeType, EdgeTypeId, Node, NodeId, Scene, SceneId } from '../core/main-types';
 
 import { AppStateManager } from './app-state';
 import { exportWorkspace } from './workspace';
 import { hasMeaningfulWorkspaceData } from './workspace/dialogs';
 import { clearAllData, exportGraphData, importGraphData } from './workspace/transfer';
+import { getDefaultEdgeTypeId } from '../config/edge-type-settings';
 import {
   buildMermaidMarkdown,
   parseMermaidFlowchart,
-  type ParsedMermaidEdge,
   type ParsedMermaidGraph,
-  type ParsedMermaidNode,
 } from './mermaid/flowchart';
+import { layoutMermaidSceneNodes } from './mermaid/layout';
 import {
   showMermaidImportSelectionDialog,
+  normalizeEdgeTypeName,
+  normalizeMermaidEdgeLabel,
   type MermaidImportSelection,
 } from './mermaid/import-dialog';
 import { getMermaidSceneSlice } from './mermaid/scene-slice';
@@ -24,6 +26,7 @@ interface MermaidImportOptions {
 interface ImportedGraphData {
   nodes: Node[];
   edges: Edge[];
+  edgeTypes: EdgeType[];
   scenes: Scene[];
   sceneId: SceneId;
 }
@@ -43,13 +46,14 @@ export async function exportMermaidGraph(): Promise<void> {
   const graph = await exportGraphData();
   const nodes = graph.nodes.filter(isNode);
   const edges = graph.edges.filter(isEdge);
+  const edgeTypes = (graph.edgeTypes ?? []).filter(isEdgeType);
 
   if (nodes.length === 0) {
     alert('There are no nodes to export.');
     return;
   }
 
-  const markdown = buildMermaidMarkdown(nodes, edges);
+  const markdown = buildMermaidMarkdown(nodes, edges, edgeTypes);
   const dateStamp = new Date().toISOString().split('T')[0];
   downloadText(markdown, `knogra-mermaid-${dateStamp}.md`);
 }
@@ -75,7 +79,7 @@ export async function showImportMermaidDialog(): Promise<void> {
 
     await clearAllData(true);
     AppStateManager.clearAppState();
-    await importGraphData({ nodes: imported.nodes, edges: imported.edges, scenes: imported.scenes }, []);
+    await importGraphData({ nodes: imported.nodes, edges: imported.edges, edgeTypes: imported.edgeTypes, scenes: imported.scenes }, []);
     AppStateManager.saveLastSceneId(imported.sceneId);
     AppStateManager.requestFitOnNextOpen(imported.sceneId);
     window.location.reload();
@@ -95,6 +99,7 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
     selection.allLevels
   );
   const idByMermaidId = new Map<string, NodeId>();
+  const edgeTypeImportPlan = createEdgeTypeImportPlan(selection);
 
   const nodes = parsed.nodes.map((node, index): Node => {
     const id = `n-${prefix}-${index + 1}` as NodeId;
@@ -123,6 +128,7 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
       title: edge.title,
       sourceId,
       targetId,
+      typeId: edgeTypeImportPlan.typeIdBySourceLabelKey.get(normalizeMermaidEdgeLabel(edge.title)) ?? getDefaultEdgeTypeId(),
       tags: [],
       properties: {},
       createdAt: now,
@@ -142,6 +148,7 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
 
   const sceneNodes = parsed.nodes.filter(node => sceneSlice.nodeIds.has(node.mermaidId));
   const sceneEdges = edgeRecords.filter((_record, index) => sceneSlice.edgeIndexes.has(index));
+  const sceneMermaidEdges = parsed.edges.filter((_edge, index) => sceneSlice.edgeIndexes.has(index));
 
   const sceneId = `scene-${prefix}` as SceneId;
   const scene: Scene = {
@@ -149,14 +156,9 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
     title: 'Mermaid import',
     description: `Imported from a Mermaid flowchart. Anchor: ${selection.anchorMermaidId}. Depth: ${selection.depth}. Layout: ${selection.layout}.`,
     centralNodeId,
-    nodes: layoutSceneNodes(
+    nodes: layoutMermaidSceneNodes(
       sceneNodes,
-      sceneEdges.map(record => ({
-        sourceMermaidId: record.sourceMermaidId,
-        targetMermaidId: record.targetMermaidId,
-        title: record.edge.title,
-        order: 0,
-      })),
+      sceneMermaidEdges,
       selection.anchorMermaidId,
       selection.layout,
       idByMermaidId
@@ -173,133 +175,67 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
     updatedAt: now,
   };
 
-  return { nodes, edges, scenes: [scene], sceneId };
+  return { nodes, edges, edgeTypes: edgeTypeImportPlan.edgeTypes, scenes: [scene], sceneId };
 }
 
-function layoutSceneNodes(
-  nodes: ParsedMermaidNode[],
-  edges: ParsedMermaidEdge[],
-  centralMermaidId: string,
-  layout: MermaidImportSelection['layout'],
-  idByMermaidId: Map<string, NodeId>
-): Scene['nodes'] {
-  if (layout === 'top-down' || layout === 'left-right') {
-    return layoutSceneNodesFlow(nodes, edges, centralMermaidId, layout, idByMermaidId);
-  }
+function createEdgeTypeImportPlan(selection: MermaidImportSelection): {
+  edgeTypes: EdgeType[];
+  typeIdBySourceLabelKey: Map<string, EdgeTypeId>;
+} {
+  const now = new Date();
+  const edgeTypes: EdgeType[] = [];
+  const typeIdByNormalizedTypeName = new Map<string, EdgeTypeId>();
+  const typeIdBySourceLabelKey = new Map<string, EdgeTypeId>();
 
-  const distances = computeUndirectedDistances(nodes, edges, centralMermaidId);
-  const finiteDistances = [...distances.values()].filter(distance => Number.isFinite(distance));
-  const disconnectedDistance = (Math.max(0, ...finiteDistances) || 1) + 1;
-  const layers = new Map<number, ParsedMermaidNode[]>();
+  for (const mapping of selection.edgeLabelMappings) {
+    const normalizedTypeName = normalizeEdgeTypeName(mapping.edgeTypeName) || 'related';
+    const typeName = mapping.edgeTypeName.trim().replace(/\s+/g, ' ') || 'related';
+    let typeId = typeIdByNormalizedTypeName.get(normalizedTypeName);
 
-  for (const node of nodes) {
-    const distance = distances.get(node.mermaidId) ?? disconnectedDistance;
-    const layer = Number.isFinite(distance) ? distance : disconnectedDistance;
-    const existing = layers.get(layer) ?? [];
-    existing.push(node);
-    layers.set(layer, existing);
-  }
-
-  const sceneNodes: Scene['nodes'] = {};
-  for (const [layer, layerNodes] of layers) {
-    const positions = positionsForLayer(layer, layerNodes.length);
-    layerNodes.forEach((node, index) => {
-      const nodeId = idByMermaidId.get(node.mermaidId);
-      if (!nodeId) return;
-      sceneNodes[nodeId] = {
-        position: positions[index],
-        scale: 1.0,
-        design: { id: 'default-node', params: {} },
-      };
-    });
-  }
-
-  return sceneNodes;
-}
-
-function layoutSceneNodesFlow(
-  nodes: ParsedMermaidNode[],
-  edges: ParsedMermaidEdge[],
-  centralMermaidId: string,
-  layout: 'top-down' | 'left-right',
-  idByMermaidId: Map<string, NodeId>
-): Scene['nodes'] {
-  const distances = computeUndirectedDistances(nodes, edges, centralMermaidId);
-  const reachable = new Set(distances.keys());
-  const fallbackDistance = (Math.max(0, ...distances.values()) || 1) + 1;
-  const layers = new Map<number, ParsedMermaidNode[]>();
-
-  for (const node of nodes) {
-    const layer = reachable.has(node.mermaidId) ? distances.get(node.mermaidId)! : fallbackDistance;
-    const existing = layers.get(layer) ?? [];
-    existing.push(node);
-    layers.set(layer, existing);
-  }
-
-  const sceneNodes: Scene['nodes'] = {};
-  for (const [layer, layerNodes] of layers) {
-    const positions = positionsForFlowLayer(layer, layerNodes.length, layout);
-    layerNodes.forEach((node, index) => {
-      const nodeId = idByMermaidId.get(node.mermaidId);
-      if (!nodeId) return;
-      sceneNodes[nodeId] = {
-        position: positions[index],
-        scale: 1.0,
-        design: { id: 'default-node', params: {} },
-      };
-    });
-  }
-
-  return sceneNodes;
-}
-
-function computeUndirectedDistances(
-  nodes: ParsedMermaidNode[],
-  edges: ParsedMermaidEdge[],
-  centralMermaidId: string
-): Map<string, number> {
-  const adjacency = new Map(nodes.map(node => [node.mermaidId, [] as string[]]));
-  for (const edge of edges) {
-    adjacency.get(edge.sourceMermaidId)?.push(edge.targetMermaidId);
-    adjacency.get(edge.targetMermaidId)?.push(edge.sourceMermaidId);
-  }
-
-  const distances = new Map<string, number>([[centralMermaidId, 0]]);
-  const queue = [centralMermaidId];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) continue;
-    const nextDistance = (distances.get(current) ?? 0) + 1;
-    for (const next of adjacency.get(current) ?? []) {
-      if (distances.has(next)) continue;
-      distances.set(next, nextDistance);
-      queue.push(next);
+    if (!typeId) {
+      typeId = normalizedTypeName === 'related'
+        ? getDefaultEdgeTypeId()
+        : createEdgeTypeId(typeName, typeIdByNormalizedTypeName);
+      typeIdByNormalizedTypeName.set(normalizedTypeName, typeId);
+      edgeTypes.push({
+        id: typeId,
+        name: typeName,
+        thematicStyleSlotId: mapping.thematicStyleSlotId,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
+
+    typeIdBySourceLabelKey.set(mapping.sourceLabelKey, typeId);
   }
 
-  return distances;
+  if (!typeIdByNormalizedTypeName.has('related')) {
+    edgeTypes.unshift({
+      id: getDefaultEdgeTypeId(),
+      name: 'related',
+      thematicStyleSlotId: 'edge-style-1',
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return { edgeTypes, typeIdBySourceLabelKey };
 }
 
-function positionsForLayer(layer: number, count: number): Position[] {
-  if (layer === 0) return [{ x: 0, y: 0 }];
-  const radius = layer * 260;
-  return Array.from({ length: count }, (_unused, index): Position => {
-    const angle = -Math.PI / 2 + (2 * Math.PI * index) / count;
-    const x = Math.round(Math.cos(angle) * radius);
-    const y = Math.round(Math.sin(angle) * radius);
-    return { x, y };
-  });
-}
-
-function positionsForFlowLayer(layer: number, count: number, layout: 'top-down' | 'left-right'): Position[] {
-  const primary = layer * 300;
-  const spacing = 340;
-  return Array.from({ length: count }, (_unused, index): Position => {
-    const secondary = Math.round((index - (count - 1) / 2) * spacing);
-    return layout === 'top-down'
-      ? { x: secondary, y: primary }
-      : { x: primary, y: secondary };
-  });
+function createEdgeTypeId(typeName: string, usedTypeNames: Map<string, EdgeTypeId>): EdgeTypeId {
+  const base = typeName
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'edge-type';
+  let candidate = base;
+  let suffix = 2;
+  const usedIds = new Set(usedTypeNames.values());
+  while (usedIds.has(candidate as EdgeTypeId)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate as EdgeTypeId;
 }
 
 function confirmMermaidImport(hasExistingData: boolean): Promise<MermaidImportOptions | null> {
@@ -386,3 +322,4 @@ function getCyContainerCenter(): Position {
 
 function isNode(value: unknown): value is Node { const node = value as Partial<Node>; return typeof node.id === 'string' && typeof node.title === 'string'; }
 function isEdge(value: unknown): value is Edge { const edge = value as Partial<Edge>; return typeof edge.id === 'string' && typeof edge.sourceId === 'string' && typeof edge.targetId === 'string' && typeof edge.title === 'string'; }
+function isEdgeType(value: unknown): value is EdgeType { const edgeType = value as Partial<EdgeType>; return typeof edgeType.id === 'string' && typeof edgeType.name === 'string'; }

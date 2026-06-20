@@ -35,6 +35,7 @@
  */
 
 import type { ImageVisualAppearance } from './background-types';
+import type { EdgeStyleSlotId } from './main-types';
 
 // =============================================================================
 // 1. STYLE PRIMITIVES — atomic building blocks
@@ -142,6 +143,9 @@ export interface EdgeStyle {
   arrow: BackgroundStyleProps;
   label: TextStyleProps;
   width?: number;  // pixels, default 2
+  arrowShape?: string;
+  arrowScale?: number;
+  curveStyle?: string;
 }
 
 // =============================================================================
@@ -161,6 +165,9 @@ export interface ColorTheme {
   node: NodeStyle;
 
   edge: EdgeStyle;
+
+  /** Three theme-owned edge styles that workspace edge types can reference. */
+  edgeStyleSlots?: Record<EdgeStyleSlotId, EdgeStyle>;
 
   decoration: {
     background: BackgroundStyleProps;

@@ -7,18 +7,24 @@
  * Uses capture phase to intercept events before other handlers.
  */
 
+import type { Core } from 'cytoscape';
 import { eventBus } from '../events/event-bus';
 
 export class TransitionInputGuard {
+  #cy: Core;
   #isTransitioning: boolean = false;
   #boundHandler: ((e: Event) => void) | null = null;
 
-  constructor() {
+  constructor(cy: Core) {
+    this.#cy = cy;
     eventBus.on('transitionStart', () => this.#onTransitionStart());
     eventBus.on('transitionEnd', () => this.#onTransitionEnd());
   }
 
   #onTransitionStart(): void {
+    // Edge selection is temporary UI state; clear it before transition visuals begin.
+    this.#cy.edges(':selected').unselect();
+
     if (this.#isTransitioning) return;
     this.#isTransitioning = true;
     

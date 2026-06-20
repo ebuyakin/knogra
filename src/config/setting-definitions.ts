@@ -33,6 +33,7 @@ export interface SettingDefinition {
   label: string;
   description: string;
   type: SettingType;
+  placeholder?: string;
   min?: number;
   max?: number;
   step?: number;
@@ -96,6 +97,13 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
             key: 'node.defaultDesign',
             label: 'Default Design',
             description: 'Design to use when not inheriting (or no node selected)',
+            type: 'select',
+            options: DESIGN_MANIFEST.map(d => ({ value: d.id, label: d.label }))
+          },
+          {
+            key: 'node.equationDesign',
+            label: 'Equation Design',
+            description: 'Design to use when Add Equation or Replace Equation imports an equation into a node',
             type: 'select',
             options: DESIGN_MANIFEST.map(d => ({ value: d.id, label: d.label }))
           }
@@ -563,7 +571,36 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         key: 'ai.customInstructions',
         label: 'Custom Instructions',
         description: 'Additional instructions appended to the AI\'s system prompt. Set a personal style, domain assumptions, or response preferences. Saved per workspace.',
-        type: 'textarea'
+        type: 'textarea',
+        placeholder: 'e.g. Respond in a Socratic style, or: Assume I have a PhD in physics'
+      },
+      {
+        key: 'ai.scenePromptInstructions',
+        label: 'Scene Shortcut Additions',
+        description: 'Additional instructions appended only when using the Scene shortcut.',
+        type: 'textarea',
+        placeholder: 'e.g. Evaluate the scene structure before explaining missing context.'
+      },
+      {
+        key: 'ai.nodePromptInstructions',
+        label: 'Node Shortcut Additions',
+        description: 'Additional instructions appended only when using the Node shortcut.',
+        type: 'textarea',
+        placeholder: 'e.g. Use intuitive examples first, then give a concise technical summary.'
+      },
+      {
+        key: 'ai.suggestPromptInstructions',
+        label: 'Suggest Shortcut Additions',
+        description: 'Additional instructions appended only when using the Suggest shortcut.',
+        type: 'textarea',
+        placeholder: 'e.g. Prefer missing prerequisites and avoid broad adjacent topics.'
+      },
+      {
+        key: 'ai.connectPromptInstructions',
+        label: 'Connect Shortcut Additions',
+        description: 'Additional instructions appended only when using the Connect shortcut.',
+        type: 'textarea',
+        placeholder: 'e.g. Prioritize existing nodes that clarify prerequisites or resolve gaps in this scene.'
       }
     ]
   },

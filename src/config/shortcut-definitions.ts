@@ -23,8 +23,10 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'A', description: 'Add child node' },
       { key: 'Shift+A', description: 'Add parent node' },
       { key: 'L', description: 'Add edge (link) — click target node' },
-      { key: 'D / Del', description: 'Delete selected node' },
-      { key: 'S', description: 'Show all edges for selected node' },
+      { key: 'Shift+L', description: 'Add edge repeatedly from the selected node' },
+      { key: 'D / Del', description: 'Delete selected node or edge' },
+      { key: 'S', description: 'Add incident edges to scene' },
+      { key: 'Shift+S', description: 'Add scene-only graph edges' },
     ]
   },
   {
@@ -32,6 +34,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     shortcuts: [
       { key: 'G', description: 'Go to scene (selected node)' },
       { key: 'Shift+G', description: 'Go to scene (fade, no animation)' },
+      { key: 'I', description: 'Show link to anchor for selected node' },
       { key: '[', description: 'Navigate back in history' },
       { key: ']', description: 'Navigate forward in history' },
       { key: 'Arrows', description: 'Navigate between nodes' },
@@ -59,7 +62,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'J', description: 'Expand children only' },
       { key: 'P', description: 'Expand parents only' },
       { key: 'Shift+C', description: 'Collapse node from scene' },
-      { key: 'X', description: 'Exclude node from scene' },
+      { key: 'X', description: 'Exclude selected node or edge from scene' },
       { key: 'Z', description: 'Toggle fold / unfold' },
       { key: 'M', description: 'Open node manager' },
     ]
@@ -71,6 +74,16 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'Escape', description: 'Unfocus chat input' },
       { key: 'Ctrl+,', description: 'Open settings' },
       { key: 'F1', description: 'Show this shortcut reference' },
+    ]
+  },
+  {
+    title: 'Scene: Edges (Bezier)',
+    shortcuts: [
+      { key: 'J / K', description: 'Bend selected edge clockwise / counterclockwise' },
+      { key: 'Shift J / K', description: 'Bend selected edge with large steps' },
+      { key: 'H / L', description: 'Move bending point toward edge source / target' },
+      { key: 'Shift H / L', description: 'Move bending point with large steps' },
+      { key: 'R', description: 'Restore edge standard style' },
     ]
   }
 ];
