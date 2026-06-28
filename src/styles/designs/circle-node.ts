@@ -11,9 +11,25 @@ import { getShadowPadding, buildShadowFilter } from './shadow-utils';
 
 export interface CircleNodeParams {
   size?: number;  // Radius in pixels (default: 40)
+  fontSize?: number;     // Preferred title font size (default: 18)
+  minFontSize?: number;  // Smallest auto-fit title font size (default: 6)
   colorOverrides?: ColorOverrides;
   effects?: VisualEffects;
   gradient?: GradientConfig;
+}
+
+const DEFAULT_RADIUS = 60;
+const MAX_FONT_SIZE = 18;
+const MIN_FONT_SIZE = 6;
+const LINE_HEIGHT_FACTOR = 1.25;
+const CHAR_WIDTH_FACTOR = 0.6;
+const TEXT_WIDTH_FACTOR = 0.62;
+const TEXT_HEIGHT_FACTOR = 0.62;
+
+interface TextLayout {
+  lines: string[];
+  fontSize: number;
+  lineHeight: number;
 }
 
 /**
@@ -119,6 +135,98 @@ function buildEffectsFilter(
   };
 }
 
+function computeTextLayout(
+  title: string,
+  radius: number,
+  preferredFontSize: number,
+  minimumFontSize: number
+): TextLayout {
+  const maxFontSize = Math.min(preferredFontSize, radius / 2);
+  const minFontSize = Math.min(minimumFontSize, maxFontSize);
+  const maxTextWidth = radius * 2 * TEXT_WIDTH_FACTOR;
+  const maxTextHeight = radius * 2 * TEXT_HEIGHT_FACTOR;
+
+  for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 1) {
+    const lineHeight = fontSize * LINE_HEIGHT_FACTOR;
+    const maxLines = Math.max(1, Math.floor(maxTextHeight / lineHeight));
+    const lines = wrapText(title, maxTextWidth, fontSize);
+    if (lines.length <= maxLines) {
+      return { lines, fontSize, lineHeight };
+    }
+  }
+
+  const fontSize = MIN_FONT_SIZE;
+  const lineHeight = fontSize * LINE_HEIGHT_FACTOR;
+  const maxLines = Math.max(1, Math.floor(maxTextHeight / lineHeight));
+  const lines = clampLines(wrapText(title, maxTextWidth, fontSize), maxLines, maxTextWidth, fontSize);
+  return { lines, fontSize, lineHeight };
+}
+
+function resolvePositiveNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function wrapText(text: string, maxWidthPx: number, fontSize: number): string[] {
+  const charWidth = fontSize * CHAR_WIDTH_FACTOR;
+  const maxCharsPerLine = Math.max(1, Math.floor(maxWidthPx / charWidth));
+  const lines: string[] = [];
+
+  for (const paragraph of text.split(/\r?\n/)) {
+    if (paragraph.length === 0) {
+      lines.push('');
+      continue;
+    }
+    wrapWords(paragraph, maxCharsPerLine, lines);
+  }
+
+  return lines.length > 0 ? lines : [''];
+}
+
+function wrapWords(text: string, maxCharsPerLine: number, lines: string[]): void {
+  let current = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const chunks = splitLongWord(word, maxCharsPerLine);
+    for (const chunk of chunks) {
+      const test = current ? `${current} ${chunk}` : chunk;
+      if (test.length <= maxCharsPerLine || current === '') {
+        current = test;
+      } else {
+        lines.push(current);
+        current = chunk;
+      }
+    }
+  }
+  if (current) lines.push(current);
+}
+
+function splitLongWord(word: string, maxCharsPerLine: number): string[] {
+  if (word.length <= maxCharsPerLine) return [word];
+  const chunks: string[] = [];
+  for (let start = 0; start < word.length; start += maxCharsPerLine) {
+    chunks.push(word.slice(start, start + maxCharsPerLine));
+  }
+  return chunks;
+}
+
+function clampLines(lines: string[], maxLines: number, maxWidthPx: number, fontSize: number): string[] {
+  if (lines.length <= maxLines) return lines;
+  const clamped = lines.slice(0, maxLines);
+  const charWidth = fontSize * CHAR_WIDTH_FACTOR;
+  const maxCharsPerLine = Math.max(3, Math.floor(maxWidthPx / charWidth));
+  const lastLine = clamped[maxLines - 1] ?? '';
+  clamped[maxLines - 1] = `${lastLine.slice(0, Math.max(0, maxCharsPerLine - 3))}...`;
+  return clamped;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /**
  * Render circle SVG with drop shadow
  */
@@ -127,7 +235,7 @@ function renderSVG(
   params: CircleNodeParams,
   theme: ColorTheme
 ): { svg: string; width: number; height: number } {
-  const radius = params.size || 40;
+  const radius = params.size || DEFAULT_RADIUS;
   
   // Get shadow config from theme
   const shadow = theme.node.shadow;
@@ -157,16 +265,14 @@ function renderSVG(
   const bgOpacity = params.effects?.backgroundOpacity ?? themeBg.opacity;
   const textOpacity = params.effects?.textOpacity ?? (theme.node.text as { opacity: number }).opacity;
   
-  // Calculate font size based on text length and circle size
-  const text = nodeData.title;
-  const diameter = radius * 2;
-  const maxWidth = diameter * 0.7;
-  let fontSize = Math.min(14, radius / 2);
-  const estimatedTextWidth = text.length * fontSize * 0.6;
-  if (estimatedTextWidth > maxWidth) {
-    fontSize = maxWidth / (text.length * 0.6);
-  }
-  fontSize = Math.max(8, Math.min(fontSize, 20));
+  const preferredFontSize = resolvePositiveNumber(params.fontSize, MAX_FONT_SIZE);
+  const minimumFontSize = resolvePositiveNumber(params.minFontSize, MIN_FONT_SIZE);
+  const textLayout = computeTextLayout(nodeData.title, radius, preferredFontSize, minimumFontSize);
+  const textBlockHeight = textLayout.lines.length * textLayout.lineHeight;
+  const textStartY = cy - textBlockHeight / 2 + textLayout.lineHeight * 0.75;
+  const tspans = textLayout.lines.map((line, index) =>
+    `<tspan x="${cx}" dy="${index === 0 ? 0 : textLayout.lineHeight}">${escapeXml(line)}</tspan>`
+  ).join('\n        ');
   
   const svg = `
     <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">
@@ -187,15 +293,14 @@ function renderSVG(
       </g>
       <text 
         x="${cx}" 
-        y="${cy}" 
+        y="${textStartY}" 
         text-anchor="middle" 
-        dominant-baseline="middle" 
         fill="${textColor}" 
         opacity="${textOpacity}"
-        font-size="${fontSize}"
+        font-size="${textLayout.fontSize}"
         font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
       >
-        ${text}
+        ${tspans}
       </text>
     </svg>
   `;

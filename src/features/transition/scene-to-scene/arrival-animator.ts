@@ -176,13 +176,13 @@ export class ArrivalAnimator {
       const staggerDelay = i * layerStagger;
 
       layerPromises.push(
-        this.#animateArrivalLayer(layerNodeIds, layerEdgeIds, targetPositions, layerDuration, staggerDelay)
+        this.#animateArrivalLayer(layerNodeIds, layerEdgeIds, targetPositions, scene, layerDuration, staggerDelay)
       );
     }
 
     // Fade in shared-to-shared edges in parallel with the first layer.
     if (sharedToSharedEdges.length > 0) {
-      layerPromises.push(this.#animateArrivalLayer([], sharedToSharedEdges, targetPositions, layerDuration, 0));
+      layerPromises.push(this.#animateArrivalLayer([], sharedToSharedEdges, targetPositions, scene, layerDuration, 0));
     }
 
     await Promise.all(layerPromises);
@@ -203,7 +203,7 @@ export class ArrivalAnimator {
   /**
    * Stage 3.2: Fade in edges connected to arriving nodes
    */
-  async fadeInEdges(edgeIds: EdgeId[]): Promise<void> {
+  async fadeInEdges(edgeIds: EdgeId[], scene: Scene): Promise<void> {
     if (edgeIds.length === 0) {
       if (isDebug('d_arrival')) console.log('[3.2] fadeInEdges: no edges to fade in');
       return;
@@ -212,7 +212,9 @@ export class ArrivalAnimator {
     const { duration, delay } = this.#getTiming('arrivalEdgesFadeIn');
     if (isDebug('d_arrival')) console.log(`[3.2] fadeInEdges: ${edgeIds.length} edges, duration=${duration}ms`);
     
-    // Add edges (invisible) — they don't exist in Cytoscape yet
+    // Add edges (invisible) — they don't exist in Cytoscape yet.
+    // Carry the scene's per-edge design so the edge owns its style instead of
+    // depending on a leftover stylesheet rule (which open-close wipes).
     edgeIds.forEach(edgeId => {
       if (this.#cy.getElementById(edgeId).length > 0) return;
       
@@ -228,11 +230,15 @@ export class ArrivalAnimator {
           ...edgeData,
           id: edgeId,
           source: edgeData.sourceId,
-          target: edgeData.targetId
+          target: edgeData.targetId,
+          design: scene.edges[edgeId]?.design
         }
       });
       edgeEl.style('opacity', 0);
     });
+
+    // Regenerate per-edge custom style rules for arriving edges with overrides.
+    this.#applyArrivingEdgeStyles(edgeIds, scene);
     
     // Animate to visible
     const edges = this.#cy.collection();
@@ -252,6 +258,7 @@ export class ArrivalAnimator {
     nodeIds: NodeId[],
     edgeIds: EdgeId[],
     targetPositions: TargetPositions,
+    scene: Scene,
     duration: number,
     staggerDelay: number
   ): Promise<void> {
@@ -268,20 +275,51 @@ export class ArrivalAnimator {
       }
     }
 
-    // Add and fade in edges (parallel with their layer's nodes)
+    // Add edges (invisible) carrying their scene design (parallel with this
+    // layer's nodes). Style rules are applied before the fade so the edge
+    // arrives with its custom geometry, not the default edge-type style.
+    const addedEdgeIds: EdgeId[] = [];
     for (const edgeId of edgeIds) {
       if (this.#cy.getElementById(edgeId).length > 0) continue;
       const edgeData = graphStore.edges.find(e => e.id === edgeId);
       if (!edgeData) continue;
       const edgeEl = this.#cy.add({
         group: 'edges',
-        data: { ...edgeData, id: edgeId, source: edgeData.sourceId, target: edgeData.targetId }
+        data: { ...edgeData, id: edgeId, source: edgeData.sourceId, target: edgeData.targetId, design: scene.edges[edgeId]?.design }
       });
       edgeEl.style('opacity', 0);
-      edgeEl.animate({ style: { opacity: 1 }, duration, easing: 'ease-out' });
+      addedEdgeIds.push(edgeId);
+    }
+
+    this.#applyArrivingEdgeStyles(addedEdgeIds, scene);
+
+    for (const edgeId of addedEdgeIds) {
+      this.#cy.getElementById(edgeId).animate({ style: { opacity: 1 }, duration, easing: 'ease-out' });
     }
 
     await this.#delay(duration);
+  }
+
+  /**
+   * Reapply per-edge custom style rules for arriving edges.
+   * Mirrors the open path: an edge with a scene-level style override needs its
+   * per-edge stylesheet rule regenerated after being added, otherwise it falls
+   * back to the edge-type/thematic style.
+   */
+  #applyArrivingEdgeStyles(edgeIds: EdgeId[], scene: Scene): void {
+    const themeId = scene.themeId || 'dark';
+    let stylesheet = (this.#cy.style() as any).json();
+    let changed = false;
+    for (const edgeId of edgeIds) {
+      const design = scene.edges[edgeId]?.design;
+      if (!StyleGenerator.hasEdgeStyleOverride(design)) continue;
+      const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, design ?? null, themeId);
+      stylesheet = StyleGenerator.updateEdgeInStylesheet(stylesheet, edgeId, edgeStyle);
+      changed = true;
+    }
+    if (changed) {
+      this.#cy.style().fromJson(stylesheet).update();
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ export interface MermaidImportSelection {
   depth: number;
   allLevels: boolean;
   layout: 'radial' | 'top-down' | 'left-right';
+  importEquations: boolean;
   edgeLabelMappings: MermaidEdgeLabelMapping[];
 }
 
@@ -23,6 +24,7 @@ export function showMermaidImportSelectionDialog(
   const nodes = [...parsed.nodes].sort((left, right) => left.order - right.order);
   const defaultAnchorId = nodes[0]?.mermaidId;
   const edgeLabelRows = getEdgeLabelRows(parsed);
+  const equationMetadataStatus = getEquationMetadataStatus(parsed);
 
   if (!defaultAnchorId) {
     return Promise.resolve(null);
@@ -149,6 +151,27 @@ export function showMermaidImportSelectionDialog(
     layoutLabel.appendChild(layoutSelect);
     depthPanel.appendChild(layoutLabel);
     depthPanel.appendChild(layoutHint);
+
+    const canImportEquations = equationMetadataStatus.total > 0;
+
+    const equationLabel = document.createElement('label');
+    equationLabel.style.cssText = `display:flex;align-items:flex-start;gap:8px;color:${canImportEquations ? '#c9d1d9' : '#8b949e'};cursor:${canImportEquations ? 'pointer' : 'not-allowed'};font-size:13px;margin-top:4px;`;
+
+    const equationInput = document.createElement('input');
+    equationInput.type = 'checkbox';
+    equationInput.disabled = !canImportEquations;
+    equationInput.style.accentColor = '#58a6ff';
+    equationInput.style.marginTop = '2px';
+    equationInput.style.opacity = canImportEquations ? '1' : '0.5';
+
+    const equationText = document.createElement('span');
+    equationText.textContent = canImportEquations
+      ? `Import equations (${equationMetadataStatus.matched} matched${equationMetadataStatus.unmatched > 0 ? `, ${equationMetadataStatus.unmatched} unmatched` : ''})`
+      : 'Import equations (none found)';
+
+    equationLabel.appendChild(equationInput);
+    equationLabel.appendChild(equationText);
+    depthPanel.appendChild(equationLabel);
 
     const sceneSizeStatus = document.createElement('div');
     sceneSizeStatus.style.cssText = 'padding:10px 12px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#8b949e;line-height:1.5;font-size:12px;';
@@ -321,6 +344,7 @@ export function showMermaidImportSelectionDialog(
         depth: getDepth(),
         allLevels: allLevelsInput.checked,
         layout: layoutSelect.value as MermaidImportSelection['layout'],
+        importEquations: equationInput.checked && !equationInput.disabled,
         edgeLabelMappings: getEdgeLabelMappings(),
       });
     });
@@ -339,6 +363,18 @@ interface EdgeLabelRow {
   count: number;
   defaultTypeName: string;
   defaultStyleSlotId: EdgeStyleSlotId;
+}
+
+function getEquationMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matched: number; unmatched: number } {
+  const nodeIds = new Set(parsed.nodes.map(node => node.mermaidId));
+  const total = parsed.equationsByMermaidId.size;
+  let matched = 0;
+
+  for (const mermaidId of parsed.equationsByMermaidId.keys()) {
+    if (nodeIds.has(mermaidId)) matched += 1;
+  }
+
+  return { total, matched, unmatched: total - matched };
 }
 
 function getEdgeLabelRows(parsed: ParsedMermaidGraph): EdgeLabelRow[] {

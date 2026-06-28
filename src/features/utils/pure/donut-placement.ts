@@ -1,18 +1,17 @@
 /**
- * Grouped Angular Placement Algorithm
- * 
- * Places child nodes around a parent, keeping them together as a cohesive group.
- * 
- * Core Principle: Children stay grouped in contiguous arcs, evenly spaced angularly.
- * Radial distance varies per child to avoid overlap.
- * 
- * Algorithm:
- * 1. Scan all angles to find which have usable depth (considering obstacles + viewport)
- * 2. Identify contiguous "free arcs" and sort by width
- * 3. Try to fit all children in the largest arc with equal angular spacing
- * 4. If not possible, distribute children proportionally across multiple arcs
- * 5. Within each arc, place children at evenly-spaced angles, varying distance as needed
- * 
+ * Compact Cluster Placement Algorithm
+ *
+ * Places newly-included child nodes around a parent, keeping them together as a
+ * single compact group in the nearest open space — close to the parent, clear of
+ * existing nodes, and inside the viewport when possible.
+ *
+ * Approach:
+ * 1. Keep children at minRadius, wrapping around the parent as needed; only push
+ *    out (into a ring) when they can't all fit at minRadius.
+ * 2. Slide that group around the parent and choose the centre direction that lands
+ *    in the most open space and grows away from the existing nodes.
+ * 3. Place the group there, each child at the smallest safe radius for its slot.
+ *
  * NO DEPENDENCIES TO BE INTRODUCED IN THIS FILE (BESIDES TYPES)
  */
 
@@ -21,7 +20,7 @@
 // ============================================================================
 
 /** Buffer zone around existing obstacles (pixels) - keeps new nodes separated from existing */
-const OBSTACLE_MARGIN = 80;
+const OBSTACLE_MARGIN = 40;
 
 /** Buffer zone between siblings (pixels) - can be tighter since they're related */
 const SIBLING_MARGIN = 10;
@@ -31,6 +30,12 @@ const SCAN_STEP = 5;
 
 /** Angular resolution for fallback search (degrees) */
 const SEARCH_STEP = 3;
+
+/** Max outward angular nudges (× SEARCH_STEP) when a child's ideal slot is blocked. */
+const MAX_NUDGE_STEPS = 8;
+
+/** Pixel-weighted bias preferring the group to expand away from existing nodes (the scene centre). */
+const AWAY_BIAS_WEIGHT = 60;
 
 // ============================================================================
 // TYPES
@@ -52,18 +57,6 @@ export interface Obstacle {
   id?: string;
   pos: Position;
   size: number;
-}
-
-interface FreeArc {
-  startAngle: number;
-  endAngle: number;
-  width: number;
-}
-
-interface ChildPlacement {
-  originalIndex: number;
-  size: number;
-  position?: Position;
 }
 
 // ============================================================================
@@ -90,10 +83,6 @@ function polarToCartesian(center: Position, angleDeg: number, radius: number): P
     x: center.x + radius * Math.cos(angleRad),
     y: center.y + radius * Math.sin(angleRad)
   };
-}
-
-function normalizeAngle(angle: number): number {
-  return ((angle % 360) + 360) % 360;
 }
 
 // ============================================================================
@@ -161,241 +150,176 @@ function findSafeDistance(
   return null;
 }
 
+// ============================================================================
+// CLUSTER PLACEMENT (current algorithm)
+// ============================================================================
+
 /**
- * Check if a ray has any usable position (ignoring siblings, just obstacles + viewport)
- * Returns { usable: boolean, reason?: string } for debugging
+ * Minimum centre-to-centre angular spacing (degrees) so two children of the
+ * given radius don't overlap when both sit at `radius` from the parent.
  */
-function isRayUsableWithReason(
-  parentPos: Position,
-  angleDeg: number,
+function angularStepDeg(radius: number, childRadius: number, margin: number): number {
+  const minChord = 2 * childRadius + margin;
+  const ratio = Math.min(1, Math.max(0, minChord / (2 * radius)));
+  return (2 * Math.asin(ratio) * 180) / Math.PI;
+}
+
+/**
+ * Signed clearance of a candidate position: distance to the nearest obstacle
+ * edge and viewport edge. Larger = more open space around the position.
+ */
+function clearanceAt(
+  pos: Position,
   childRadius: number,
   obstacles: Obstacle[],
-  minRadius: number,
-  maxRadius: number,
   viewport: Viewport | undefined
-): { usable: boolean; reason?: string } {
-  // Check at various distances
-  for (let r = minRadius; r <= maxRadius; r += 10) {
-    const pos = polarToCartesian(parentPos, angleDeg, r);
-    
-    // Check viewport
-    if (viewport) {
-      if (pos.x - childRadius < viewport.x1) continue;
-      if (pos.x + childRadius > viewport.x2) continue;
-      if (pos.y - childRadius < viewport.y1) continue;
-      if (pos.y + childRadius > viewport.y2) continue;
-    }
-    
-    // Check obstacles
-    let blocked = false;
-    for (const obs of obstacles) {
-      if (circlesOverlap(pos, childRadius, obs.pos, obs.size / 2, OBSTACLE_MARGIN)) {
-        blocked = true;
-        break;
-      }
-    }
-    
-    if (!blocked) {
-      return { usable: true };
-    }
-  }
-  
-  // Determine why blocked at minRadius
-  const pos = polarToCartesian(parentPos, angleDeg, minRadius);
-  
-  if (viewport) {
-    if (pos.x - childRadius < viewport.x1) return { usable: false, reason: 'viewport-left' };
-    if (pos.x + childRadius > viewport.x2) return { usable: false, reason: 'viewport-right' };
-    if (pos.y - childRadius < viewport.y1) return { usable: false, reason: 'viewport-top' };
-    if (pos.y + childRadius > viewport.y2) return { usable: false, reason: 'viewport-bottom' };
-  }
-  
+): number {
+  let clear = Infinity;
   for (const obs of obstacles) {
-    if (circlesOverlap(pos, childRadius, obs.pos, obs.size / 2, OBSTACLE_MARGIN)) {
-      return { usable: false, reason: `obstacle:${obs.id || 'unknown'}` };
-    }
+    const gap = distance(pos, obs.pos) - (childRadius + obs.size / 2);
+    if (gap < clear) clear = gap;
   }
-  
-  return { usable: false, reason: 'unknown' };
+  if (viewport) {
+    clear = Math.min(
+      clear,
+      pos.x - childRadius - viewport.x1,
+      viewport.x2 - (pos.x + childRadius),
+      pos.y - childRadius - viewport.y1,
+      viewport.y2 - (pos.y + childRadius)
+    );
+  }
+  return clear;
 }
 
-// ============================================================================
-// ARC FINDING
-// ============================================================================
+interface FanResult {
+  /** Final positions in original child order; null where no spot was found. */
+  positions: (Position | null)[];
+  placedCount: number;
+  sumClearance: number;
+  sumExtraRadius: number;
+}
 
 /**
- * Find contiguous free arcs by scanning all angles
+ * Try to place all children as a compact fan centred on `centerAngle`.
+ *
+ * Children occupy fixed angular slots (`step` apart) around the centre and are
+ * placed centre-outward so inner slots claim space first. Each child takes the
+ * smallest safe radius at/beyond `baseRadius`; if its slot is blocked it nudges
+ * a few degrees outward before being left unplaced. Mutates nothing.
  */
-function findFreeArcs(
+function attemptFan(
   parentPos: Position,
-  childRadius: number,
+  centerAngle: number,
+  sizes: number[],
+  step: number,
   obstacles: Obstacle[],
-  minRadius: number,
+  baseRadius: number,
   maxRadius: number,
   viewport: Viewport | undefined
-): FreeArc[] {
-  // Scan all angles to find which are usable, with reasons for blocked ones
-  const usable: boolean[] = [];
-  const blockedReasons: string[] = [];
-  
-  for (let angle = 0; angle < 360; angle += SCAN_STEP) {
-    const result = isRayUsableWithReason(parentPos, angle, childRadius, obstacles, minRadius, maxRadius, viewport);
-    usable.push(result.usable);
-    if (!result.usable) {
-      blockedReasons.push(`${angle}°:${result.reason}`);
+): FanResult {
+  const n = sizes.length;
+  const mid = (n - 1) / 2;
+  const positions: (Position | null)[] = new Array(n).fill(null);
+  const placedPos: Position[] = [];
+  const placedR: number[] = [];
+
+  let placedCount = 0;
+  let sumClearance = 0;
+  let sumExtraRadius = 0;
+
+  // Place from the centre of the fan outward so inner slots claim space first.
+  const order = Array.from({ length: n }, (_, i) => i)
+    .sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
+
+  for (const i of order) {
+    const thisRadius = sizes[i] / 2;
+    const slotAngle = centerAngle + (i - mid) * step;
+    const nudgeSign = i < mid ? -1 : 1; // nudge outward, away from the fan centre
+
+    let angle = slotAngle;
+    let r = findSafeDistance(
+      parentPos, angle, thisRadius, obstacles,
+      placedPos, placedR, baseRadius, maxRadius, viewport
+    );
+
+    for (let k = 1; r === null && k <= MAX_NUDGE_STEPS; k++) {
+      angle = slotAngle + nudgeSign * k * SEARCH_STEP;
+      r = findSafeDistance(
+        parentPos, angle, thisRadius, obstacles,
+        placedPos, placedR, baseRadius, maxRadius, viewport
+      );
     }
+
+    if (r === null) continue; // leave unplaced; caller applies a last resort
+
+    const pos = polarToCartesian(parentPos, angle, r);
+    positions[i] = pos;
+    placedPos.push(pos);
+    placedR.push(thisRadius);
+    placedCount++;
+    sumExtraRadius += r - baseRadius;
+    sumClearance += clearanceAt(pos, thisRadius, obstacles, viewport);
   }
-  
-  // Debug: show usable rays and blocked reasons (uncomment for debugging)
-  // const usableAngles = usable.map((u, i) => u ? i * SCAN_STEP : null).filter(a => a !== null);
-  // console.log('[findFreeArcs] Usable rays:', usableAngles.join('°, ') + '°');
-  // console.log('[findFreeArcs] Blocked rays:', blockedReasons.join(', '));
-  
-  // Find contiguous runs of usable angles
-  const arcs: FreeArc[] = [];
-  let arcStart = -1;
-  const count = usable.length;
-  
-  for (let i = 0; i < count; i++) {
-    const isUsable = usable[i];
-    
-    if (isUsable && arcStart === -1) {
-      arcStart = i;
-    } else if (!isUsable && arcStart !== -1) {
-      const startAngle = arcStart * SCAN_STEP;
-      const endAngle = i * SCAN_STEP;
-      const width = (i - arcStart) * SCAN_STEP;
-      if (width > 0) {
-        arcs.push({ startAngle, endAngle, width });
+
+  return { positions, placedCount, sumClearance, sumExtraRadius };
+}
+
+/**
+ * Pick the centre direction for the fan: the direction whose compact group
+ * lands in the most open local pocket near the parent.
+ *
+ * Scans all directions, scoring each by how many children fit (primary) and by
+ * open space minus extra radius (secondary). Prefers keeping the group inside
+ * the viewport, only spilling outside it when that places strictly more nodes.
+ */
+function chooseClusterDirection(
+  parentPos: Position,
+  sizes: number[],
+  step: number,
+  obstacles: Obstacle[],
+  baseRadius: number,
+  maxRadius: number,
+  viewport: Viewport | undefined,
+  awayAngle: number | null
+): { angle: number; viewport: Viewport | undefined } {
+  const evaluate = (vp: Viewport | undefined): { angle: number; placedCount: number; quality: number } => {
+    let best = { angle: 0, placedCount: -1, quality: -Infinity };
+    for (let theta = 0; theta < 360; theta += SCAN_STEP) {
+      const fan = attemptFan(parentPos, theta, sizes, step, obstacles, baseRadius, maxRadius, vp);
+      let quality = fan.sumClearance - fan.sumExtraRadius;
+      if (awayAngle !== null) {
+        // Mild preference for growing away from the scene centre / obstacles.
+        quality += AWAY_BIAS_WEIGHT * Math.cos(((theta - awayAngle) * Math.PI) / 180);
       }
-      arcStart = -1;
-    }
-  }
-  
-  // Handle arc that extends to end of scan
-  if (arcStart !== -1) {
-    const startAngle = arcStart * SCAN_STEP;
-    arcs.push({ startAngle, endAngle: 360, width: 360 - startAngle });
-  }
-  
-  // Handle wrap-around: check if last arc (ending at 360°) connects to first arc
-  if (arcs.length >= 2) {
-    const lastArc = arcs[arcs.length - 1];
-    const firstArc = arcs[0];
-    
-    // Check if they're adjacent (last ends at 360°, first starts near 0°)
-    if (lastArc.endAngle === 360 && firstArc.startAngle < SCAN_STEP * 2) {
-      // Check if the angle at 0° is actually usable (connecting them)
-      if (usable[0]) {
-        // Merge: new arc from lastArc.start to firstArc.end, wrapping around
-        const mergedWidth = lastArc.width + firstArc.width;
-        arcs[0] = {
-          startAngle: lastArc.startAngle,
-          endAngle: firstArc.endAngle,
-          width: mergedWidth
-        };
-        arcs.pop(); // Remove the last arc (now merged)
+      if (
+        fan.placedCount > best.placedCount ||
+        (fan.placedCount === best.placedCount && quality > best.quality)
+      ) {
+        best = { angle: theta, placedCount: fan.placedCount, quality };
       }
     }
-  } else if (arcs.length === 1 && arcs[0].endAngle === 360 && usable[0]) {
-    // Single arc that wraps around to connect with itself at 0°
-    // Check if it's actually a full circle
-    if (arcs[0].startAngle === 0) {
-      arcs[0].width = 360;
-    }
-  }
-  
-  // If nothing found, return full circle as fallback
-  if (arcs.length === 0) {
-    arcs.push({ startAngle: 0, endAngle: 360, width: 360 });
-  }
-  
-  // Sort by width (largest first)
-  arcs.sort((a, b) => b.width - a.width);
-  
-  return arcs;
-}
+    return best;
+  };
 
-// ============================================================================
-// CHILD DISTRIBUTION
-// ============================================================================
+  const withVp = evaluate(viewport);
+  if (withVp.placedCount === sizes.length || viewport === undefined) {
+    return { angle: withVp.angle, viewport };
+  }
 
-/**
- * Distribute N children across arcs, strongly preferring to keep them together
- * Since children can be placed at varying distances, we can fit more than
- * the simple chord-based calculation suggests.
- */
-function distributeChildrenToArcs(
-  arcs: FreeArc[],
-  childCount: number,
-  _childSize: number,
-  _minRadius: number
-): { arc: FreeArc; count: number }[] {
-  if (arcs.length === 0) return [];
-  
-  // ALWAYS try to fit all children in the largest arc first
-  // The varying-distance placement will handle collisions
-  const largestArc = arcs[0];
-  
-  // Only split if the arc is very small (less than 10° per child)
-  const degreesPerChild = largestArc.width / childCount;
-  
-  if (degreesPerChild >= 10) {
-    // Enough angular room - put all in one arc
-    return [{ arc: largestArc, count: childCount }];
+  // Couldn't fit everyone inside the viewport — allow spilling outside it,
+  // but only if that actually places strictly more children.
+  const noVp = evaluate(undefined);
+  if (noVp.placedCount > withVp.placedCount) {
+    return { angle: noVp.angle, viewport: undefined };
   }
-  
-  // Arc is too narrow, need to split across multiple arcs
-  const distribution: { arc: FreeArc; count: number }[] = [];
-  let remaining = childCount;
-  
-  for (const arc of arcs) {
-    if (remaining <= 0) break;
-    
-    // How many can fit with at least 10° spacing?
-    const maxHere = Math.max(1, Math.floor(arc.width / 10));
-    const assignHere = Math.min(remaining, maxHere);
-    
-    if (assignHere > 0) {
-      distribution.push({ arc, count: assignHere });
-      remaining -= assignHere;
-    }
-  }
-  
-  // If we still have remaining, force them into the largest arc
-  if (remaining > 0 && distribution.length > 0) {
-    distribution[0].count += remaining;
-  }
-  
-  return distribution;
+  return { angle: withVp.angle, viewport };
 }
 
 /**
- * Generate evenly-spaced angles within an arc for N children
+ * Place children as one compact group in the nearest open pocket around the
+ * parent. Replaces the older "spread across the widest arc" approach.
  */
-function generateAnglesInArc(arc: FreeArc, count: number): number[] {
-  if (count === 0) return [];
-  if (count === 1) return [arc.startAngle + arc.width / 2];
-  
-  const padding = arc.width / (count + 1);
-  const angles: number[] = [];
-  
-  for (let i = 0; i < count; i++) {
-    const angle = arc.startAngle + padding * (i + 1);
-    angles.push(normalizeAngle(angle));
-  }
-  
-  return angles;
-}
-
-// ============================================================================
-// MAIN ALGORITHM
-// ============================================================================
-
-/**
- * Place children in grouped arcs with even angular spacing
- */
-function placeChildrenGrouped(
+function placeChildrenCluster(
   parentPos: Position,
   childCount: number,
   childSizes: number[],
@@ -405,125 +329,70 @@ function placeChildrenGrouped(
   viewport: Viewport | undefined
 ): Position[] {
   if (childCount === 0) return [];
-  
-  const sizes = childSizes.length === childCount 
-    ? childSizes 
+
+  const sizes = childSizes.length === childCount
+    ? childSizes
     : new Array(childCount).fill(childSizes[0] || 100);
-  
+
   const maxChildSize = Math.max(...sizes);
   const childRadius = maxChildSize / 2;
-  
-  // Find free arcs
-  const freeArcs = findFreeArcs(parentPos, childRadius, obstacles, minRadius, maxRadius, viewport);
-  
-  // console.log('[placement] Free arcs:', freeArcs.map(a => `${a.startAngle}°-${a.endAngle}° (${a.width}°)`).join(', '));
-  
-  // Distribute children to arcs
-  const distribution = distributeChildrenToArcs(freeArcs, childCount, maxChildSize, minRadius);
-  
-  // console.log('[placement] Distribution:', distribution.map(d => `${d.count} in ${d.arc.startAngle}°-${d.arc.endAngle}°`).join(', '));
-  
-  // Create child placement objects
-  const children: ChildPlacement[] = sizes.map((size, i) => ({ originalIndex: i, size }));
-  
-  // Place children in each arc
-  const placedPositions: Position[] = [];
-  const placedRadii: number[] = [];
-  let childIndex = 0;
-  
-  for (const { arc, count } of distribution) {
-    const angles = generateAnglesInArc(arc, count);
-    
-    // console.log(`[placement] Arc ${arc.startAngle}°-${arc.endAngle}°: angles = ${angles.map(a => a.toFixed(0) + '°').join(', ')}`);
-    
-    for (const angle of angles) {
-      if (childIndex >= children.length) break;
-      
-      const child = children[childIndex];
-      const thisRadius = child.size / 2;
-      
-      // Try the assigned angle first
-      let safeDistance = findSafeDistance(
-        parentPos, angle, thisRadius, obstacles,
-        placedPositions, placedRadii,
-        minRadius, maxRadius, viewport
-      );
-      
-      let usedAngle = angle;
-      
-      // If assigned angle is blocked, scan ALL angles to find any safe position
-      // Priority #2: No overlap with existing nodes (must be enforced)
-      if (safeDistance === null) {
-        // console.log(`  Child ${childIndex + 1}: ${angle.toFixed(0)}° blocked, searching all angles...`);
-        
-        for (let searchAngle = 0; searchAngle < 360; searchAngle += SEARCH_STEP) {
-          safeDistance = findSafeDistance(
-            parentPos, searchAngle, thisRadius, obstacles,
-            placedPositions, placedRadii,
-            minRadius, maxRadius, viewport
-          );
-          
-          if (safeDistance !== null) {
-            usedAngle = searchAngle;
-            break;
-          }
-        }
-      }
-      
-      // If still no position found, try again WITHOUT viewport constraint
-      // (better to place outside viewport than at extreme distance)
-      // Use the originally assigned angle first to maintain even distribution
-      if (safeDistance === null) {
-        safeDistance = findSafeDistance(
-          parentPos, angle, thisRadius, obstacles,
-          placedPositions, placedRadii,
-          minRadius, maxRadius, undefined  // no viewport constraint
-        );
-        usedAngle = angle;
-        
-        // If assigned angle still blocked (by obstacles/siblings), then search
-        if (safeDistance === null) {
-          for (let searchAngle = 0; searchAngle < 360; searchAngle += SEARCH_STEP) {
-            safeDistance = findSafeDistance(
-              parentPos, searchAngle, thisRadius, obstacles,
-              placedPositions, placedRadii,
-              minRadius, maxRadius, undefined  // no viewport constraint
-            );
-            
-            if (safeDistance !== null) {
-              usedAngle = searchAngle;
-              break;
-            }
-          }
-        }
-      }
-      
-      if (safeDistance !== null) {
-        const pos = polarToCartesian(parentPos, usedAngle, safeDistance);
-        child.position = pos;
-        placedPositions.push(pos);
-        placedRadii.push(thisRadius);
-        // console.log(`  Child ${childIndex + 1}: ${usedAngle.toFixed(0)}° @ ${safeDistance}px`);
-      } else {
-        // ABSOLUTE LAST RESORT: No valid position exists anywhere
-        // This should only happen if the entire space is blocked by obstacles
-        // Place at minRadius with even angular distribution
-        const fallbackAngle = childIndex * (360 / children.length);
-        const pos = polarToCartesian(parentPos, fallbackAngle, minRadius);
-        child.position = pos;
-        placedPositions.push(pos);
-        placedRadii.push(thisRadius);
-        console.warn(`  Child ${childIndex + 1}: Fallback placement at ${fallbackAngle.toFixed(0)}° @ ${minRadius}px`);
-      }
-      
-      childIndex++;
+  const minChord = 2 * childRadius + SIBLING_MARGIN;
+
+  // Spacing and radius: keep children as close to the parent as possible. They
+  // wrap around the parent as needed; only when they can't all fit at minRadius
+  // (even as a full ring) do we push out just enough to form one.
+  const naturalStep = angularStepDeg(minRadius, childRadius, SIBLING_MARGIN);
+  let step: number;
+  let baseRadius: number;
+  if (childCount <= 1) {
+    step = 0;
+    baseRadius = minRadius;
+  } else if (childCount * naturalStep <= 360) {
+    step = naturalStep;
+    baseRadius = minRadius;
+  } else {
+    step = 360 / childCount;
+    const sinHalf = Math.sin((step * Math.PI / 180) / 2);
+    baseRadius = sinHalf > 0 ? Math.max(minRadius, minChord / (2 * sinHalf)) : minRadius;
+  }
+
+  // Prefer growing the group away from existing nodes (i.e. the scene centre).
+  let awayAngle: number | null = null;
+  if (obstacles.length > 0) {
+    let cx = 0;
+    let cy = 0;
+    for (const obs of obstacles) {
+      cx += obs.pos.x;
+      cy += obs.pos.y;
+    }
+    cx /= obstacles.length;
+    cy /= obstacles.length;
+    awayAngle = (Math.atan2(parentPos.y - cy, parentPos.x - cx) * 180) / Math.PI;
+  }
+
+  // Aim the group at the most open local pocket, then place it there.
+  const chosen = chooseClusterDirection(
+    parentPos, sizes, step, obstacles, baseRadius, maxRadius, viewport, awayAngle
+  );
+  const fan = attemptFan(
+    parentPos, chosen.angle, sizes, step, obstacles, baseRadius, maxRadius, chosen.viewport
+  );
+
+  // Last resort for any child with no clear spot at its ideal slot.
+  const mid = (childCount - 1) / 2;
+  const result: Position[] = [];
+  for (let i = 0; i < childCount; i++) {
+    const placed = fan.positions[i];
+    if (placed) {
+      result.push(placed);
+    } else {
+      const slotAngle = chosen.angle + (i - mid) * step;
+      result.push(polarToCartesian(parentPos, slotAngle, baseRadius));
+      console.warn(`[placement] Child ${i + 1}: no clear spot; placed at slot ${slotAngle.toFixed(0)}° @ ${baseRadius.toFixed(0)}px`);
     }
   }
-  
-  // Restore original order
-  children.sort((a, b) => a.originalIndex - b.originalIndex);
-  
-  return children.map(c => c.position!);
+
+  return result;
 }
 
 // ============================================================================
@@ -541,7 +410,7 @@ export function placeChildrenDonutSimple(
 ): Position[] {
   const childSizes = new Array(childCount).fill(childSize);
   
-  return placeChildrenGrouped(
+  return placeChildrenCluster(
     parentPos,
     childCount,
     childSizes,

@@ -17,6 +17,7 @@ export interface EquationCompactNodeParams {
   paddingBelow?: number;        // Padding below equation (default: 35, larger to counterweight title)
   borderRadius?: number;        // Corner radius (default: 6)
   titleFontSize?: number;       // Title font size (default: 11)
+  equationScale?: number;        // Equation size multiplier (default: 1)
   minWidth?: number;            // Minimum node width (default: 100)
   colorOverrides?: ColorOverrides;
   effects?: VisualEffects;
@@ -158,6 +159,19 @@ async function renderMathJaxEquation(
   }
 }
 
+function resolvePositiveNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 // =============================================================================
 // SVG RENDERING
 // =============================================================================
@@ -271,7 +285,7 @@ function renderSVG(
           font-size="${titleFontSize}"
           font-weight="normal"
           font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-        >${titleLines.map((line, i) => `<tspan x="8" dy="${i === 0 ? 0 : titleLineHeight}">${line}</tspan>`).join('')}</text>
+        >${titleLines.map((line, i) => `<tspan x="8" dy="${i === 0 ? 0 : titleLineHeight}">${escapeXml(line)}</tspan>`).join('')}</text>
 
         <g transform="translate(${equationX}, ${equationY}) scale(${equationData.scale})">
           ${equationData.svgContent}
@@ -297,7 +311,14 @@ export async function getEquationCompactNodeStyle(
   const textColor = resolveColor(params.colorOverrides?.text, theme.node.text.color);
 
   const equationData = await renderMathJaxEquation(equation, textColor);
-  const { svg, width, height } = renderSVG(titleText, equationData, params, theme);
+  const equationScale = resolvePositiveNumber(params.equationScale, 1);
+  const scaledEquationData = {
+    ...equationData,
+    width: equationData.width * equationScale,
+    height: equationData.height * equationScale,
+    scale: equationData.scale * equationScale,
+  };
+  const { svg, width, height } = renderSVG(titleText, scaledEquationData, params, theme);
   const encodedSVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 
   return {

@@ -99,6 +99,7 @@ graph TD
         NodeF[Node]
         EdgeF[Edge]
         GraphF[Graph]
+        QuizF[Quiz]
     end
 
     subgraph Background["Background Layer"]
@@ -173,6 +174,7 @@ Type definitions and interfaces. **No logic.**
 | `background-types.ts` | Background image and filter types |
 | `design-types.ts` | Node/edge design system types |
 | `chat-types.ts` | Chat persistence types |
+| `quiz-types.ts` | Runtime quiz configuration, snapshot, and node-status contracts |
 
 #### Config (`src/config/`)
 Application settings and user preferences.
@@ -332,6 +334,7 @@ Core Types only
 | **Graph** | `graph.ts` | Graph construction: add/delete nodes and edges |
 | **Transition** | `transition/transition.ts` | Animated scene-to-scene navigation |
 | **Path** | `path/path.ts` | Navigation history tracking and persistence |
+| **Quiz** | `quiz.ts` | Runtime recall mode: hides sampled node content and tracks reveal/self-grade state |
 
 **FeatureAPI** (`feature-api.ts`) — Facade exposing all features. No business logic.
 
@@ -366,7 +369,7 @@ this.#cy.on('scene:changed', (_event, sceneId) => {
 | `sceneChanged` | `{sceneId, centralNodeId}` | Transition | ChatSession, NodeShelf, AppStateManager, diagnostics, FoldBadge |
 | `transitionStart` | (none) | Transition | UI transition guards |
 | `transitionEnd` | (none) | Transition | UI transition guards |
-| `appModeChanged` | `{mode}` | AppMode | SuggestionPanel and other mode-aware UI |
+| `appModeChanged` | `{mode}` | AppMode | Quiz, SuggestionPanel, and other mode-aware UI |
 
 ### 3.7 AI Module (`src/ai/`)
 
@@ -416,6 +419,7 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 | `path-picker.ts` | Saved path picker/editor ⚠️ |
 | `background-editor.ts` | Background image picker/editor ⚠️ |
 | `theme-editor.ts` | Custom theme editor |
+| `quiz-panel.ts` | Floating quiz controls for runtime recall mode |
 | `settings-modal.ts` | Application settings |
 | `connection-badge.ts` | Connection count badges |
 | `fold-badge.ts` | Fold state affordance |

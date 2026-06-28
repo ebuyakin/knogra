@@ -15,6 +15,7 @@ import type { NodePicker } from './node-picker';
 import type { NodeManager } from './node-manager';
 import type { BackgroundEditor } from './background-editor';
 import type { ThemeEditor } from './theme-editor';
+import type { QuizPanel } from './quiz-panel';
 import type { AnchorLinkTooltip } from './anchor-link-tooltip';
 import { graphStore } from '../../storage/graph-store';
 import { getAppMode, isEditMode, setAppMode } from '../../storage/app-mode';
@@ -48,12 +49,13 @@ export class ContextMenu {
   #nodeManager: NodeManager;
   #backgroundEditor: BackgroundEditor;
   #themeEditor: ThemeEditor;
+  #quizPanel: QuizPanel;
   #anchorLinkTooltip: AnchorLinkTooltip;
   #menuElement: HTMLDivElement | null = null;
   #copiedEdgeStyle: CopiedEdgeStyle | null = null;
   #copiedNodeDesign: { design: { id: string; params: Record<string, unknown> }; scale: number } | null = null;
 
-  constructor(cy: Core, container: HTMLElement, features: FeatureAPI, edgeCreationMode: EdgeCreationMode, nodeEditor: NodeEditor, edgeEditor: EdgeEditor, edgeTypeManager: EdgeTypeManager, edgeTypeVisibilityModal: EdgeTypeVisibilityModal, _nodePicker: NodePicker, nodeManager: NodeManager, backgroundEditor: BackgroundEditor, themeEditor: ThemeEditor, anchorLinkTooltip: AnchorLinkTooltip) {
+  constructor(cy: Core, container: HTMLElement, features: FeatureAPI, edgeCreationMode: EdgeCreationMode, nodeEditor: NodeEditor, edgeEditor: EdgeEditor, edgeTypeManager: EdgeTypeManager, edgeTypeVisibilityModal: EdgeTypeVisibilityModal, _nodePicker: NodePicker, nodeManager: NodeManager, backgroundEditor: BackgroundEditor, themeEditor: ThemeEditor, quizPanel: QuizPanel, anchorLinkTooltip: AnchorLinkTooltip) {
     this.#cy = cy;
     this.#container = container;
     this.#features = features;
@@ -65,6 +67,7 @@ export class ContextMenu {
     this.#nodeManager = nodeManager;
     this.#backgroundEditor = backgroundEditor;
     this.#themeEditor = themeEditor;
+    this.#quizPanel = quizPanel;
     this.#anchorLinkTooltip = anchorLinkTooltip;
     this.#setupContextMenuListeners();
   }
@@ -648,6 +651,12 @@ export class ContextMenu {
         ]
       },
       this.#createModeMenuItem(),
+      {
+        label: 'Quiz...',
+        action: () => {
+          this.#quizPanel.show();
+        }
+      },
       {
         label: 'Workspace',
         children: [

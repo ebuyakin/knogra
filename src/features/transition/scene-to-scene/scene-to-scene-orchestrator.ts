@@ -280,7 +280,7 @@ export class SceneToSceneOrchestrator {
       await waitForStep('[3.1] flyInNodes cascade complete');
 
       // Stage 3.2: Edges to arriving nodes fade in
-      await this.#arrivalAnimator.fadeInEdges(edgesToFadeIn);
+      await this.#arrivalAnimator.fadeInEdges(edgesToFadeIn, targetScene);
       await waitForStep('[3.2] fadeInEdges complete');
     } else {
       // ── Mode B: Nodes cascade fly-in + edges fade per layer (parallel) ──

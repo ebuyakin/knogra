@@ -44,6 +44,7 @@ coverage/
 
 # Personal notes
 dev-notes.md
+todo.md
 
 # Local dev workspace (diagnostics, snapshots, chat logs, dependency outputs)
 .ws/
@@ -59,6 +60,7 @@ dev-notes.md
 
 # Release plan (working document)
 docs/release-plan.md
+docs/release-plan-v1-5.md
 
 # Generated tutorial output (publish via knogra-graphs repo, not tracked here)
 scripts/tutorial/tutorial.knogra

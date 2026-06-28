@@ -274,6 +274,13 @@ export class KeyboardHandler {
       return;
     }
 
+    // 0 - Reset zoom to 1
+    if (key === '0' && !ctrl) {
+      event.preventDefault();
+      this.#features.scene.resetZoom();
+      return;
+    }
+
     // Delete/Backspace - Delete selected node or edge
     if (key === 'delete' || key === 'backspace') {
       event.preventDefault();

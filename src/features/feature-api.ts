@@ -12,6 +12,7 @@ import { Edge } from './edge';
 import { Graph } from './graph/graph';
 import { Transition } from './transition/transition';
 import { Path } from './path/path';
+import { Quiz } from './quiz';
 
 export class FeatureAPI {
   scene: Scene;
@@ -21,6 +22,7 @@ export class FeatureAPI {
   graph: Graph;
   transition: Transition;
   path: Path;
+  quiz: Quiz;
 
   constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
     this.scene = new Scene(cy);
@@ -30,5 +32,6 @@ export class FeatureAPI {
     this.graph = new Graph(cy);
     this.transition = new Transition(cy, backgroundRenderer);
     this.path = new Path(cy);
+    this.quiz = new Quiz(cy);
   }
 }

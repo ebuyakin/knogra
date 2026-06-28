@@ -391,8 +391,18 @@ export class Scene {
    */
   zoom(factor: number, duration: number = 150): void {
     const currentZoom = this.#cy.zoom();
-    const newZoom = currentZoom * factor;
+    this.#animateZoomTo(currentZoom * factor, duration);
+  }
 
+  /**
+   * Reset zoom to 1 centered on viewport
+   */
+  resetZoom(duration: number = 150): void {
+    this.#animateZoomTo(1, duration);
+  }
+
+  #animateZoomTo(newZoom: number, duration: number): void {
+    const currentZoom = this.#cy.zoom();
     const pan = this.#cy.pan();
     const container = this.#cy.container();
     if (!container) return;

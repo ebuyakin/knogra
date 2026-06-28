@@ -22,6 +22,7 @@
 | [knogra-vision.md](knogra-vision.md) | Current | Product direction and core UX primitives. |
 | [project-plan.md](project-plan.md) | Historical | Early project plan; read through current docs and `todo.md`. |
 | [release-plan.md](release-plan.md) | Historical | v1 release checklist; v1 is complete as of 2026-06-14. |
+| [release-plan-v1-5.md](release-plan-v1-5.md) | Current | Active V1.5 checklist for the next public release, website updates, graph-library expansion, videos, and launch follow-through. |
 | [knogra-product-discussion.md](knogra-product-discussion.md) | Historical | Early Python/Neo4j R&D planning background. |
 
 ## Architecture

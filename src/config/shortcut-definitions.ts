@@ -42,7 +42,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'F', description: 'Fit graph to view' },
       { key: 'Shift+F', description: 'Fit to background image' },
       { key: 'Ctrl+0', description: 'Fit to view (with padding)' },
-      { key: '+ / −', description: 'Zoom in / out' },
+      { key: '+ / − / 0', description: 'Zoom in / out / reset' },
       { key: 'H', description: 'Toggle hidden connection badges' },
       { key: 'V', description: 'Enable / disable edit mode' },
     ]

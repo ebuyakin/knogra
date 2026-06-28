@@ -58,8 +58,8 @@ export class GraphStatisticsModal {
               ['Background images', stats.totals.backgroundImages]
             ])}
             ${this.#renderSection('Connectivity', [
-              ['Connected components', stats.connectivity.connectedComponents],
-              ['Largest component', stats.connectivity.largestComponentSize],
+              ['Separate graph groups', stats.connectivity.connectedComponents],
+              ['Nodes in largest group', stats.connectivity.largestComponentSize],
               ['Isolated nodes', stats.connectivity.isolatedNodes],
               ['Disconnected from anchor', stats.connectivity.disconnectedFromAnchor],
               ['Max anchor distance', stats.connectivity.maxAnchorDistance ?? '—']
@@ -67,8 +67,8 @@ export class GraphStatisticsModal {
             ${this.#renderSection('Scene Coverage', [
               ['Nodes not in any scene', stats.sceneCoverage.nodesNotInAnyScene],
               ['Nodes without own scene', stats.sceneCoverage.nodesWithoutOwnScene],
-              ['Scene node inclusions', stats.sceneCoverage.totalSceneNodeInclusions],
-              ['Scene edge inclusions', stats.sceneCoverage.totalSceneEdgeInclusions]
+              ['Node appearances in scenes', stats.sceneCoverage.totalSceneNodeInclusions],
+              ['Edge appearances in scenes', stats.sceneCoverage.totalSceneEdgeInclusions]
             ])}
             ${this.#renderSection('Averages', [
               ['Edges per node', this.#formatNumber(stats.averages.edgesPerNode)],

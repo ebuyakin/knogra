@@ -34,6 +34,7 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 
 - **Scenes & transitions** — each node gets a focused view; navigate between them with fluid animations
 - **AI assistant** — context-aware chat per node; suggests new concepts and connections (BYOK — Gemini, OpenRouter)
+- **Quiz mode** — hide node labels in the graph and self-grade recall while navigating scenes
 - **Design system** — 20+ node designs, multiple themes, background images with color grading
 - **Paths** — guided tours through your graph for revision, presentation, or storytelling
 - **Fold & unfold** — collapse branches to focus, expand to explore

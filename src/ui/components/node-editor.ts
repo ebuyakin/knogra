@@ -76,6 +76,7 @@ export class NodeEditor {
   #checkTitleConflict: NodeEditorCheckTitleConflict | null = null;
   #originalTitle = '';
   #containerRect: DOMRect | null = null;
+  #handleKeydown: ((event: KeyboardEvent) => void) | null = null;
   #isDragging = false;
   #dragOffsetX = 0;
   #dragOffsetY = 0;
@@ -98,6 +99,7 @@ export class NodeEditor {
   }
 
   hide(): void {
+    this.#clearKeydownHandler();
     if (this.#modalElement) {
       this.#modalElement.remove();
       this.#modalElement = null;
@@ -107,6 +109,12 @@ export class NodeEditor {
       this.#checkTitleConflict = null;
       this.#containerRect = null;
     }
+  }
+
+  #clearKeydownHandler(): void {
+    if (!this.#handleKeydown) return;
+    document.removeEventListener('keydown', this.#handleKeydown);
+    this.#handleKeydown = null;
   }
 
   // ===========================================================================
@@ -307,15 +315,15 @@ export class NodeEditor {
     const handleKeydown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         this.hide();
-        document.removeEventListener('keydown', handleKeydown);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
         e.preventDefault();
+        if (this.#modalElement !== modal) return;
         saveBtn.click();
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
-    document.addEventListener('keydown', handleKeydown);
+    this.#handleKeydown = handleKeydown;
+    document.addEventListener('keydown', this.#handleKeydown);
 
     modal.appendChild(dialog);
     document.body.appendChild(modal);

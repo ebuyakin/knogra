@@ -4,6 +4,7 @@ import { AppStateManager } from './app-state';
 import { exportWorkspace } from './workspace';
 import { hasMeaningfulWorkspaceData } from './workspace/dialogs';
 import { clearAllData, exportGraphData, importGraphData } from './workspace/transfer';
+import { getSetting } from '../config';
 import { getDefaultEdgeTypeId } from '../config/edge-type-settings';
 import {
   buildMermaidMarkdown,
@@ -103,12 +104,13 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
 
   const nodes = parsed.nodes.map((node, index): Node => {
     const id = `n-${prefix}-${index + 1}` as NodeId;
+    const equation = selection.importEquations ? parsed.equationsByMermaidId.get(node.mermaidId)?.trim() : '';
     idByMermaidId.set(node.mermaidId, id);
     return {
       id,
       title: node.title,
       tags: [],
-      properties: {},
+      properties: equation ? { equation } : {},
       createdAt: now,
       updatedAt: now,
       attachments: [],
@@ -149,6 +151,29 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
   const sceneNodes = parsed.nodes.filter(node => sceneSlice.nodeIds.has(node.mermaidId));
   const sceneEdges = edgeRecords.filter((_record, index) => sceneSlice.edgeIndexes.has(index));
   const sceneMermaidEdges = parsed.edges.filter((_edge, index) => sceneSlice.edgeIndexes.has(index));
+  const sceneNodeRecords = layoutMermaidSceneNodes(
+    sceneNodes,
+    sceneMermaidEdges,
+    selection.anchorMermaidId,
+    selection.layout,
+    idByMermaidId
+  );
+
+  const defaultDesignId = getSetting('node.defaultDesign');
+  const equationDesignId = getSetting('node.equationDesign');
+  for (const node of sceneNodes) {
+    const nodeId = idByMermaidId.get(node.mermaidId);
+    if (!nodeId) continue;
+
+    const sceneNode = sceneNodeRecords[nodeId];
+    if (!sceneNode) continue;
+
+    const hasImportedEquation = selection.importEquations && Boolean(parsed.equationsByMermaidId.get(node.mermaidId)?.trim());
+    sceneNode.design = {
+      id: hasImportedEquation ? equationDesignId : defaultDesignId,
+      params: {},
+    };
+  }
 
   const sceneId = `scene-${prefix}` as SceneId;
   const scene: Scene = {
@@ -156,13 +181,7 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
     title: 'Mermaid import',
     description: `Imported from a Mermaid flowchart. Anchor: ${selection.anchorMermaidId}. Depth: ${selection.depth}. Layout: ${selection.layout}.`,
     centralNodeId,
-    nodes: layoutMermaidSceneNodes(
-      sceneNodes,
-      sceneMermaidEdges,
-      selection.anchorMermaidId,
-      selection.layout,
-      idByMermaidId
-    ),
+    nodes: sceneNodeRecords,
     edges: Object.fromEntries(sceneEdges.map(record => [
       record.edge.id,
       { design: { id: 'default', params: {} } },

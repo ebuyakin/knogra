@@ -17,6 +17,7 @@ export interface EquationNodeParams {
   borderRadius?: number;        // Corner radius (default: 6)
   titleFontSize?: number;       // Title font size (default: 11)
   typeFontSize?: number;        // Type label font size (default: 11)
+  equationScale?: number;        // Equation size multiplier (default: 1)
   minWidth?: number;            // Minimum node width (default: 100)
   colorOverrides?: ColorOverrides;
   effects?: VisualEffects;
@@ -220,6 +221,19 @@ async function renderMathJaxEquation(
   }
 }
 
+function resolvePositiveNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /**
  * Build the composite SVG for the node
  */
@@ -350,7 +364,7 @@ function renderSVG(
           font-weight="normal"
           font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
         >
-          ${titleText}
+          ${escapeXml(titleText)}
         </text>
         
         <g transform="translate(${equationX}, ${equationY}) scale(${equationData.scale})">
@@ -365,7 +379,7 @@ function renderSVG(
           font-size="${typeFontSize}"
           font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
         >
-          ${tagsText}
+          ${escapeXml(tagsText)}
         </text>
       </g>
     </svg>
@@ -392,9 +406,16 @@ export async function getEquationNodeStyle(
   
   // Render equation with MathJax
   const equationData = await renderMathJaxEquation(equation, textColor);
+  const equationScale = resolvePositiveNumber(params.equationScale, 1);
+  const scaledEquationData = {
+    ...equationData,
+    width: equationData.width * equationScale,
+    height: equationData.height * equationScale,
+    scale: equationData.scale * equationScale,
+  };
   
   // Build composite SVG with params
-  const { svg, width, height } = renderSVG(titleText, tagsText, equationData, params, theme);
+  const { svg, width, height } = renderSVG(titleText, tagsText, scaledEquationData, params, theme);
   
   // Encode SVG as data URI
   const encodedSVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);

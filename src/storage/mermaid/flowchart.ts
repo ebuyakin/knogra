@@ -16,6 +16,7 @@ export interface ParsedMermaidEdge {
 export interface ParsedMermaidGraph {
   nodes: ParsedMermaidNode[];
   edges: ParsedMermaidEdge[];
+  equationsByMermaidId: Map<string, string>;
 }
 
 interface NodeSpec {
@@ -62,8 +63,9 @@ export function buildMermaidMarkdown(nodes: Node[], edges: Edge[], edgeTypes: Ed
 }
 
 export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
-  const body = extractMermaidBody(source);
+  const body = removeKnograEquationSection(extractMermaidBody(source));
   const lines = normalizeMermaidLines(body);
+  const equationsByMermaidId = parseKnograEquationSection(source);
 
   const headerIndex = lines.findIndex(line => /^(flowchart|graph)\s+/i.test(line));
   if (headerIndex < 0) {
@@ -116,12 +118,65 @@ export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
     throw new Error('No nodes found in Mermaid flowchart.');
   }
 
-  return { nodes: [...nodes.values()], edges };
+  return { nodes: [...nodes.values()], edges, equationsByMermaidId };
 }
 
 function extractMermaidBody(source: string): string {
   const fenced = source.match(/```mermaid\s*([\s\S]*?)```/i);
   return fenced?.[1] ?? source;
+}
+
+function parseKnograEquationSection(source: string): Map<string, string> {
+  const equations = new Map<string, string>();
+  const section = extractKnograEquationSection(source);
+  if (!section) return equations;
+
+  for (const rawLine of section.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const match = line.match(/^([A-Za-z0-9_-]+)\s*:\s*`([^`]*)`\s*$/);
+    if (!match) continue;
+
+    const equation = match[2].trim();
+    if (equation) equations.set(match[1], equation);
+  }
+
+  return equations;
+}
+
+function extractKnograEquationSection(source: string): string {
+  const lines = source.split(/\r?\n/);
+  const startIndex = lines.findIndex(line => /^#{1,6}\s+Knogra equations\s*$/i.test(line.trim()));
+  if (startIndex < 0) return '';
+
+  const sectionLines: string[] = [];
+  for (let index = startIndex + 1; index < lines.length; index++) {
+    if (/^#{1,6}\s+/.test(lines[index].trim())) break;
+    sectionLines.push(lines[index]);
+  }
+
+  return sectionLines.join('\n');
+}
+
+function removeKnograEquationSection(source: string): string {
+  const lines = source.split(/\r?\n/);
+  const result: string[] = [];
+  let inEquationSection = false;
+
+  for (const line of lines) {
+    const isHeading = /^#{1,6}\s+/.test(line.trim());
+    if (/^#{1,6}\s+Knogra equations\s*$/i.test(line.trim())) {
+      inEquationSection = true;
+      continue;
+    }
+
+    if (inEquationSection && isHeading) {
+      inEquationSection = false;
+    }
+
+    if (!inEquationSection) result.push(line);
+  }
+
+  return result.join('\n');
 }
 
 function stripTrailingSemicolon(line: string): string {
@@ -177,7 +232,7 @@ function parseEdgeLine(line: string): { source: NodeSpec; target: NodeSpec; titl
 
 function parseNodeSpec(text: string): NodeSpec | null {
   const bracket = text.match(/^([A-Za-z0-9_-]+)\s*\[\s*(.+?)\s*\]$/);
-  if (bracket) return { mermaidId: bracket[1], title: unquoteLabel(bracket[2].trim()) };
+  if (bracket) return { mermaidId: bracket[1], title: unquoteNodeTitle(bracket[2].trim()) };
 
   const bare = text.match(/^[A-Za-z0-9_-]+$/);
   if (bare) return { mermaidId: text };
@@ -200,6 +255,10 @@ function unquoteLabel(label: string): string {
     return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\'/g, "'");
   }
   return trimmed;
+}
+
+function unquoteNodeTitle(label: string): string {
+  return unquoteLabel(label).replace(/<br\s*\/?>/gi, '\n');
 }
 
 function escapeMermaidString(value: string): string {

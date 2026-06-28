@@ -14,6 +14,7 @@ import { NodePicker } from './node-picker';
 import { NodeManager } from './node-manager';
 import { BackgroundEditor } from './background-editor';
 import { ThemeEditor } from './theme-editor';
+import { QuizPanel } from './quiz-panel';
 import { ContextMenu } from './context-menu';
 import { AnchorLinkTooltip } from './anchor-link-tooltip';
 import { ConnectionBadgeManager } from './connection-badge';
@@ -33,6 +34,7 @@ export class UIComponentAPI {
   readonly nodeManager: NodeManager;
   readonly backgroundEditor: BackgroundEditor;
   readonly themeEditor: ThemeEditor;
+  readonly quizPanel: QuizPanel;
   readonly anchorLinkTooltip: AnchorLinkTooltip;
   readonly contextMenu: ContextMenu;
   readonly badgeManager: ConnectionBadgeManager;
@@ -53,6 +55,7 @@ export class UIComponentAPI {
     this.nodeManager = new NodeManager(features);
     this.backgroundEditor = new BackgroundEditor(container);
     this.themeEditor = new ThemeEditor();
+    this.quizPanel = new QuizPanel(features, container);
     this.anchorLinkTooltip = new AnchorLinkTooltip(cy, container);
     this.edgeCreationMode = new EdgeCreationMode(cy, container, features);
 
@@ -70,6 +73,7 @@ export class UIComponentAPI {
       this.nodeManager,
       this.backgroundEditor,
       this.themeEditor,
+      this.quizPanel,
       this.anchorLinkTooltip
     );
 
