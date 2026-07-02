@@ -74,6 +74,15 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
               { value: 'edit', label: 'Edit node' },
               { value: 'navigate', label: 'Go to scene' }
             ]
+          },
+          {
+            key: 'interaction.zoomStep',
+            label: 'Zoom step',
+            description: 'Multiplier for +/- zoom (applied to current scene and all-scenes zoom)',
+            type: 'number',
+            min: 1.05,
+            max: 3,
+            step: 0.05
           }
         ]
       },

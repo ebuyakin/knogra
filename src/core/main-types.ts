@@ -141,7 +141,13 @@ export interface Scene {
   }>;
   backgroundImages?: SceneBackgroundImage[];  // Background images for memory palace
   themeId: ThemeId;
-  viewport: {zoom: number, pan: {x: number, y: number}}
+  /**
+   * `pan` is a pixel offset kept for legacy readers; it is NOT used to restore
+   * the viewport. `focalPoint` is the graph-space point the author placed at
+   * the container center — resolution- and zoom-independent, so the framing
+   * survives container resize and zoom changes.
+   */
+  viewport: {zoom: number, pan: {x: number, y: number}, focalPoint?: {x: number, y: number}}
   /** Fold state: fold-root NodeId → array of hidden nodes with relative offsets */
   foldedNodes?: Record<NodeId, FoldedNodeEntry[]>;
   /** Scene-local edge type display state. Does not change scene composition. */

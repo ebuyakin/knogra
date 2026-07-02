@@ -18,6 +18,7 @@ import { resolveSceneEdgeVisualState } from '../../../styles/edge-visual-resolve
 import { TransitionAnalysisOperator, type TransitionAnalysis } from './shared-core-animation/transition-analysis-operator';
 import { GhostOperator } from './shared-core-animation/ghost-operator';
 import { waitForStep } from './scene-to-scene-orchestrator';
+import { resolveScenePan } from '../../utils/cy/viewport-utils';
 
 interface Position {
   x: number;
@@ -47,6 +48,23 @@ function calculateCrossfadeTiming(overlapPercent: number, duration: number): Cro
     fadeInDelay: duration * fadeInStartRatio,
     fadeInDuration: duration * (1 - fadeInStartRatio)
   };
+}
+
+/** Cubic ease-in-out matching Cytoscape's 'ease-in-out-cubic'. */
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/** A shared element moved in render (screen) space during the morph. */
+interface Mover {
+  ele: any;
+  r0: Position;
+  r1: Position;
+  target: Position;
+  w0?: number;
+  h0?: number;
+  w1?: number;
+  h1?: number;
 }
 
 export class SharedCoreAnimator {
@@ -105,16 +123,21 @@ export class SharedCoreAnimator {
       animations.push(this.#backgroundOperator.crossfadeBackground(targetScene, morphDuration));
     }
 
-    // B. Viewport
-    if (!isNewScene && targetScene.viewport?.zoom > 0) {
-      if (isDebug('d_transition')) {
-        console.log(`[d_transition] Viewport animation: current zoom=${this.#cy.zoom().toFixed(4)} → target zoom=${targetScene.viewport.zoom.toFixed(4)}`);
-      }
-      animations.push(this.#animateViewport(targetScene.viewport.zoom, targetScene.viewport.pan, morphDuration));
+    // B + C. Node motion and viewport, driven together in render (screen) space
+    //        so shared elements follow straight-line rendered trajectories even
+    //        when the two scenes differ in zoom/pan (see #animateSharedMotion).
+    const morphToViewport = !isNewScene && targetScene.viewport?.zoom > 0;
+    const targetZoom = morphToViewport ? targetScene.viewport.zoom : this.#cy.zoom();
+    const targetPan = morphToViewport ? resolveScenePan(targetScene, this.#cy) : this.#cy.pan();
+    if (morphToViewport && isDebug('d_transition')) {
+      console.log(`[d_transition] Viewport animation: current zoom=${this.#cy.zoom().toFixed(4)} → target zoom=${targetZoom.toFixed(4)}`);
     }
+    animations.push(
+      this.#animateSharedMotion(analysis, targetPositions, targetScales, targetZoom, targetPan, morphDuration)
+    );
 
-    // C. Nodes (move + crossfade)
-    animations.push(this.#animateNodes(analysis, targetPositions, targetScales, morphDuration, crossfadeTiming));
+    // C. Node crossfades (opacity only — position handled by #animateSharedMotion)
+    animations.push(this.#animateNodeCrossfades(analysis, crossfadeTiming));
 
     // D. Edges (tween + crossfade)
     animations.push(this.#animateEdges(analysis, targetScene, morphDuration, crossfadeTiming));
@@ -420,71 +443,146 @@ export class SharedCoreAnimator {
     this.#cy.endBatch();
   }
 
-  async #animateNodes(
+  /**
+   * Phase 2 core motion: move all shared elements AND the viewport together,
+   * driven in render (screen) space via a single rAF loop.
+   *
+   * Each shared node's RENDERED position is interpolated on a straight line
+   * from start to target; the model position written each frame is back-solved
+   * against that frame's animated viewport (`model = (rendered - pan) / zoom`).
+   * This keeps the on-screen trajectory straight even when the departing and
+   * arriving scenes differ in zoom/pan — animating model position and zoom
+   * independently would bend the path, because the rendered position is the
+   * product `zoom(t)·position(t)`, which is non-linear in time.
+   *
+   * Opacity crossfades and edge tweens are time-based and handled separately.
+   */
+  #animateSharedMotion(
     analysis: TransitionAnalysis,
     targetPositions: TargetPositions,
     targetScales: Record<NodeId, number>,
-    duration: number,
+    targetZoom: number,
+    targetPan: Position,
+    duration: number
+  ): Promise<void> {
+    return new Promise(resolve => {
+      const cy = this.#cy;
+      const z0 = cy.zoom();
+      const pan0: Position = { ...cy.pan() };
+      const z1 = targetZoom;
+      const pan1: Position = { x: targetPan.x, y: targetPan.y };
+      const viewportMoves = z0 !== z1 || pan0.x !== pan1.x || pan0.y !== pan1.y;
+
+      const movers: Mover[] = [];
+      const addMover = (
+        ele: any,
+        target: Position | undefined,
+        scaleFrom?: number,
+        scaleTo?: number
+      ): void => {
+        if (!ele || ele.length === 0 || !target) return;
+        const p0 = ele.position();
+        const mover: Mover = {
+          ele,
+          r0: { x: z0 * p0.x + pan0.x, y: z0 * p0.y + pan0.y },
+          r1: { x: z1 * target.x + pan1.x, y: z1 * target.y + pan1.y },
+          target: { x: target.x, y: target.y }
+        };
+        if (scaleFrom !== undefined && scaleTo !== undefined && scaleFrom !== scaleTo) {
+          const ratio = scaleTo / scaleFrom;
+          mover.w0 = ele.width();
+          mover.h0 = ele.height();
+          mover.w1 = mover.w0 * ratio;
+          mover.h1 = mover.h0 * ratio;
+        }
+        movers.push(mover);
+      };
+
+      // Move-only nodes: position (+ scale if changed)
+      for (const nodeId of analysis.nodes.moveOnly) {
+        const node = cy.getElementById(nodeId);
+        const oldScale = node.data('scale') || 1.0;
+        const newScale = targetScales[nodeId] || 1.0;
+        addMover(node, targetPositions[nodeId], oldScale, newScale);
+      }
+
+      // Crossfade nodes: real + ghost move to the same target (opacity handled elsewhere)
+      for (const change of analysis.nodes.crossfade) {
+        const targetPos = targetPositions[change.nodeId];
+        addMover(cy.getElementById(change.nodeId), targetPos);
+        addMover(this.#ghostOperator.getGhostFor(change.nodeId), targetPos);
+      }
+
+      if (!viewportMoves && movers.length === 0) {
+        resolve();
+        return;
+      }
+
+      const start = performance.now();
+      const step = (now: number): void => {
+        const raw = duration > 0 ? Math.min(1, (now - start) / duration) : 1;
+        const e = easeInOutCubic(raw);
+        const z = z0 + e * (z1 - z0);
+        const px = pan0.x + e * (pan1.x - pan0.x);
+        const py = pan0.y + e * (pan1.y - pan0.y);
+
+        cy.startBatch();
+        if (viewportMoves) cy.viewport({ zoom: z, pan: { x: px, y: py } });
+        for (const m of movers) {
+          const rx = m.r0.x + e * (m.r1.x - m.r0.x);
+          const ry = m.r0.y + e * (m.r1.y - m.r0.y);
+          m.ele.position({ x: (rx - px) / z, y: (ry - py) / z });
+          if (m.w1 !== undefined) {
+            m.ele.style({
+              width: m.w0! + e * (m.w1 - m.w0!),
+              height: m.h0! + e * (m.h1! - m.h0!)
+            });
+          }
+        }
+        cy.endBatch();
+
+        if (raw < 1) {
+          requestAnimationFrame(step);
+          return;
+        }
+
+        // Snap to exact final state to avoid rounding drift.
+        cy.startBatch();
+        if (viewportMoves) cy.viewport({ zoom: z1, pan: { x: pan1.x, y: pan1.y } });
+        for (const m of movers) {
+          m.ele.position({ x: m.target.x, y: m.target.y });
+          if (m.w1 !== undefined) m.ele.style({ width: m.w1, height: m.h1! });
+        }
+        cy.endBatch();
+        resolve();
+      };
+
+      requestAnimationFrame(step);
+    });
+  }
+
+  /** Crossfade opacity for shared nodes (ghost fades out, real fades in). */
+  async #animateNodeCrossfades(
+    analysis: TransitionAnalysis,
     timing: CrossfadeTiming
   ): Promise<void> {
     const promises: Promise<void>[] = [];
 
-    // 1. Move-only nodes: animate position (and scale if changed)
-    for (const nodeId of analysis.nodes.moveOnly) {
-      const node = this.#cy.getElementById(nodeId);
-      if (node.length === 0) continue;
-
-      const targetPos = targetPositions[nodeId];
-      if (!targetPos) continue;
-
-      const oldScale = node.data('scale') || 1.0;
-      const newScale = targetScales[nodeId] || 1.0;
-      const animProps: any = { position: targetPos };
-
-      if (oldScale !== newScale) {
-        const ratio = newScale / oldScale;
-        animProps.style = {
-          width: node.width() * ratio,
-          height: node.height() * ratio
-        };
-        if (isDebug('d_transition')) {
-          console.log(`[d_transition] moveOnly ${nodeId}: scale ${oldScale}→${newScale}, width ${node.width().toFixed(1)}→${(node.width() * ratio).toFixed(1)}, height ${node.height().toFixed(1)}→${(node.height() * ratio).toFixed(1)}`);
-        }
-      }
-
-      promises.push(this.#runAnimation(node, animProps, duration));
-    }
-
-    // 2. Crossfade nodes: movement + opacity run in PARALLEL via .animation().play()
-    //    (cy.animate() queues, so we must use .animation().play() for parallel)
     for (const change of analysis.nodes.crossfade) {
-      const realNode = this.#cy.getElementById(change.nodeId);
-      const targetPos = targetPositions[change.nodeId];
       const ghost = this.#ghostOperator.getGhostFor(change.nodeId);
-
-      // Ghost: move full duration + fade out
-      if (ghost.length > 0 && targetPos) {
-        const moveGhost = ghost.animation(
-          { position: targetPos },
-          { duration, easing: 'ease-in-out-cubic' }
-        );
-        const fadeOutGhost = ghost.animation(
-          { style: { opacity: 0 } },
-          { duration: timing.fadeOutDuration, easing: 'ease-in' }
-        );
-        moveGhost.play();
-        fadeOutGhost.play();
-        promises.push(moveGhost.promise() as Promise<void>);
+      if (ghost.length > 0) {
+        promises.push(new Promise<void>(res => {
+          const fadeOut = ghost.animation(
+            { style: { opacity: 0 } },
+            { duration: timing.fadeOutDuration, easing: 'ease-in' }
+          );
+          fadeOut.play();
+          fadeOut.promise().then(() => res());
+        }));
       }
 
-      // Real: move full duration + delayed fade in
-      if (realNode.length > 0 && targetPos) {
-        const moveReal = (realNode as any).animation(
-          { position: targetPos },
-          { duration, easing: 'ease-in-out-cubic' }
-        );
-        moveReal.play();
-        promises.push(moveReal.promise() as unknown as Promise<void>);
+      const realNode = this.#cy.getElementById(change.nodeId);
+      if (realNode.length > 0) {
         promises.push(this.#delayedFadeIn(realNode, timing.fadeInDelay, timing.fadeInDuration));
       }
     }
@@ -539,17 +637,6 @@ export class SharedCoreAnimator {
     }
 
     await Promise.all(promises);
-  }
-
-  async #animateViewport(zoom: number, pan: {x:number, y:number}, duration: number): Promise<void> {
-     return new Promise(resolve => {
-       this.#cy.animate({
-         zoom, pan
-       }, {
-         duration,
-         complete: () => resolve()
-       });
-     });
   }
 
   // Central node styling is handled by transition.ts after all phases complete.

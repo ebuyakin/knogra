@@ -220,10 +220,14 @@ export class SceneBackground {
   }
 
   /**
-   * Resize the background canvas
+   * Resize the background canvas.
+   * Resizing a canvas clears its bitmap, so redraw at the current viewport.
+   * Zoom is unchanged and only pan shifts, so the image stays the same size
+   * and locked to the graph — the net transform is a pure translation.
    */
   resize(width: number, height: number): void {
     this.#backgroundRenderer.resize(width, height);
+    this.#backgroundRenderer.redraw(this.#cy.zoom(), this.#cy.pan());
   }
 
   /**

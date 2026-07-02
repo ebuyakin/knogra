@@ -17,6 +17,7 @@ import { resolveSceneEdgeVisualState } from '../../../styles/edge-visual-resolve
 import { OpenSceneAnimator } from './open-scene-animator';
 import { CloseSceneAnimator } from './close-scene-animator';
 import { getHiddenNodeIds } from '../element-classification-utils';
+import { resolveScenePan } from '../../utils/cy/viewport-utils';
 
 export class OpenCloseOrchestrator {
   #cy: Core;
@@ -288,7 +289,7 @@ export class OpenCloseOrchestrator {
     if (scene.viewport && scene.viewport.zoom && scene.viewport.zoom > 0) {
       this.#cy.viewport({
         zoom: scene.viewport.zoom,
-        pan: scene.viewport.pan
+        pan: resolveScenePan(scene, this.#cy)
       });
       if (isDebug('d_transition')) console.log(`[OpenCloseOrchestrator] Using saved viewport: zoom=${scene.viewport.zoom}`);
     } else {

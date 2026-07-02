@@ -10,6 +10,7 @@ import type { FeatureAPI } from '../features/feature-api';
 import type { ConnectionBadgeManager } from './components/connection-badge';
 import type { EdgeCreationMode } from './edge-creation-mode';
 import { isDebug } from '../config/debug-flags';
+import { getSetting } from '../config';
 import type { NodeEditor, NodeEditorContext } from './components/node-editor';
 import type { NodeManager } from './components/node-manager';
 import type { AnchorLinkTooltip } from './components/anchor-link-tooltip';
@@ -260,24 +261,49 @@ export class KeyboardHandler {
       return;
     }
 
-    // + or = - Zoom in
-    if ((key === '+' || key === '=') && !ctrl) {
+    // = - Zoom in current scene
+    if (key === '=' && !ctrl) {
       event.preventDefault();
-      this.#features.scene.zoom(1.1);
+      const step = getSetting('interaction.zoomStep');
+      this.#features.scene.zoom(step);
       return;
     }
 
-    // - - Zoom out
+    // - - Zoom out current scene
     if (key === '-' && !ctrl) {
       event.preventDefault();
-      this.#features.scene.zoom(0.9);
+      const step = getSetting('interaction.zoomStep');
+      this.#features.scene.zoom(1 / step);
       return;
     }
 
-    // 0 - Reset zoom to 1
+    // 0 - Refit scene and reset zoom to 1 (current scene)
     if (key === '0' && !ctrl) {
       event.preventDefault();
       this.#features.scene.resetZoom();
+      return;
+    }
+
+    // + (Shift+=) - Zoom in all scenes
+    if (key === '+' && !ctrl) {
+      event.preventDefault();
+      const step = getSetting('interaction.zoomStep');
+      this.#features.scene.scaleAllScenesZoom(step);
+      return;
+    }
+
+    // _ (Shift+-) - Zoom out all scenes
+    if (key === '_' && !ctrl) {
+      event.preventDefault();
+      const step = getSetting('interaction.zoomStep');
+      this.#features.scene.scaleAllScenesZoom(1 / step);
+      return;
+    }
+
+    // ) (Shift+0) - Reset all scenes to current scene
+    if (key === ')' && !ctrl) {
+      event.preventDefault();
+      this.#features.scene.normalizeAllScenesToCurrent();
       return;
     }
 
@@ -453,12 +479,6 @@ export class KeyboardHandler {
       return;
     }
 
-    // Ctrl/Cmd + 0 - Fit to view
-    if (ctrl && key === '0') {
-      event.preventDefault();
-      this.#cy.fit(undefined, 50);
-      return;
-    }
   }
 
   #toggleAppMode(): void {

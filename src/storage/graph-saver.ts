@@ -180,7 +180,8 @@ class GraphSaver {
       edges: {},
       viewport: {
         zoom: this.#cy.zoom(),
-        pan: this.#cy.pan()
+        pan: this.#cy.pan(),
+        focalPoint: this.#extractFocalPoint()
       },
       backgroundImages: existingScene?.backgroundImages || [],
       foldedNodes: (this.#cy.scratch('foldedNodes') as Scene['foldedNodes']) || undefined,
@@ -212,6 +213,24 @@ class GraphSaver {
     });
 
     return scene;
+  }
+
+  /**
+   * Extract the graph-space point currently at the container center.
+   * This is the resolution- and zoom-independent focal point of the viewport:
+   * `focal = (center - pan) / zoom`. Returns undefined if the container or
+   * zoom is unavailable, in which case the restore path falls back.
+   */
+  #extractFocalPoint(): { x: number; y: number } | undefined {
+    if (!this.#cy) return undefined;
+    const container = this.#cy.container();
+    const zoom = this.#cy.zoom();
+    if (!container || !zoom || zoom <= 0) return undefined;
+    const pan = this.#cy.pan();
+    return {
+      x: (container.clientWidth / 2 - pan.x) / zoom,
+      y: (container.clientHeight / 2 - pan.y) / zoom
+    };
   }
 
   /**

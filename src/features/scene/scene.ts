@@ -20,6 +20,7 @@ import { resolveSceneEdgeVisualState } from '../../styles/edge-visual-resolver';
 // shared utilities imports
 import { collapseNodesCascading } from '../utils/cy/collapse-animator';
 import { expandNodeConnections, type ExpandMode } from '../utils/cy/expand-animator';
+import { resolveScenePan } from '../utils/cy/viewport-utils';
 
 // scene sub-modules
 import { SceneNodeOps } from './node-ops';
@@ -65,11 +66,19 @@ export class Scene {
   // ==========================================================================
 
   /**
-   * Handle container resize
+   * Handle container resize.
+   * Keeps the authored zoom and re-centers the current scene on the new
+   * container size (P-A). No autofit — resizing must not rescale the scene.
    */
   handleResize(): void {
     this.#cy.resize();
-    this.fit();
+    const sceneId = this.getCurrentSceneId();
+    const scene = sceneId ? graphStore.scenes.find(s => s.id === sceneId) : null;
+    if (!scene) return;
+    this.#cy.viewport({
+      zoom: scene.viewport.zoom,
+      pan: resolveScenePan(scene, this.#cy)
+    });
   }
 
   /**
@@ -395,10 +404,71 @@ export class Scene {
   }
 
   /**
-   * Reset zoom to 1 centered on viewport
+   * Reset zoom to 1 and center the current scene in a single viewport animation.
+   * This is intentionally scene-local behavior for the `0` command.
    */
-  resetZoom(duration: number = 150): void {
-    this.#animateZoomTo(1, duration);
+  resetZoom(duration: number = 500): void {
+    const elements = this.#cy.elements();
+    if (elements.length === 0) {
+      this.#animateZoomTo(1, duration);
+      return;
+    }
+
+    const container = this.#cy.container();
+    if (!container) {
+      this.#animateZoomTo(1, duration);
+      return;
+    }
+
+    const bounds = elements.boundingBox();
+    const centerX = bounds.x1 + bounds.w / 2;
+    const centerY = bounds.y1 + bounds.h / 2;
+
+    this.#cy.animate({
+      zoom: 1,
+      pan: {
+        x: container.clientWidth / 2 - centerX,
+        y: container.clientHeight / 2 - centerY
+      }
+    }, {
+      duration,
+      easing: 'ease-out'
+    });
+  }
+
+  /**
+   * Scale the stored zoom of EVERY scene by the same factor. Because a single
+   * factor is applied uniformly, the relative zoom ratios between scenes — and
+   * therefore the authored transition framing — are preserved. Persists each
+   * scene and refreshes the current scene's live viewport immediately.
+   */
+  scaleAllScenesZoom(factor: number): void {
+    if (!(factor > 0) || !Number.isFinite(factor)) return;
+
+    for (const scene of graphStore.scenes) {
+      const zoom = scene.viewport?.zoom;
+      if (typeof zoom !== 'number' || zoom <= 0) continue;
+      void graphStore.updateScene({
+        ...scene,
+        viewport: { ...scene.viewport, zoom: zoom * factor },
+        updatedAt: new Date()
+      });
+    }
+
+    this.#animateZoomTo(this.#cy.zoom() * factor, 150);
+  }
+
+  /**
+   * Normalize all scenes so the CURRENT scene renders at zoom 1, scaling every
+   * other scene by the same factor to keep relative framing intact.
+   */
+  normalizeAllScenesToCurrent(): void {
+    const sceneId = this.getCurrentSceneId();
+    if (!sceneId) return;
+    const scene = graphStore.scenes.find(s => s.id === sceneId);
+    const refZoom = scene?.viewport?.zoom;
+    if (typeof refZoom !== 'number' || refZoom <= 0) return;
+    this.scaleAllScenesZoom(1 / refZoom);
   }
 
   #animateZoomTo(newZoom: number, duration: number): void {

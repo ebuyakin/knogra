@@ -35,6 +35,7 @@ export interface MenuItem {
   action?: () => void;
   enabled?: boolean;
   children?: MenuItem[];  // For sub-menus
+  separator?: boolean;    // Render a visual divider instead of an item
 }
 
 export class ContextMenu {
@@ -637,15 +638,52 @@ export class ContextMenu {
         label: 'Zoom',
         children: [
           {
-            label: 'Fit graph (F)',
+            label: 'Fit scene to nodes (F)',
             action: () => {
               this.#features.scene.fit();
             }
           },
           {
-            label: 'Fit to background (Shift+F)',
+            label: 'Fit scene to image (Shift+F)',
             action: () => {
               this.#features.sceneBackground.fitToBackground();
+            }
+          },
+          {
+            label: 'Zoom in current scene (+)',
+            action: () => {
+              this.#features.scene.zoom(getSetting('interaction.zoomStep'));
+            }
+          },
+          {
+            label: 'Zoom out current scene (−)',
+            action: () => {
+              this.#features.scene.zoom(1 / getSetting('interaction.zoomStep'));
+            }
+          },
+          {
+            label: 'Reset zoom and pan for current scene (0)',
+            action: () => {
+              this.#features.scene.resetZoom();
+            }
+          },
+          { label: '', separator: true },
+          {
+            label: 'Zoom in all scenes (Shift +)',
+            action: () => {
+              this.#features.scene.scaleAllScenesZoom(getSetting('interaction.zoomStep'));
+            }
+          },
+          {
+            label: 'Zoom out all scenes (Shift −)',
+            action: () => {
+              this.#features.scene.scaleAllScenesZoom(1 / getSetting('interaction.zoomStep'));
+            }
+          },
+          {
+            label: 'Reset zoom for all scenes (Shift 0)',
+            action: () => {
+              this.#features.scene.normalizeAllScenesToCurrent();
             }
           }
         ]
@@ -759,6 +797,15 @@ export class ContextMenu {
    */
   #renderMenuItems(container: HTMLElement, items: MenuItem[]): void {
     items.forEach(item => {
+      if (item.separator) {
+        const divider = document.createElement('div');
+        divider.className = 'graph-context-menu-separator';
+        divider.style.height = '1px';
+        divider.style.margin = '4px 6px';
+        divider.style.backgroundColor = 'var(--border-primary, #30363d)';
+        container.appendChild(divider);
+        return;
+      }
       const itemElement = document.createElement('div');
       itemElement.className = 'graph-context-menu-item';
       itemElement.style.padding = '5px 10px';

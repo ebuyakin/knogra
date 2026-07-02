@@ -11,7 +11,7 @@ import { StyleGenerator } from '../../../styles/style-generator';
 
 import { findDirectChildren, findDirectParents, mapPositionsToNodes, findRelevantEdges } from '../pure/scene-calculations';
 import { circularSpreadSafe } from '../pure/position-expansion';
-import { placeChildrenDonutSimple, type Obstacle } from '../pure/donut-placement';
+import { placeExpansionFan, type NodeObstacle, type EdgeObstacle, type ViewportRect } from '../pure/donut-placement';
 import { getSetting } from '../../../config';
 import { isDebug } from '../../../config/debug-flags';
 
@@ -135,22 +135,38 @@ export async function expandNodeConnections(
   const childBaseSize = inheritDesign ? parentSize : 120;
   const childHalfSize = (childBaseSize * nodeScale) / 2;
   
-  const margin = 20;
+  // Gap between the parent's edge and a child's edge. A full child-radius of
+  // breathing room keeps the fan from crowding the parent in open space.
+  const margin = childHalfSize;
   const minRadius = parentHalfSize + childHalfSize + margin;
   
   // Child size for donut placement algorithm
   const childSize = childBaseSize * nodeScale;
   
-  // Build obstacles array with actual bounding boxes
-  // EXCLUDE the central node - we're expanding from it, so it shouldn't block placement
-  const obstacles: Obstacle[] = [];
+  // Build node obstacles with actual bounding boxes.
+  // EXCLUDE the expanding node itself - we grow away from it, it shouldn't block placement.
+  const nodeObstacles: NodeObstacle[] = [];
   cy.nodes().forEach(n => {
     if (n.id() !== nodeId) {
       const bbox = n.boundingBox();
-      obstacles.push({
-        id: n.id(),
+      nodeObstacles.push({
         pos: n.position(),
         size: Math.max(bbox.w, bbox.h)
+      });
+    }
+  });
+
+  // Build edge obstacles as straight source→target segments so the fan avoids
+  // crossing existing connections, not just existing nodes.
+  const edgeObstacles: EdgeObstacle[] = [];
+  cy.edges().forEach(e => {
+    const src = e.source();
+    const tgt = e.target();
+    if (src.length > 0 && tgt.length > 0) {
+      edgeObstacles.push({
+        a: src.position(),
+        b: tgt.position(),
+        incidentToParent: src.id() === nodeId || tgt.id() === nodeId
       });
     }
   });
@@ -185,41 +201,52 @@ export async function expandNodeConnections(
   const useDonutPlacement = true; // test/debug flag
   
   if (useDonutPlacement) {
-    // Calculate visible viewport in model coordinates (not cy.extent which is element bounds)
+    // Reference centre for the outward axis: the scene's central node, so the
+    // fan grows away from the scene's anchor. Fall back to the screen centre.
     const pan = cy.pan();
     const zoom = cy.zoom();
     const container = cy.container();
-    
-    // Fallback to a large default viewport if container is not available
-    const viewport = container ? {
-      x1: -pan.x / zoom,
-      y1: -pan.y / zoom,
-      x2: (container.clientWidth - pan.x) / zoom,
-      y2: (container.clientHeight - pan.y) / zoom
-    } : {
-      x1: -1000,
-      y1: -1000,
-      x2: 1000,
-      y2: 1000
-    };
-    
+
+    const screenCenter = container
+      ? {
+          x: (container.clientWidth / 2 - pan.x) / zoom,
+          y: (container.clientHeight / 2 - pan.y) / zoom
+        }
+      : { x: 0, y: 0 };
+
+    const centralNode = cy.nodes('[?centralNode]');
+    const referenceCenter = centralNode.length > 0 ? centralNode[0].position() : screenCenter;
+
+    // Visible viewport in model coordinates. The camera is fixed during
+    // expansion, so we plan inside this frame and only overshoot when forced.
+    const viewport: ViewportRect | null = container
+      ? {
+          x1: (0 - pan.x) / zoom,
+          y1: (0 - pan.y) / zoom,
+          x2: (container.clientWidth - pan.x) / zoom,
+          y2: (container.clientHeight - pan.y) / zoom
+        }
+      : null;
+
     if (isDebug('d_transition')) {
-      console.log(`[expandNodeConnections] viewport: x1=${viewport.x1.toFixed(0)}, y1=${viewport.y1.toFixed(0)}, x2=${viewport.x2.toFixed(0)}, y2=${viewport.y2.toFixed(0)}`);
+      console.log(`[expandNodeConnections] referenceCenter: x=${referenceCenter.x.toFixed(0)}, y=${referenceCenter.y.toFixed(0)}`);
       console.log(`[expandNodeConnections] nodePos: ${rootPosition.x}, ${rootPosition.y}, minRadius: ${minRadius}, childSize: ${childSize}`);
     }
-    
-    childPositions = placeChildrenDonutSimple(
-      rootPosition,
-      connectedIds.length,
-      obstacles,
-      minRadius,
+
+    childPositions = placeExpansionFan({
+      parentPos: rootPosition,
+      childCount: connectedIds.length,
       childSize,
-      viewport,
-      2000        // maxRadius
-    );
+      nodeObstacles,
+      edgeObstacles,
+      minRadius,
+      maxRadius: 2000,
+      referenceCenter,
+      viewport
+    });
   } else {
     // Original circular spread algorithm (uses just positions)
-    const existingPositions = obstacles.map(o => o.pos);
+    const existingPositions = nodeObstacles.map(o => o.pos);
     childPositions = circularSpreadSafe(
       rootPosition,
       connectedIds.length,
