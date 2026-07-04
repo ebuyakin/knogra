@@ -36,6 +36,18 @@ export class Graph {
     return getLinkToAnchor(nodeId, graphStore.nodes, graphStore.edges);
   }
 
+  /** Deduplicated, sorted union of all tags across every node in the graph. */
+  getAllTags(): string[] {
+    const tags = new Set<string>();
+    for (const node of graphStore.nodes) {
+      for (const tag of node.tags ?? []) {
+        const trimmed = tag.trim();
+        if (trimmed) tags.add(trimmed);
+      }
+    }
+    return [...tags].sort((a, b) => a.localeCompare(b));
+  }
+
   getGraphStatistics(): GraphStatistics {
     return buildGraphStatistics({
       nodes: graphStore.nodes,

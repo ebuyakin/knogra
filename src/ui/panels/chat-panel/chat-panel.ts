@@ -305,9 +305,9 @@ export class ChatPanel {
   };
 
   /** Bound handler for double-click edit on notes */
-  #noteEditHandler: NoteEditHandler = (noteEl, messageId, content) => {
+  #noteEditHandler: NoteEditHandler = (noteEl, messageId, content, attachments) => {
     editNote(
-      noteEl, messageId, content,
+      noteEl, messageId, content, attachments,
       this.#messagesContainer,
       chatSession.getCurrentNodeId(),
       this.#messageContextMenuHandler,
@@ -327,7 +327,7 @@ export class ChatPanel {
       ),
       onEditNote: (messageEl, messageId) => {
         const msg = chatSession.getMessages().find(m => m.id === messageId);
-        if (msg) this.#noteEditHandler(messageEl, messageId, msg.content);
+        if (msg) this.#noteEditHandler(messageEl, messageId, msg.content, msg.attachments ?? []);
       },
     };
   }

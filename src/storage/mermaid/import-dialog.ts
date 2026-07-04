@@ -15,6 +15,9 @@ export interface MermaidImportSelection {
   allLevels: boolean;
   layout: 'radial' | 'top-down' | 'left-right';
   importEquations: boolean;
+  importTags: boolean;
+  sceneGeneration: 'anchor' | 'hubs' | 'all';
+  subSceneDepth: number;
   edgeLabelMappings: MermaidEdgeLabelMapping[];
 }
 
@@ -25,6 +28,9 @@ export function showMermaidImportSelectionDialog(
   const defaultAnchorId = nodes[0]?.mermaidId;
   const edgeLabelRows = getEdgeLabelRows(parsed);
   const equationMetadataStatus = getEquationMetadataStatus(parsed);
+  const tagMetadataStatus = getTagMetadataStatus(parsed);
+  const hubNodeCount = countHubNodes(parsed);
+  const totalNodeCount = parsed.nodes.length;
 
   if (!defaultAnchorId) {
     return Promise.resolve(null);
@@ -35,7 +41,7 @@ export function showMermaidImportSelectionDialog(
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:center;justify-content:center;';
 
     const dialog = document.createElement('div');
-    dialog.style.cssText = 'position:absolute;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:min(1040px,94vw);max-height:88vh;color:#e6edf3;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;flex-direction:column;gap:16px;';
+    dialog.style.cssText = 'position:absolute;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:min(980px,92vw);max-height:88vh;overflow-y:auto;color:#e6edf3;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;flex-direction:column;gap:16px;';
 
     const cyContainer = document.getElementById('cy');
     const rect = cyContainer?.getBoundingClientRect();
@@ -57,7 +63,7 @@ export function showMermaidImportSelectionDialog(
     `;
 
     const body = document.createElement('div');
-    body.style.cssText = 'display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,0.75fr);gap:16px;min-height:0;';
+    body.style.cssText = 'display:grid;grid-template-columns:minmax(0,0.9fr) minmax(440px,1fr);gap:16px;min-height:0;flex-shrink:0;';
 
     const anchorPanel = document.createElement('div');
     anchorPanel.style.cssText = 'display:flex;flex-direction:column;gap:10px;min-height:0;';
@@ -68,7 +74,7 @@ export function showMermaidImportSelectionDialog(
     anchorPanel.appendChild(anchorLabel);
 
     const list = document.createElement('div');
-    list.style.cssText = 'border:1px solid #30363d;border-radius:6px;padding:8px;overflow:auto;max-height:52vh;background:#0d1117;';
+    list.style.cssText = 'border:1px solid #30363d;border-radius:6px;padding:8px;overflow:auto;max-height:30vh;background:#0d1117;';
 
     nodes.forEach((node, index) => {
       const row = document.createElement('label');
@@ -108,7 +114,15 @@ export function showMermaidImportSelectionDialog(
     depthInput.min = '0';
     depthInput.step = '1';
     depthInput.value = '1';
-    depthInput.style.cssText = 'width:120px;padding:8px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;';
+    depthInput.style.cssText = 'width:110px;flex-shrink:0;padding:8px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;';
+
+    const sceneSizeStatus = document.createElement('div');
+    sceneSizeStatus.style.cssText = 'flex:1;display:flex;align-items:center;padding:8px 12px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#8b949e;line-height:1.4;font-size:12px;font-weight:400;';
+
+    const depthRow = document.createElement('div');
+    depthRow.style.cssText = 'display:flex;align-items:stretch;gap:12px;';
+    depthRow.appendChild(depthInput);
+    depthRow.appendChild(sceneSizeStatus);
 
     const depthHint = document.createElement('div');
     depthHint.textContent = '0 = origin only, 1 = origin + direct connections, 2 = one more hop, and so on.';
@@ -127,7 +141,7 @@ export function showMermaidImportSelectionDialog(
     allLevelsLabel.appendChild(allLevelsInput);
     allLevelsLabel.appendChild(allLevelsText);
 
-    depthLabel.appendChild(depthInput);
+    depthLabel.appendChild(depthRow);
     depthPanel.appendChild(depthLabel);
     depthPanel.appendChild(allLevelsLabel);
     depthPanel.appendChild(depthHint);
@@ -145,7 +159,7 @@ export function showMermaidImportSelectionDialog(
     `;
 
     const layoutHint = document.createElement('div');
-    layoutHint.textContent = 'Radial is best for graph-like maps. Flow layouts follow Mermaid edge direction from the origin.';
+    layoutHint.textContent = 'Radial suits graph-like maps; flow layouts follow Mermaid edge direction.';
     layoutHint.style.cssText = 'color:#8b949e;line-height:1.5;font-size:12px;';
 
     layoutLabel.appendChild(layoutSelect);
@@ -173,16 +187,70 @@ export function showMermaidImportSelectionDialog(
     equationLabel.appendChild(equationText);
     depthPanel.appendChild(equationLabel);
 
-    const sceneSizeStatus = document.createElement('div');
-    sceneSizeStatus.style.cssText = 'padding:10px 12px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#8b949e;line-height:1.5;font-size:12px;';
-    depthPanel.appendChild(sceneSizeStatus);
+    const canImportTags = tagMetadataStatus.total > 0;
+
+    const tagLabel = document.createElement('label');
+    tagLabel.style.cssText = `display:flex;align-items:flex-start;gap:8px;color:${canImportTags ? '#c9d1d9' : '#8b949e'};cursor:${canImportTags ? 'pointer' : 'not-allowed'};font-size:13px;margin-top:4px;`;
+
+    const tagInput = document.createElement('input');
+    tagInput.type = 'checkbox';
+    tagInput.disabled = !canImportTags;
+    tagInput.style.accentColor = '#58a6ff';
+    tagInput.style.marginTop = '2px';
+    tagInput.style.opacity = canImportTags ? '1' : '0.5';
+
+    const tagText = document.createElement('span');
+    tagText.textContent = canImportTags
+      ? `Import tags (${tagMetadataStatus.matched} matched${tagMetadataStatus.unmatched > 0 ? `, ${tagMetadataStatus.unmatched} unmatched` : ''})`
+      : 'Import tags (none found)';
+
+    tagLabel.appendChild(tagInput);
+    tagLabel.appendChild(tagText);
+    depthPanel.appendChild(tagLabel);
+
+    const sceneGenLabel = document.createElement('label');
+    sceneGenLabel.style.cssText = 'display:flex;flex-direction:column;gap:6px;color:#c9d1d9;font-size:13px;margin-top:12px;';
+    const sceneGenTitle = document.createElement('span');
+    sceneGenTitle.textContent = 'Generate scenes for';
+    const sceneGenSelect = document.createElement('select');
+    sceneGenSelect.style.cssText = 'width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;';
+    sceneGenSelect.innerHTML = `
+      <option value="anchor">Anchor only</option>
+      <option value="hubs">All hub nodes (${hubNodeCount} scene${hubNodeCount === 1 ? '' : 's'})</option>
+      <option value="all">All nodes (${totalNodeCount} scene${totalNodeCount === 1 ? '' : 's'})</option>
+    `;
+    sceneGenLabel.appendChild(sceneGenTitle);
+    sceneGenLabel.appendChild(sceneGenSelect);
+    depthPanel.appendChild(sceneGenLabel);
+
+    const subDepthLabel = document.createElement('label');
+    subDepthLabel.style.cssText = 'display:flex;flex-direction:column;gap:6px;color:#c9d1d9;font-size:13px;margin-top:8px;';
+    const subDepthTitle = document.createElement('span');
+    subDepthTitle.textContent = 'Levels per generated scene';
+    const subDepthSelect = document.createElement('select');
+    subDepthSelect.style.cssText = 'width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;';
+    subDepthSelect.innerHTML = `
+      <option value="1">1 level (direct neighbours)</option>
+      <option value="2">2 levels</option>
+    `;
+    subDepthLabel.appendChild(subDepthTitle);
+    subDepthLabel.appendChild(subDepthSelect);
+    depthPanel.appendChild(subDepthLabel);
+
+    const syncSceneGenControls = (): void => {
+      const disabled = sceneGenSelect.value === 'anchor';
+      subDepthSelect.disabled = disabled;
+      subDepthLabel.style.opacity = disabled ? '0.5' : '1';
+    };
+    sceneGenSelect.addEventListener('change', syncSceneGenControls);
+    syncSceneGenControls();
 
     body.appendChild(anchorPanel);
     body.appendChild(depthPanel);
     dialog.appendChild(body);
 
     const edgeTypePanel = document.createElement('div');
-    edgeTypePanel.style.cssText = 'display:flex;flex-direction:column;gap:8px;min-height:0;';
+    edgeTypePanel.style.cssText = 'display:flex;flex-direction:column;gap:8px;min-height:0;flex-shrink:0;';
 
     const edgeTypeTitle = document.createElement('div');
     edgeTypeTitle.textContent = 'Map Mermaid edge labels to Knogra edge types';
@@ -345,6 +413,9 @@ export function showMermaidImportSelectionDialog(
         allLevels: allLevelsInput.checked,
         layout: layoutSelect.value as MermaidImportSelection['layout'],
         importEquations: equationInput.checked && !equationInput.disabled,
+        importTags: tagInput.checked && !tagInput.disabled,
+        sceneGeneration: sceneGenSelect.value as MermaidImportSelection['sceneGeneration'],
+        subSceneDepth: subDepthSelect.value === '2' ? 2 : 1,
         edgeLabelMappings: getEdgeLabelMappings(),
       });
     });
@@ -375,6 +446,31 @@ function getEquationMetadataStatus(parsed: ParsedMermaidGraph): { total: number;
   }
 
   return { total, matched, unmatched: total - matched };
+}
+
+function getTagMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matched: number; unmatched: number } {
+  const nodeIds = new Set(parsed.nodes.map(node => node.mermaidId));
+  const total = parsed.tagsByMermaidId.size;
+  let matched = 0;
+
+  for (const mermaidId of parsed.tagsByMermaidId.keys()) {
+    if (nodeIds.has(mermaidId)) matched += 1;
+  }
+
+  return { total, matched, unmatched: total - matched };
+}
+
+function countHubNodes(parsed: ParsedMermaidGraph): number {
+  const degree = new Map<string, number>(parsed.nodes.map(node => [node.mermaidId, 0]));
+  for (const edge of parsed.edges) {
+    degree.set(edge.sourceMermaidId, (degree.get(edge.sourceMermaidId) ?? 0) + 1);
+    degree.set(edge.targetMermaidId, (degree.get(edge.targetMermaidId) ?? 0) + 1);
+  }
+  let count = 0;
+  for (const value of degree.values()) {
+    if (value >= 2) count += 1;
+  }
+  return count;
 }
 
 function getEdgeLabelRows(parsed: ParsedMermaidGraph): EdgeLabelRow[] {

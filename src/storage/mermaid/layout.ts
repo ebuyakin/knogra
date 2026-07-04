@@ -13,24 +13,25 @@ interface EstimatedNodeFootprint {
   height: number;
 }
 
-interface RadialLayerGeometry {
-  radius: number;
-  maxNodeRadius: number;
-}
-
 interface OrderedMermaidLayer {
   layer: number;
   nodes: ParsedMermaidNode[];
   groupKeys: Array<number | null>;
 }
 
-const RADIAL_BASE_LAYER_SPACING = 180;
-const RADIAL_LAYER_MARGIN = 30;
-const RADIAL_CENTER_LAYER_MARGIN = 150;
-const RADIAL_SIBLING_MARGIN = -8;
-const RADIAL_COLLISION_RADIUS_SCALE = 0.65;
-const RADIAL_ELLIPSE_X_SCALE = 1.35;
-const RADIAL_ELLIPSE_Y_SCALE = 0.9;
+interface SectorTreeNode {
+  mermaidId: string;
+  depth: number;
+  children: SectorTreeNode[];
+  leafWeight: number;
+  /** Half-diagonal of the node's estimated footprint. */
+  footprintRadius: number;
+  angleStart: number;
+  angleEnd: number;
+}
+
+const SECTOR_RING_SPACING = 220;
+const SECTOR_SIBLING_GAP = 40;
 const DEFAULT_NODE_ASPECT = 16 / 9;
 const DEFAULT_NODE_FONT_SIZE = 14;
 const DEFAULT_NODE_MIN_WIDTH = 100;
@@ -51,41 +52,175 @@ export function layoutMermaidSceneNodes(
     return layoutMermaidSceneNodesFlow(nodes, edges, centralMermaidId, layout, idByMermaidId);
   }
 
-  const distances = computeUndirectedDistances(nodes, edges, centralMermaidId);
-  const finiteDistances = [...distances.values()].filter(distance => Number.isFinite(distance));
-  const disconnectedDistance = (Math.max(0, ...finiteDistances) || 1) + 1;
-  const layers = new Map<number, ParsedMermaidNode[]>();
+  return layoutMermaidSceneNodesRadial(nodes, edges, centralMermaidId, idByMermaidId);
+}
 
-  for (const node of nodes) {
-    const distance = distances.get(node.mermaidId) ?? disconnectedDistance;
-    const layer = Number.isFinite(distance) ? distance : disconnectedDistance;
-    const existing = layers.get(layer) ?? [];
-    existing.push(node);
-    layers.set(layer, existing);
-  }
-
+function layoutMermaidSceneNodesRadial(
+  nodes: ParsedMermaidNode[],
+  edges: ParsedMermaidEdge[],
+  centralMermaidId: string,
+  idByMermaidId: Map<string, NodeId>
+): Scene['nodes'] {
+  const positions = computeRadialSectorPositions(nodes, edges, centralMermaidId);
   const sceneNodes: Scene['nodes'] = {};
-  let previousLayerGeometry: RadialLayerGeometry | undefined;
-  for (const { layer, nodes: layerNodes } of orderMermaidLayersByCrossLayerNeighbors(layers, edges)) {
-    const nodeRadii = layerNodes.map(node => getCollisionRadius(estimateDefaultNodeFootprint(node)));
-    const layerRadius = calculateLayerRadius(layer, nodeRadii, previousLayerGeometry);
-    const positions = positionsForLayer(layerRadius, nodeRadii);
-    previousLayerGeometry = {
-      radius: layerRadius,
-      maxNodeRadius: Math.max(0, ...nodeRadii),
+  for (const node of nodes) {
+    const nodeId = idByMermaidId.get(node.mermaidId);
+    if (!nodeId) continue;
+    const position = positions.get(node.mermaidId);
+    if (!position) continue;
+    sceneNodes[nodeId] = {
+      position,
+      scale: 1.0,
+      design: { id: 'default-node', params: {} },
     };
-    layerNodes.forEach((node, index) => {
-      const nodeId = idByMermaidId.get(node.mermaidId);
-      if (!nodeId) return;
-      sceneNodes[nodeId] = {
-        position: positions[index],
-        scale: 1.0,
-        design: { id: 'default-node', params: {} },
-      };
-    });
+  }
+  return sceneNodes;
+}
+
+/**
+ * Recursive angular sector allocation over a BFS spanning tree rooted at the
+ * central node. Each subtree stays inside its parent's wedge (sized by leaf
+ * count), keeping children near their parent and edges short.
+ *
+ * Intentionally parallel to `src/features/autolayout/layout.ts`. The two are
+ * independent copies: this one estimates footprints from title text (nodes do
+ * not exist yet at import time), while the feature reads real rendered
+ * footprints of live nodes.
+ */
+function computeRadialSectorPositions(
+  nodes: ParsedMermaidNode[],
+  edges: ParsedMermaidEdge[],
+  centralMermaidId: string
+): Map<string, Position> {
+  const positions = new Map<string, Position>();
+  if (nodes.length === 0) return positions;
+  const nodeById = new Map(nodes.map(node => [node.mermaidId, node]));
+  if (!nodeById.has(centralMermaidId)) return positions;
+
+  const root = buildSectorForest(nodes, edges, centralMermaidId, nodeById);
+  computeSectorLeafWeights(root);
+  assignSectorAngles(root, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI);
+  const ringRadii = computeSectorRingRadii(root);
+  placeSectorNodes(root, ringRadii, positions);
+  return positions;
+}
+
+function buildSectorForest(
+  nodes: ParsedMermaidNode[],
+  edges: ParsedMermaidEdge[],
+  centralMermaidId: string,
+  nodeById: Map<string, ParsedMermaidNode>
+): SectorTreeNode {
+  const adjacency = new Map<string, string[]>();
+  for (const node of nodes) adjacency.set(node.mermaidId, []);
+  for (const edge of [...edges].sort((left, right) => left.order - right.order)) {
+    if (edge.sourceMermaidId === edge.targetMermaidId) continue;
+    if (!adjacency.has(edge.sourceMermaidId) || !adjacency.has(edge.targetMermaidId)) continue;
+    adjacency.get(edge.sourceMermaidId)!.push(edge.targetMermaidId);
+    adjacency.get(edge.targetMermaidId)!.push(edge.sourceMermaidId);
   }
 
-  return sceneNodes;
+  const makeTreeNode = (mermaidId: string, depth: number): SectorTreeNode => ({
+    mermaidId,
+    depth,
+    children: [],
+    leafWeight: 0,
+    footprintRadius: sectorFootprintRadius(estimateDefaultNodeFootprint(nodeById.get(mermaidId)!)),
+    angleStart: 0,
+    angleEnd: 0,
+  });
+
+  const visited = new Set<string>();
+  const growSubtree = (subtreeRoot: SectorTreeNode): void => {
+    const queue: SectorTreeNode[] = [subtreeRoot];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const neighborId of adjacency.get(current.mermaidId) ?? []) {
+        if (visited.has(neighborId)) continue;
+        visited.add(neighborId);
+        const child = makeTreeNode(neighborId, current.depth + 1);
+        current.children.push(child);
+        queue.push(child);
+      }
+    }
+  };
+
+  const root = makeTreeNode(centralMermaidId, 0);
+  visited.add(centralMermaidId);
+  growSubtree(root);
+
+  // Attach any node not reachable from the centre as its own depth-1 subtree.
+  for (const node of nodes) {
+    if (visited.has(node.mermaidId)) continue;
+    visited.add(node.mermaidId);
+    const componentRoot = makeTreeNode(node.mermaidId, 1);
+    root.children.push(componentRoot);
+    growSubtree(componentRoot);
+  }
+
+  return root;
+}
+
+function sectorFootprintRadius(footprint: EstimatedNodeFootprint): number {
+  return Math.sqrt((footprint.width / 2) ** 2 + (footprint.height / 2) ** 2);
+}
+
+function computeSectorLeafWeights(node: SectorTreeNode): number {
+  if (node.children.length === 0) {
+    node.leafWeight = 1;
+    return 1;
+  }
+  let sum = 0;
+  for (const child of node.children) sum += computeSectorLeafWeights(child);
+  node.leafWeight = sum;
+  return sum;
+}
+
+function assignSectorAngles(node: SectorTreeNode, start: number, end: number): void {
+  node.angleStart = start;
+  node.angleEnd = end;
+  if (node.children.length === 0) return;
+  const totalWeight = node.children.reduce((sum, child) => sum + child.leafWeight, 0) || 1;
+  const span = end - start;
+  let cursor = start;
+  for (const child of node.children) {
+    const childSpan = span * (child.leafWeight / totalWeight);
+    assignSectorAngles(child, cursor, cursor + childSpan);
+    cursor += childSpan;
+  }
+}
+
+function computeSectorRingRadii(root: SectorTreeNode): number[] {
+  const nodesByDepth: SectorTreeNode[][] = [];
+  const walk = (node: SectorTreeNode): void => {
+    (nodesByDepth[node.depth] ??= []).push(node);
+    node.children.forEach(walk);
+  };
+  walk(root);
+
+  const radii: number[] = [0];
+  for (let depth = 1; depth < nodesByDepth.length; depth++) {
+    let required = radii[depth - 1] + SECTOR_RING_SPACING;
+    for (const node of nodesByDepth[depth]) {
+      const angularWidth = node.angleEnd - node.angleStart;
+      if (angularWidth <= 1e-6) continue;
+      const arcNeeded = 2 * node.footprintRadius + SECTOR_SIBLING_GAP;
+      const radiusForFit = arcNeeded / angularWidth;
+      if (radiusForFit > required) required = radiusForFit;
+    }
+    radii[depth] = Math.ceil(required);
+  }
+  return radii;
+}
+
+function placeSectorNodes(node: SectorTreeNode, ringRadii: number[], out: Map<string, Position>): void {
+  const angle = (node.angleStart + node.angleEnd) / 2;
+  const radius = ringRadii[node.depth] ?? 0;
+  out.set(node.mermaidId, {
+    x: Math.round(Math.cos(angle) * radius),
+    y: Math.round(Math.sin(angle) * radius),
+  });
+  for (const child of node.children) placeSectorNodes(child, ringRadii, out);
 }
 
 function layoutMermaidSceneNodesFlow(
@@ -328,87 +463,6 @@ function wordWrapTitle(title: string, targetWidthPx: number, fontSize: number): 
   }
   if (current) lines.push(current);
   return lines.length > 0 ? lines : [title];
-}
-
-function getCollisionRadius(footprint: EstimatedNodeFootprint): number {
-  const diagonalRadius = Math.sqrt((footprint.width / 2) ** 2 + (footprint.height / 2) ** 2);
-  return diagonalRadius * RADIAL_COLLISION_RADIUS_SCALE;
-}
-
-function calculateLayerRadius(
-  layer: number,
-  nodeRadii: number[],
-  previousLayerGeometry: RadialLayerGeometry | undefined
-): number {
-  if (layer === 0) return 0;
-
-  const maxNodeRadius = Math.max(0, ...nodeRadii);
-  const baseRadius = layer * RADIAL_BASE_LAYER_SPACING;
-  const sameLayerRadius = calculateMinimumCrowdingRadius(nodeRadii);
-  const previousLayerRadius = previousLayerGeometry
-    ? previousLayerGeometry.radius + calculateMinimumLayerGap(previousLayerGeometry, maxNodeRadius)
-    : 0;
-
-  return Math.ceil(Math.max(baseRadius, sameLayerRadius, previousLayerRadius));
-}
-
-function calculateMinimumLayerGap(previousLayerGeometry: RadialLayerGeometry, maxNodeRadius: number): number {
-  const margin = previousLayerGeometry.radius === 0 ? RADIAL_CENTER_LAYER_MARGIN : RADIAL_LAYER_MARGIN;
-  const ellipseScale = previousLayerGeometry.radius === 0
-    ? Math.min(RADIAL_ELLIPSE_X_SCALE, RADIAL_ELLIPSE_Y_SCALE)
-    : 1;
-  return (previousLayerGeometry.maxNodeRadius + maxNodeRadius + margin) / ellipseScale;
-}
-
-function calculateMinimumCrowdingRadius(nodeRadii: number[]): number {
-  if (nodeRadii.length <= 1) return 0;
-
-  let low = Math.max(...nodeRadii) + RADIAL_SIBLING_MARGIN;
-  let high = low;
-  while (getRequiredAngularSpan(nodeRadii, high) > 2 * Math.PI) {
-    high *= 1.5;
-  }
-
-  for (let iteration = 0; iteration < 24; iteration++) {
-    const middle = (low + high) / 2;
-    if (getRequiredAngularSpan(nodeRadii, middle) > 2 * Math.PI) {
-      low = middle;
-    } else {
-      high = middle;
-    }
-  }
-
-  return Math.ceil(high);
-}
-
-function getRequiredAngularSpan(nodeRadii: number[], layerRadius: number): number {
-  return nodeRadii.reduce((sum, nodeRadius) => {
-    const spanRadius = nodeRadius + RADIAL_SIBLING_MARGIN / 2;
-    return sum + 2 * Math.asin(Math.min(1, spanRadius / layerRadius));
-  }, 0);
-}
-
-function positionsForLayer(layerRadius: number, nodeRadii: number[]): Position[] {
-  if (layerRadius === 0) return [{ x: 0, y: 0 }];
-  if (nodeRadii.length === 0) return [];
-
-  const xRadius = layerRadius * RADIAL_ELLIPSE_X_SCALE;
-  const yRadius = layerRadius * RADIAL_ELLIPSE_Y_SCALE;
-
-  const angularSpans = nodeRadii.map(nodeRadius => (
-    2 * Math.asin(Math.min(1, (nodeRadius + RADIAL_SIBLING_MARGIN / 2) / layerRadius))
-  ));
-  const totalSpan = angularSpans.reduce((sum, span) => sum + span, 0);
-  const remainingSpan = Math.max(0, 2 * Math.PI - totalSpan);
-  const gap = remainingSpan / nodeRadii.length;
-  let angle = -Math.PI / 2 - angularSpans[0] / 2;
-
-  return nodeRadii.map((_nodeRadius, index): Position => {
-    angle += (index === 0 ? 0 : angularSpans[index - 1] / 2 + gap) + angularSpans[index] / 2;
-    const x = Math.round(Math.cos(angle) * xRadius);
-    const y = Math.round(Math.sin(angle) * yRadius);
-    return { x, y };
-  });
 }
 
 function positionsForFlowLayer(layer: number, groupKeys: Array<number | null>, layout: 'top-down' | 'left-right'): Position[] {

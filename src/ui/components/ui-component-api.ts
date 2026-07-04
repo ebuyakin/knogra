@@ -16,6 +16,7 @@ import { BackgroundEditor } from './background-editor';
 import { ThemeEditor } from './theme-editor';
 import { QuizPanel } from './quiz-panel';
 import { ContextMenu } from './context-menu';
+import { PasteStyleDialog } from './paste-style-dialog';
 import { AnchorLinkTooltip } from './anchor-link-tooltip';
 import { ConnectionBadgeManager } from './connection-badge';
 import { FoldBadgeManager } from './fold-badge';
@@ -37,6 +38,7 @@ export class UIComponentAPI {
   readonly quizPanel: QuizPanel;
   readonly anchorLinkTooltip: AnchorLinkTooltip;
   readonly contextMenu: ContextMenu;
+  readonly pasteStyleDialog: PasteStyleDialog;
   readonly badgeManager: ConnectionBadgeManager;
   readonly foldBadgeManager: FoldBadgeManager;
   readonly edgeCreationMode: EdgeCreationMode;
@@ -58,6 +60,7 @@ export class UIComponentAPI {
     this.quizPanel = new QuizPanel(features, container);
     this.anchorLinkTooltip = new AnchorLinkTooltip(cy, container);
     this.edgeCreationMode = new EdgeCreationMode(cy, container, features);
+    this.pasteStyleDialog = new PasteStyleDialog(features);
 
     // Create context menu (depends on editors)
     this.contextMenu = new ContextMenu(
@@ -74,7 +77,8 @@ export class UIComponentAPI {
       this.backgroundEditor,
       this.themeEditor,
       this.quizPanel,
-      this.anchorLinkTooltip
+      this.anchorLinkTooltip,
+      this.pasteStyleDialog
     );
 
     // Create badge managers

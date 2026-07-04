@@ -12,6 +12,23 @@ export type MessageId = string;
 /** Origin of a chat message */
 export type MessageSource = 'ai' | 'note' | 'tutorial';
 
+/** MIME types accepted for note image attachments */
+export type NoteImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp';
+
+/**
+ * Image attached to a note. Stored inline as a base64 data URL.
+ * Local-only: attachments are never included in AI requests.
+ */
+export interface NoteImageAttachment {
+  id: string;
+  type: 'image';
+  mimeType: NoteImageMimeType;
+  name: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 /** Individual message in a conversation */
 export interface ChatMessage {
   id: MessageId;
@@ -19,6 +36,8 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   source?: MessageSource;
+  /** Note image attachments (notes only in current version) */
+  attachments?: NoteImageAttachment[];
 }
 
 /** Full conversation associated with a node */

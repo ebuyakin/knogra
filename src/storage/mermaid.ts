@@ -38,11 +38,6 @@ interface ImportedEdgeRecord {
   edge: Edge;
 }
 
-interface Position {
-  x: number;
-  y: number;
-}
-
 export async function exportMermaidGraph(): Promise<void> {
   const graph = await exportGraphData();
   const nodes = graph.nodes.filter(isNode);
@@ -93,23 +88,18 @@ export async function showImportMermaidDialog(): Promise<void> {
 function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImportSelection): ImportedGraphData {
   const now = new Date();
   const prefix = `mermaid-${Date.now().toString(36)}`;
-  const sceneSlice = getMermaidSceneSlice(
-    parsed,
-    selection.anchorMermaidId,
-    selection.depth,
-    selection.allLevels
-  );
   const idByMermaidId = new Map<string, NodeId>();
   const edgeTypeImportPlan = createEdgeTypeImportPlan(selection);
 
   const nodes = parsed.nodes.map((node, index): Node => {
     const id = `n-${prefix}-${index + 1}` as NodeId;
     const equation = selection.importEquations ? parsed.equationsByMermaidId.get(node.mermaidId)?.trim() : '';
+    const tags = selection.importTags ? parsed.tagsByMermaidId.get(node.mermaidId) ?? [] : [];
     idByMermaidId.set(node.mermaidId, id);
     return {
       id,
       title: node.title,
-      tags: [],
+      tags: [...tags],
       properties: equation ? { equation } : {},
       createdAt: now,
       updatedAt: now,
@@ -145,56 +135,103 @@ function createImportedGraph(parsed: ParsedMermaidGraph, selection: MermaidImpor
 
   const edges = edgeRecords.map(record => record.edge);
 
-  const centralNodeId = idByMermaidId.get(selection.anchorMermaidId);
-  if (!centralNodeId) throw new Error('Could not choose a central node.');
-
-  const sceneNodes = parsed.nodes.filter(node => sceneSlice.nodeIds.has(node.mermaidId));
-  const sceneEdges = edgeRecords.filter((_record, index) => sceneSlice.edgeIndexes.has(index));
-  const sceneMermaidEdges = parsed.edges.filter((_edge, index) => sceneSlice.edgeIndexes.has(index));
-  const sceneNodeRecords = layoutMermaidSceneNodes(
-    sceneNodes,
-    sceneMermaidEdges,
-    selection.anchorMermaidId,
-    selection.layout,
-    idByMermaidId
-  );
-
   const defaultDesignId = getSetting('node.defaultDesign');
   const equationDesignId = getSetting('node.equationDesign');
-  for (const node of sceneNodes) {
-    const nodeId = idByMermaidId.get(node.mermaidId);
-    if (!nodeId) continue;
 
-    const sceneNode = sceneNodeRecords[nodeId];
-    if (!sceneNode) continue;
+  const buildScene = (
+    centralMermaidId: string,
+    depth: number,
+    allLevels: boolean,
+    sceneId: SceneId,
+    title: string
+  ): Scene | null => {
+    const sceneCentralNodeId = idByMermaidId.get(centralMermaidId);
+    if (!sceneCentralNodeId) return null;
 
-    const hasImportedEquation = selection.importEquations && Boolean(parsed.equationsByMermaidId.get(node.mermaidId)?.trim());
-    sceneNode.design = {
-      id: hasImportedEquation ? equationDesignId : defaultDesignId,
-      params: {},
+    const slice = getMermaidSceneSlice(parsed, centralMermaidId, depth, allLevels);
+    if (slice.overLimit) return null;
+
+    const sceneNodes = parsed.nodes.filter(node => slice.nodeIds.has(node.mermaidId));
+    const sceneEdges = edgeRecords.filter((_record, index) => slice.edgeIndexes.has(index));
+    const sceneMermaidEdges = parsed.edges.filter((_edge, index) => slice.edgeIndexes.has(index));
+    const sceneNodeRecords = layoutMermaidSceneNodes(
+      sceneNodes,
+      sceneMermaidEdges,
+      centralMermaidId,
+      selection.layout,
+      idByMermaidId
+    );
+
+    for (const node of sceneNodes) {
+      const nodeId = idByMermaidId.get(node.mermaidId);
+      if (!nodeId) continue;
+
+      const sceneNode = sceneNodeRecords[nodeId];
+      if (!sceneNode) continue;
+
+      const hasImportedEquation = selection.importEquations && Boolean(parsed.equationsByMermaidId.get(node.mermaidId)?.trim());
+      sceneNode.design = {
+        id: hasImportedEquation ? equationDesignId : defaultDesignId,
+        params: {},
+      };
+    }
+
+    return {
+      id: sceneId,
+      title,
+      description: `Imported from a Mermaid flowchart. Central: ${centralMermaidId}. Depth: ${depth}. Layout: ${selection.layout}.`,
+      centralNodeId: sceneCentralNodeId,
+      nodes: sceneNodeRecords,
+      edges: Object.fromEntries(sceneEdges.map(record => [
+        record.edge.id,
+        { design: { id: 'default', params: {} } },
+      ])),
+      backgroundImages: [],
+      themeId: 'dark',
+      viewport: computeSceneFitViewport(sceneNodeRecords),
+      foldedNodes: {},
+      createdAt: now,
+      updatedAt: now,
     };
-  }
-
-  const sceneId = `scene-${prefix}` as SceneId;
-  const scene: Scene = {
-    id: sceneId,
-    title: 'Mermaid import',
-    description: `Imported from a Mermaid flowchart. Anchor: ${selection.anchorMermaidId}. Depth: ${selection.depth}. Layout: ${selection.layout}.`,
-    centralNodeId,
-    nodes: sceneNodeRecords,
-    edges: Object.fromEntries(sceneEdges.map(record => [
-      record.edge.id,
-      { design: { id: 'default', params: {} } },
-    ])),
-    backgroundImages: [],
-    themeId: 'dark',
-    viewport: { zoom: 1, pan: getCyContainerCenter() },
-    foldedNodes: {},
-    createdAt: now,
-    updatedAt: now,
   };
 
-  return { nodes, edges, edgeTypes: edgeTypeImportPlan.edgeTypes, scenes: [scene], sceneId };
+  const anchorSceneId = `scene-${prefix}` as SceneId;
+  const anchorScene = buildScene(
+    selection.anchorMermaidId,
+    selection.depth,
+    selection.allLevels,
+    anchorSceneId,
+    'Mermaid import'
+  );
+  if (!anchorScene) throw new Error('Could not choose a central node.');
+
+  const scenes: Scene[] = [anchorScene];
+  const titleByMermaidId = new Map(parsed.nodes.map(node => [node.mermaidId, node.title]));
+  for (const centralMermaidId of selectSceneCentralIds(parsed, selection)) {
+    if (centralMermaidId === selection.anchorMermaidId) continue;
+    const scene = buildScene(
+      centralMermaidId,
+      selection.subSceneDepth,
+      false,
+      `${anchorSceneId}-${centralMermaidId}` as SceneId,
+      titleByMermaidId.get(centralMermaidId) ?? 'Mermaid scene'
+    );
+    if (scene) scenes.push(scene);
+  }
+
+  return { nodes, edges, edgeTypes: edgeTypeImportPlan.edgeTypes, scenes, sceneId: anchorSceneId };
+}
+
+function selectSceneCentralIds(parsed: ParsedMermaidGraph, selection: MermaidImportSelection): string[] {
+  if (selection.sceneGeneration === 'anchor') return [];
+  if (selection.sceneGeneration === 'all') return parsed.nodes.map(node => node.mermaidId);
+
+  const degree = new Map<string, number>(parsed.nodes.map(node => [node.mermaidId, 0]));
+  for (const edge of parsed.edges) {
+    degree.set(edge.sourceMermaidId, (degree.get(edge.sourceMermaidId) ?? 0) + 1);
+    degree.set(edge.targetMermaidId, (degree.get(edge.targetMermaidId) ?? 0) + 1);
+  }
+  return parsed.nodes.filter(node => (degree.get(node.mermaidId) ?? 0) >= 2).map(node => node.mermaidId);
 }
 
 function createEdgeTypeImportPlan(selection: MermaidImportSelection): {
@@ -331,12 +368,57 @@ function downloadText(content: string, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function getCyContainerCenter(): Position {
+/** Approximate half-extent (graph units) of a node, used to keep node bodies
+ *  clear of the viewport edge when fitting. Nodes are laid out by centre. */
+const NODE_FIT_MARGIN = 80;
+/** Cap zoom-in so small scenes fill the screen without ballooning node sizes. */
+const FIT_MAX_ZOOM = 1.5;
+
+function getCyContainerSize(): { w: number; h: number } {
   const element = document.getElementById('cy');
   return {
-    x: (element?.clientWidth ?? window.innerWidth) / 2,
-    y: (element?.clientHeight ?? window.innerHeight) / 2,
+    w: element?.clientWidth ?? window.innerWidth,
+    h: element?.clientHeight ?? window.innerHeight,
   };
+}
+
+/**
+ * Compute a fit-to-content viewport purely from the laid-out node positions and
+ * the current container size — no Cytoscape instance required. Mirrors what
+ * `cy.fit(padding)` does: focal point at the content centre, zoom sized so the
+ * padded content fits the container. Zoom-in is capped by FIT_MAX_ZOOM.
+ */
+function computeSceneFitViewport(records: Scene['nodes']): Scene['viewport'] {
+  const { w, h } = getCyContainerSize();
+  const padding = getSetting('transition.openFitPadding');
+  const entries = Object.values(records);
+
+  if (entries.length === 0) {
+    return { zoom: 1, pan: { x: w / 2, y: h / 2 }, focalPoint: { x: 0, y: 0 } };
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const { position, scale } of entries) {
+    const margin = NODE_FIT_MARGIN * (scale || 1);
+    minX = Math.min(minX, position.x - margin);
+    maxX = Math.max(maxX, position.x + margin);
+    minY = Math.min(minY, position.y - margin);
+    maxY = Math.max(maxY, position.y + margin);
+  }
+
+  const focalPoint = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+  const bboxW = Math.max(maxX - minX, 1);
+  const bboxH = Math.max(maxY - minY, 1);
+  const availW = Math.max(w - 2 * padding, 1);
+  const availH = Math.max(h - 2 * padding, 1);
+  const zoom = Math.min(availW / bboxW, availH / bboxH, FIT_MAX_ZOOM);
+  const safeZoom = zoom > 0 && Number.isFinite(zoom) ? zoom : 1;
+  const pan = { x: w / 2 - focalPoint.x * safeZoom, y: h / 2 - focalPoint.y * safeZoom };
+
+  return { zoom: safeZoom, pan, focalPoint };
 }
 
 function isNode(value: unknown): value is Node { const node = value as Partial<Node>; return typeof node.id === 'string' && typeof node.title === 'string'; }

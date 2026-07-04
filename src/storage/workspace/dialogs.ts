@@ -148,6 +148,73 @@ export function showImportWorkspaceDialog(hasExistingData: boolean): Promise<Imp
 }
 
 /**
+ * Ask whether to scale the imported graph to fit the current screen. Shown only
+ * when the graph was authored on a meaningfully different screen size. Resolves
+ * `true` if the user accepts the rescale, `false` to keep the authored zoom.
+ */
+export function showScaleToFitDialog(): Promise<boolean> {
+  return new Promise(resolve => {
+    const cyContainer = document.getElementById('cy');
+    const rect = cyContainer?.getBoundingClientRect();
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000;
+      display: flex; align-items: center; justify-content: center;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position: relative;
+      left: ${rect ? (rect.left + rect.width / 2 - window.innerWidth / 2) : 0}px;
+      top: ${rect ? (rect.top + rect.height / 2 - window.innerHeight / 2) : 0}px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 24px; max-width: 420px; color: #e6edf3; font-size: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin:0 0 12px; font-size:16px; font-weight:600;">Scale to your screen?</h3>
+      <p style="margin:0 0 20px; color:#8b949e; line-height:1.5;">
+        This graph was designed for a different screen size. Scaling it to fit
+        keeps every scene framed the way the author intended. You can always
+        adjust later with <strong style="color:#c9d1d9; white-space:nowrap;">Shift+0</strong>,
+        or use the <strong style="color:#c9d1d9;">Zoom</strong> item in the
+        right-click menu for more detailed, flexible scaling.
+      </p>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="sf-keep" style="padding:6px 16px; border-radius:6px; border:1px solid #30363d;
+          background:none; color:#c9d1d9; cursor:pointer; font-size:13px;">Keep original</button>
+        <button id="sf-ok" style="padding:6px 16px; border-radius:6px; border:none;
+          background:#58a6ff; color:#fff; cursor:pointer; font-size:13px; font-weight:600;">Scale to fit</button>
+      </div>
+    `;
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    const cleanup = (): void => { overlay.remove(); };
+
+    dialog.querySelector('#sf-keep')?.addEventListener('click', () => {
+      cleanup();
+      resolve(false);
+    });
+
+    dialog.querySelector('#sf-ok')?.addEventListener('click', () => {
+      cleanup();
+      resolve(true);
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        cleanup();
+        resolve(false);
+      }
+    });
+  });
+}
+
+/**
  * Show a non-blocking error dialog listing validation issues,
  * with a Copy button so the user can paste and analyze the full list.
  * Returns true if the user chooses to proceed, false to cancel.

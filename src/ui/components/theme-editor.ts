@@ -12,10 +12,16 @@ import '../../styles/theme-editor.css';
 // THEME EDITOR (Picker Pattern)
 // =============================================================================
 
+export interface ThemeEditorResult {
+  themeId: string;
+  /** 'current' applies to the active scene only; 'all' applies workspace-wide. */
+  scope: 'current' | 'all';
+}
+
 export class ThemeEditor {
   #overlay: HTMLDivElement | null = null;
   #modal: HTMLDivElement | null = null;
-  #resolve: ((themeId: string | null) => void) | null = null;
+  #resolve: ((result: ThemeEditorResult | null) => void) | null = null;
   #selectedThemeId: string = 'dark';
   #originalThemeId: string = 'dark';
   #isDragging = false;
@@ -30,9 +36,9 @@ export class ThemeEditor {
    * Show the theme editor
    * @param currentThemeId - The current theme ID for the scene
    * @param containerRect - Graph viewport bounds for centering
-   * @returns Selected themeId or null if cancelled/unchanged
+   * @returns The chosen theme and scope, or null if cancelled/unchanged
    */
-  show(currentThemeId: string, containerRect: DOMRect): Promise<string | null> {
+  show(currentThemeId: string, containerRect: DOMRect): Promise<ThemeEditorResult | null> {
     return new Promise((resolve) => {
       this.#resolve = resolve;
       
@@ -302,11 +308,19 @@ export class ThemeEditor {
     cancelBtn.addEventListener('click', () => this.#cancel());
 
     const applyBtn = document.createElement('button');
-    applyBtn.className = 'theme-editor-btn theme-editor-btn-primary';
+    applyBtn.className = 'theme-editor-btn theme-editor-btn-secondary';
     applyBtn.textContent = 'Apply';
+    applyBtn.dataset.tooltip = 'Applies to the current scene only';
     applyBtn.addEventListener('click', () => this.#apply());
 
+    const applyAllBtn = document.createElement('button');
+    applyAllBtn.className = 'theme-editor-btn theme-editor-btn-secondary';
+    applyAllBtn.textContent = 'Apply to all';
+    applyAllBtn.dataset.tooltip = 'Applies to all scenes in the graph';
+    applyAllBtn.addEventListener('click', () => this.#applyAll());
+
     footer.appendChild(cancelBtn);
+    footer.appendChild(applyAllBtn);
     footer.appendChild(applyBtn);
     return footer;
   }
@@ -316,11 +330,20 @@ export class ThemeEditor {
   // ===========================================================================
 
   #apply(): void {
-    // Only return themeId if it changed
-    const result = this.#selectedThemeId !== this.#originalThemeId 
-      ? this.#selectedThemeId 
+    // Only return a result if the theme changed for the current scene.
+    const result: ThemeEditorResult | null = this.#selectedThemeId !== this.#originalThemeId
+      ? { themeId: this.#selectedThemeId, scope: 'current' }
       : null;
-    
+
+    this.#cleanup();
+    this.#resolve?.(result);
+    this.#resolve = null;
+  }
+
+  #applyAll(): void {
+    // Always apply to all scenes, even if it matches the current scene's theme.
+    const result: ThemeEditorResult = { themeId: this.#selectedThemeId, scope: 'all' };
+
     this.#cleanup();
     this.#resolve?.(result);
     this.#resolve = null;

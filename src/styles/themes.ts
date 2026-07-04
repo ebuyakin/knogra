@@ -81,8 +81,8 @@ const DEFAULT_THEME: ColorTheme = {
   },
   edgeStyleSlots: {
     'edge-style-1': makeEdgeStyle('#9aa4af', '#4d5662', '#9aa4af', 2, 0.8),
-    'edge-style-2': makeStrongEdgeStyle('#f0f3f6', '#8b949e', '#f0f3f6', 2, 0.96),
-    'edge-style-3': makeSecondaryEdgeStyle('#c9d1d9', '#6e7681', '#c9d1d9', 2, 0.86)
+    'edge-style-2': makeStrongEdgeStyle('#b4bcc6', '#8b949e', '#b4bcc6', 2, 0.8),
+    'edge-style-3': makeSecondaryEdgeStyle('#a7afb8', '#6e7681', '#a7afb8', 2, 0.8)
   },
   decoration: {
     background: { color: '#161b22', opacity: 1, brightness: 1, saturation: 1, hue: 0, gradient: { type: 'solid' } },
@@ -148,8 +148,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#9aa4af', '#4d5662', '#9aa4af', 2),
-      'edge-style-2': makeStrongEdgeStyle('#f0f3f6', '#8b949e', '#f0f3f6', 2),
-      'edge-style-3': makeSecondaryEdgeStyle('#c9d1d9', '#6e7681', '#c9d1d9', 2)
+      'edge-style-2': makeStrongEdgeStyle('#b4bcc6', '#8b949e', '#b4bcc6', 2, 0.9),
+      'edge-style-3': makeSecondaryEdgeStyle('#a7afb8', '#6e7681', '#a7afb8', 2, 0.9)
     }
   },
 
@@ -169,8 +169,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#84a6d4', '#385a7c', '#84a6d4', 2, 0.82),
-      'edge-style-2': makeStrongEdgeStyle('#4fd1ff', '#1679a8', '#4fd1ff', 3.25, 0.96),
-      'edge-style-3': makeSecondaryEdgeStyle('#f2b15f', '#a45a18', '#f2b15f', 2.5, 0.88)
+      'edge-style-2': makeStrongEdgeStyle('#5cbde0', '#1679a8', '#5cbde0', 3.25, 0.82),
+      'edge-style-3': makeSecondaryEdgeStyle('#dda45a', '#a45a18', '#dda45a', 2.5, 0.8)
     }
   },
 
@@ -204,8 +204,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#5a6068', '#afb8c1', '#5a6068', 2, 0.78),
-      'edge-style-2': makeStrongEdgeStyle('#0969da', '#54aeff', '#0969da', 3, 0.94),
-      'edge-style-3': makeSecondaryEdgeStyle('#bf8700', '#d4a72c', '#7d4e00', 2.5, 0.84)
+      'edge-style-2': makeStrongEdgeStyle('#2f6bb0', '#54aeff', '#2f6bb0', 3, 0.8),
+      'edge-style-3': makeSecondaryEdgeStyle('#a67600', '#d4a72c', '#7d4e00', 2.5, 0.8)
     },
     decoration: {
       background: { color: '#f6f8fa' },
@@ -242,8 +242,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#f0f3f6', '#8b949e', '#f0f3f6', 2.5, 0.92),
-      'edge-style-2': makeStrongEdgeStyle('#7cff00', '#00aa00', '#7cff00', 4, 1),
-      'edge-style-3': makeSecondaryEdgeStyle('#ffd94a', '#aa8800', '#ffd94a', 3, 0.94)
+      'edge-style-2': makeStrongEdgeStyle('#8ee63c', '#00aa00', '#8ee63c', 4, 0.92),
+      'edge-style-3': makeSecondaryEdgeStyle('#f2d24a', '#aa8800', '#f2d24a', 3, 0.92)
     },
     decoration: {
       background: { color: '#1a1d24' },
@@ -280,8 +280,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#a17056', '#5a4530', '#a08060', 2, 0.8),
-      'edge-style-2': makeStrongEdgeStyle('#e8a848', '#9a5f18', '#e8a848', 3.25, 0.95),
-      'edge-style-3': makeSecondaryEdgeStyle('#e06040', '#8c2f22', '#e06040', 2.5, 0.87)
+      'edge-style-2': makeStrongEdgeStyle('#c68f42', '#9a5f18', '#c68f42', 3.25, 0.8),
+      'edge-style-3': makeSecondaryEdgeStyle('#cf5a3c', '#8c2f22', '#cf5a3c', 2.5, 0.8)
     },
     decoration: {
       background: { color: '#1e1410' },
@@ -318,8 +318,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#5f98a0', '#305860', '#6a9ca0', 2, 0.8),
-      'edge-style-2': makeStrongEdgeStyle('#40d8c0', '#168a7a', '#40d8c0', 3.25, 0.95),
-      'edge-style-3': makeSecondaryEdgeStyle('#e06b66', '#94352f', '#e06b66', 2.5, 0.86)
+      'edge-style-2': makeStrongEdgeStyle('#4dbeab', '#168a7a', '#4dbeab', 3.25, 0.8),
+      'edge-style-3': makeSecondaryEdgeStyle('#cf6560', '#94352f', '#cf6560', 2.5, 0.8)
     },
     decoration: {
       background: { color: '#0e2024' },
@@ -357,8 +357,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#8a7dc0', '#484068', '#8878a8', 2, 0.8),
-      'edge-style-2': makeStrongEdgeStyle('#b080f0', '#7048b8', '#b080f0', 3.25, 0.95),
-      'edge-style-3': makeSecondaryEdgeStyle('#d86d8a', '#8f2f38', '#d86d8a', 2.5, 0.86)
+      'edge-style-2': makeStrongEdgeStyle('#9d78d0', '#7048b8', '#9d78d0', 3.25, 0.8),
+      'edge-style-3': makeSecondaryEdgeStyle('#c86680', '#8f2f38', '#c86680', 2.5, 0.8)
     },
     decoration: {
       background: { color: '#140e24' },
@@ -395,8 +395,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#6f8f72', '#305838', '#6a9870', 2, 0.8),
-      'edge-style-2': makeStrongEdgeStyle('#50c870', '#2b8740', '#50c870', 3.25, 0.95),
-      'edge-style-3': makeSecondaryEdgeStyle('#d8a030', '#8d6412', '#d8a030', 2.5, 0.86)
+      'edge-style-2': makeStrongEdgeStyle('#57b06f', '#2b8740', '#57b06f', 3.25, 0.8),
+      'edge-style-3': makeSecondaryEdgeStyle('#c28f34', '#8d6412', '#c28f34', 2.5, 0.8)
     },
     decoration: {
       background: { color: '#0e1e14' },
@@ -433,8 +433,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#7a8494', '#404650', '#808898', 2, 0.8),
-      'edge-style-2': makeStrongEdgeStyle('#80a0d0', '#4f6f9e', '#80a0d0', 3.25, 0.94),
-      'edge-style-3': makeSecondaryEdgeStyle('#d07a64', '#8e3d34', '#d07a64', 2.5, 0.86)
+      'edge-style-2': makeStrongEdgeStyle('#7690bb', '#4f6f9e', '#7690bb', 3.25, 0.8),
+      'edge-style-3': makeSecondaryEdgeStyle('#c0725d', '#8e3d34', '#c0725d', 2.5, 0.8)
     },
     decoration: {
       background: { color: '#181a20' },
@@ -471,8 +471,8 @@ export const BUILT_IN_THEMES: Record<string, BuiltInTheme> = {
     },
     edgeStyleSlots: {
       'edge-style-1': makeEdgeStyle('#a56e5d', '#583830', '#a07068', 2, 0.8),
-      'edge-style-2': makeStrongEdgeStyle('#f07040', '#a23b20', '#f07040', 3.25, 0.95),
-      'edge-style-3': makeSecondaryEdgeStyle('#f0a030', '#9c6316', '#f0a030', 2.5, 0.86)
+      'edge-style-2': makeStrongEdgeStyle('#d9673c', '#a23b20', '#d9673c', 3.25, 0.8),
+      'edge-style-3': makeSecondaryEdgeStyle('#c9883a', '#9c6316', '#c9883a', 2.5, 0.8)
     },
     decoration: {
       background: { color: '#1e100e' },

@@ -13,6 +13,7 @@ import { StyleGenerator } from '../../styles/style-generator';
 import { getSetting } from '../../config';
 import { isDebug } from '../../config/debug-flags';
 import { circularSpreadSafe } from '../utils/pure/position-expansion';
+import { computeTagStylePlan, type TagStyleParams, type TagStylePlan } from './tag-style-plan';
 
 /**
  * Context needed to open NodeEditor for a specific node
@@ -248,6 +249,59 @@ export class SceneNodeOps {
     }
 
     if (isDebug('d_scene')) console.log(`Scene: Updated node ${nodeId} style (design: ${newDesign.id}, scale: ${newScale})`);
+  }
+
+  /**
+   * Compute the plan for a tag-targeted style application (read-only).
+   * Used by the paste-style dialog for its live preview count.
+   */
+  planTaggedStyleApplication(params: TagStyleParams): TagStylePlan {
+    const nodeTags = new Map<NodeId, string[]>();
+    for (const node of graphStore.nodes) nodeTags.set(node.id, node.tags ?? []);
+    return computeTagStylePlan(graphStore.scenes, nodeTags, params);
+  }
+
+  /**
+   * Apply a copied style to every node carrying the selected tag(s), across the
+   * chosen scope. The current scene is routed through Cytoscape so it renders
+   * immediately and GraphSaver persists it; other scenes are written directly
+   * to the store (a named cross-scene write, mirroring scaleAllScenesZoom).
+   */
+  async applyStyleToTaggedNodes(
+    style: { design: { id: string; params: Record<string, unknown> }; scale: number },
+    params: TagStyleParams
+  ): Promise<void> {
+    if (!isEditMode()) {
+      console.warn('Cannot apply tagged style in View mode');
+      return;
+    }
+
+    const plan = this.planTaggedStyleApplication(params);
+    const currentSceneId = this.#getSceneId();
+
+    for (const entry of plan.perScene) {
+      if (entry.sceneId === currentSceneId) continue;
+      const scene = graphStore.scenes.find(s => s.id === entry.sceneId);
+      if (!scene) continue;
+      for (const nodeId of entry.nodeIds) {
+        const record = scene.nodes[nodeId];
+        if (!record) continue;
+        if (params.applyDesign) record.design = { id: style.design.id, params: { ...style.design.params } };
+        if (params.applyScale) record.scale = style.scale;
+      }
+      await graphStore.updateScene({ ...scene, updatedAt: new Date() });
+    }
+
+    for (const nodeId of plan.currentSceneNodeIds) {
+      const updates: { design?: { id: string; params: Record<string, unknown> }; scale?: number } = {};
+      if (params.applyDesign) updates.design = { id: style.design.id, params: { ...style.design.params } };
+      if (params.applyScale) updates.scale = style.scale;
+      await this.updateNodeStyle(nodeId, updates);
+    }
+
+    if (isDebug('d_scene')) {
+      console.log(`Scene: Applied tagged style to ${plan.totalNodeInstances} node(s) across ${plan.totalScenes} scene(s)`);
+    }
   }
 
   /**

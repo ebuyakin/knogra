@@ -4,10 +4,173 @@
  */
 
 import type { NodeId } from '../../../core/main-types';
-import type { ChatMessage, MessageId } from '../../../core/chat-types';
+import type { ChatMessage, MessageId, NoteImageAttachment, NoteImageMimeType } from '../../../core/chat-types';
 import { chatStore } from '../../../storage/chat-store';
 import { buildNoteElement, scrollToBottom } from './chat-message-renderer';
 import type { MessageContextMenuHandler, NoteEditHandler } from './chat-message-renderer';
+
+// ============================================================================
+// IMAGE ATTACHMENTS
+// ============================================================================
+
+const MAX_NOTE_IMAGE_BYTES = 1 * 1024 * 1024;
+const MAX_NOTE_IMAGE_DIMENSION = 4096;
+const ALLOWED_NOTE_IMAGE_MIME_TYPES = new Set<NoteImageMimeType>(['image/png', 'image/jpeg', 'image/webp']);
+const NOTE_IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp';
+
+function generateAttachmentId(): string {
+  return `att-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/** Read + validate a file into a NoteImageAttachment. Rejects with a user message on failure. */
+function readImageAttachment(file: File): Promise<NoteImageAttachment> {
+  return new Promise((resolve, reject) => {
+    if (!ALLOWED_NOTE_IMAGE_MIME_TYPES.has(file.type as NoteImageMimeType)) {
+      reject(new Error('Only PNG, JPEG, and WebP images are allowed.'));
+      return;
+    }
+    if (file.size > MAX_NOTE_IMAGE_BYTES) {
+      reject(new Error('Images must be 1 MB or smaller.'));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image.'));
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const img = new Image();
+      img.onerror = () => reject(new Error('Failed to load image.'));
+      img.onload = () => {
+        if (img.width > MAX_NOTE_IMAGE_DIMENSION || img.height > MAX_NOTE_IMAGE_DIMENSION) {
+          reject(new Error(`Images must be at most ${MAX_NOTE_IMAGE_DIMENSION}px on each side.`));
+          return;
+        }
+        resolve({
+          id: generateAttachmentId(),
+          type: 'image',
+          mimeType: file.type as NoteImageMimeType,
+          name: file.name,
+          dataUrl,
+          width: img.width,
+          height: img.height,
+        });
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Controls a single-image attachment zone inside a note editor. */
+interface AttachmentZone {
+  getAttachments(): NoteImageAttachment[];
+  /** True while the native file picker is open (blur-save must be suppressed). */
+  isBusy(): boolean;
+}
+
+/**
+ * Build the attachment toolbar + preview strip inside an editor element.
+ * Enforces a single image per note (adding replaces the existing one).
+ */
+function createAttachmentZone(
+  editorEl: HTMLElement,
+  initial: NoteImageAttachment[],
+  textarea: HTMLTextAreaElement
+): AttachmentZone {
+  let attachment: NoteImageAttachment | null = initial[0] ?? null;
+  let picking = false;
+
+  const zone = document.createElement('div');
+  zone.className = 'note-attach-zone';
+
+  const preview = document.createElement('div');
+  preview.className = 'note-attach-preview';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'note-attach-toolbar';
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'note-attach-btn';
+  addBtn.textContent = 'Add image';
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = NOTE_IMAGE_ACCEPT;
+  fileInput.style.display = 'none';
+
+  const errorEl = document.createElement('div');
+  errorEl.className = 'note-attach-error';
+
+  const render = (): void => {
+    preview.innerHTML = '';
+    if (attachment) {
+      const img = document.createElement('img');
+      img.className = 'note-image';
+      img.src = attachment.dataUrl;
+      img.alt = attachment.name;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'note-attach-remove';
+      removeBtn.textContent = '×';
+      removeBtn.title = 'Remove image';
+      removeBtn.addEventListener('mousedown', (e) => e.preventDefault());
+      removeBtn.addEventListener('click', () => {
+        attachment = null;
+        render();
+      });
+
+      const frame = document.createElement('div');
+      frame.className = 'note-attach-frame';
+      frame.append(img, removeBtn);
+      preview.appendChild(frame);
+    }
+    addBtn.textContent = attachment ? 'Replace image' : 'Add image';
+  };
+
+  // Opening the native file dialog blurs the textarea. Guard against the
+  // editor's blur-save timer closing the editor while the picker is open.
+  const beginPick = (): void => {
+    picking = true;
+    const onWindowFocus = (): void => {
+      window.removeEventListener('focus', onWindowFocus);
+      // Let the `change` event fire first, then release the guard and
+      // restore focus so Enter/blur save the note normally.
+      setTimeout(() => {
+        picking = false;
+        if (editorEl.isConnected) textarea.focus();
+      }, 100);
+    };
+    window.addEventListener('focus', onWindowFocus);
+    fileInput.click();
+  };
+
+  addBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  addBtn.addEventListener('click', beginPick);
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (!file) return;
+    errorEl.textContent = '';
+    try {
+      attachment = await readImageAttachment(file);
+      render();
+    } catch (err) {
+      errorEl.textContent = (err as Error).message;
+    }
+  });
+
+  toolbar.append(addBtn, errorEl);
+  zone.append(preview, toolbar, fileInput);
+  editorEl.appendChild(zone);
+  render();
+
+  return {
+    getAttachments: () => (attachment ? [attachment] : []),
+    isBusy: () => picking,
+  };
+}
 
 // ============================================================================
 // PUBLIC API
@@ -38,7 +201,7 @@ export function createNoteEditor(
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      saveNote(textarea.value.trim(), editorEl, container, nodeId, onContextMenu, onEdit);
+      saveNote(textarea.value.trim(), editorEl, container, nodeId, onContextMenu, onEdit, zone.getAttachments());
     }
     if (e.key === 'Escape') {
       editorEl.remove();
@@ -47,10 +210,12 @@ export function createNoteEditor(
 
   textarea.addEventListener('blur', () => {
     setTimeout(() => {
+      if (zone.isBusy()) return;
       if (editorEl.isConnected) {
         const content = textarea.value.trim();
-        if (content) {
-          saveNote(content, editorEl, container, nodeId, onContextMenu, onEdit);
+        const attachments = zone.getAttachments();
+        if (content || attachments.length > 0) {
+          saveNote(content, editorEl, container, nodeId, onContextMenu, onEdit, attachments);
         } else {
           editorEl.remove();
         }
@@ -59,6 +224,7 @@ export function createNoteEditor(
   });
 
   editorEl.appendChild(textarea);
+  const zone = createAttachmentZone(editorEl, [], textarea);
 
   // Insert after the target message, or at the end
   if (afterEl?.nextSibling) {
@@ -79,6 +245,7 @@ export function editNote(
   noteEl: HTMLElement,
   messageId: MessageId,
   currentContent: string,
+  currentAttachments: NoteImageAttachment[],
   container: HTMLElement,
   nodeId: NodeId | null,
   onContextMenu: MessageContextMenuHandler,
@@ -98,7 +265,7 @@ export function editNote(
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      updateNote(textarea.value.trim(), messageId, editorEl, nodeId, onContextMenu, onEdit, currentContent);
+      updateNote(textarea.value.trim(), messageId, editorEl, nodeId, onContextMenu, onEdit, currentContent, zone.getAttachments());
     }
     if (e.key === 'Escape') {
       // Cancel — restore original note
@@ -107,14 +274,14 @@ export function editNote(
   });
 
   textarea.addEventListener('blur', () => {
-    setTimeout(() => {
-      if (editorEl.isConnected) {
-        updateNote(textarea.value.trim(), messageId, editorEl, nodeId, onContextMenu, onEdit, currentContent);
+    setTimeout(() => {      if (zone.isBusy()) return;      if (editorEl.isConnected) {
+        updateNote(textarea.value.trim(), messageId, editorEl, nodeId, onContextMenu, onEdit, currentContent, zone.getAttachments());
       }
     }, 150);
   });
 
   editorEl.appendChild(textarea);
+  const zone = createAttachmentZone(editorEl, currentAttachments);
   noteEl.replaceWith(editorEl);
   textarea.focus();
   // Place cursor at end
@@ -131,14 +298,19 @@ async function saveNote(
   container: HTMLElement,
   nodeId: NodeId | null,
   onContextMenu: MessageContextMenuHandler,
-  onEdit: NoteEditHandler
+  onEdit: NoteEditHandler,
+  attachments: NoteImageAttachment[]
 ): Promise<void> {
-  if (!content || !nodeId) {
+  if ((!content && attachments.length === 0) || !nodeId) {
     editorEl.remove();
     return;
   }
 
   const message: ChatMessage = await chatStore.addMessage(nodeId, 'user', content, 'note');
+  if (attachments.length > 0) {
+    await chatStore.setMessageAttachments(nodeId, message.id, attachments);
+    message.attachments = attachments;
+  }
 
   // Replace editor with rendered note in the same position
   const noteEl = buildNoteElement(message, onContextMenu, onEdit);
@@ -153,30 +325,24 @@ async function updateNote(
   nodeId: NodeId | null,
   onContextMenu: MessageContextMenuHandler,
   onEdit: NoteEditHandler,
-  originalContent: string
+  originalContent: string,
+  attachments: NoteImageAttachment[]
 ): Promise<void> {
   if (!nodeId) { editorEl.remove(); return; }
 
-  // Empty content — remove the note entirely
-  if (!content) {
+  // Empty note (no text, no image) — remove entirely
+  if (!content && attachments.length === 0) {
     await chatStore.deleteMessage(nodeId, messageId);
     editorEl.remove();
     return;
   }
 
-  // No change — just restore display
-  if (content === originalContent) {
-    const conversation = await chatStore.getConversation(nodeId);
-    const msg = conversation?.messages.find(m => m.id === messageId);
-    if (msg) {
-      const noteEl = buildNoteElement(msg, onContextMenu, onEdit);
-      editorEl.replaceWith(noteEl);
-    }
-    return;
+  // Persist content (only if changed) and attachments, then re-render
+  if (content !== originalContent) {
+    await chatStore.updateMessage(nodeId, messageId, content);
   }
+  await chatStore.setMessageAttachments(nodeId, messageId, attachments);
 
-  // Save updated content
-  await chatStore.updateMessage(nodeId, messageId, content);
   const conversation = await chatStore.getConversation(nodeId);
   const msg = conversation?.messages.find(m => m.id === messageId);
   if (msg) {

@@ -13,6 +13,7 @@ import { Graph } from './graph/graph';
 import { Transition } from './transition/transition';
 import { Path } from './path/path';
 import { Quiz } from './quiz';
+import { AutoLayout } from './autolayout/autolayout';
 
 export class FeatureAPI {
   scene: Scene;
@@ -23,6 +24,7 @@ export class FeatureAPI {
   transition: Transition;
   path: Path;
   quiz: Quiz;
+  autolayout: AutoLayout;
 
   constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
     this.scene = new Scene(cy);
@@ -33,5 +35,6 @@ export class FeatureAPI {
     this.transition = new Transition(cy, backgroundRenderer);
     this.path = new Path(cy);
     this.quiz = new Quiz(cy);
+    this.autolayout = new AutoLayout(cy);
   }
 }

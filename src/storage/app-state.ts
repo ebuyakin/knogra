@@ -25,6 +25,13 @@ interface AppState {
   fitSceneOnNextOpen?: SceneId;
   /** Last selected edge type id (persisted for new-edge default) */
   lastEdgeTypeId?: EdgeTypeId;
+  /**
+   * CSS-pixel size of the Cytoscape container at export time — the screen the
+   * shared `.knogra` file was authored on. Used on import to offer a
+   * proportional "scale to fit" of every scene's zoom when the importing screen
+   * differs. Captured in `exportWorkspace`; consumed in `importWorkspace`.
+   */
+  authoringContainerSize?: { w: number; h: number };
 }
 
 // ============================================================================
@@ -77,6 +84,21 @@ export class AppStateManager {
    */
   static saveLastSceneId(sceneId: SceneId): void {
     this.updateAppState({ lastSceneId: sceneId });
+  }
+
+  /**
+   * Get the authoring container size (CSS pixels) recorded at last export.
+   */
+  static getAuthoringContainerSize(): { w: number; h: number } | undefined {
+    return this.getAppState().authoringContainerSize;
+  }
+
+  /**
+   * Record the current Cytoscape container size (CSS pixels) as the authoring
+   * screen. Called at export time so the exported app-state carries it.
+   */
+  static saveAuthoringContainerSize(w: number, h: number): void {
+    this.updateAppState({ authoringContainerSize: { w, h } });
   }
 
   /**

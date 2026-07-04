@@ -282,6 +282,29 @@
   border: 1px solid transparent;
 }
 
+.theme-editor-btn[data-tooltip] {
+  position: relative;
+}
+
+.theme-editor-btn[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--bg-tertiary, #1c2128);
+  color: var(--text-primary, #e6edf3);
+  border: 1px solid var(--border-primary, #30363d);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
 .theme-editor-btn-secondary {
   background: transparent;
   border-color: var(--border-primary, #30363d);

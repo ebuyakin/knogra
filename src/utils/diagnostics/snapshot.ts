@@ -251,6 +251,38 @@ function truncateImageData(images: unknown[]): unknown[] {
   });
 }
 
+/**
+ * Replace base64 note-image data URLs with a compact placeholder so snapshots
+ * stay small and readable. Only the diagnostic dump is affected.
+ */
+function redactConversationImages(conversations: unknown[]): unknown[] {
+  return conversations.map(conversation => {
+    if (!conversation || typeof conversation !== 'object') return conversation;
+    const conv = conversation as Record<string, unknown>;
+    const messages = conv.messages;
+    if (!Array.isArray(messages)) return conversation;
+
+    const redactedMessages = messages.map(message => {
+      if (!message || typeof message !== 'object') return message;
+      const msg = message as Record<string, unknown>;
+      const attachments = msg.attachments;
+      if (!Array.isArray(attachments) || attachments.length === 0) return message;
+
+      const redactedAttachments = attachments.map(att => {
+        if (!att || typeof att !== 'object') return att;
+        const a = att as Record<string, unknown>;
+        if (typeof a.dataUrl !== 'string') return att;
+        return {
+          ...a,
+          dataUrl: `[image ${a.mimeType ?? '?'} ${a.width ?? '?'}×${a.height ?? '?'}, ${a.dataUrl.length} chars]`,
+        };
+      });
+      return { ...msg, attachments: redactedAttachments };
+    });
+    return { ...conv, messages: redactedMessages };
+  });
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
@@ -362,7 +394,7 @@ export async function buildSnapshot(
       settings: exportSettings(),
       appState: AppStateManager.getAppState(),
       shelf: exportShelf(),
-      conversations,
+      conversations: redactConversationImages(conversations),
       paths,
       themes,
       backgroundImages: truncateImageData(images),

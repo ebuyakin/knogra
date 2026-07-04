@@ -50,17 +50,19 @@ interface ChatMessage {
   content: string;
   timestamp: Date;
   source?: MessageSource;
-  attachments?: MessageAttachment[];  // Future: images, files
+  attachments?: NoteImageAttachment[];  // note image attachments
 }
 
 type MessageSource = 'ai' | 'note' | 'tutorial';
 
-interface MessageAttachment {
+interface NoteImageAttachment {
   id: string;
-  type: 'image' | 'file';
+  type: 'image';
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
   name: string;
-  dataUrl: string;           // Base64 data URL for images
-  // Future: could support Blob storage for large files
+  dataUrl: string;   // Base64 data URL
+  width: number;
+  height: number;
 }
 ```
 
@@ -175,15 +177,16 @@ Landing page offers two entry points:
 
 Single global workspace in v1. Multi-workspace support (isolated DBs, multi-tab, workspace picker) is planned for a future version.
 
-## Attachments (Future)
+## Attachments (Note images)
 
-The `attachments` field on ChatMessage is reserved for future use:
+Notes can carry a single inline image attachment (`attachments` on ChatMessage):
 
-- Image attachments rendered inline in the chat timeline
-- Stored as base64 data URLs (small images) or Blob references (large files)
-- IndexedDB supports Blob storage natively
-- UI: drag-and-drop or paste into input area
-- Not in v1 scope — schema supports it from day one
+- **Scope:** notes only. AI and tutorial messages are not given attachments, and note attachments are never included in AI requests.
+- **Types:** PNG, JPEG, WebP (no SVG). Max 1 MB, max 4096px per side. One image per note (add more via separate notes).
+- **Storage:** base64 data URL stored inline in the conversation object — no schema/version bump, rides the existing export/import path automatically.
+- **UI:** "Add image" button in the note editor; inline `<img>` render in the timeline (fit-to-width, capped at 240px tall); `×` to remove while editing.
+- **Diagnostics:** `knogra.snapshot()` redacts attachment data URLs to a compact placeholder to keep snapshots small.
+- **Future:** Blob storage for large files, drag/drop + paste, multi-image, attachments in AI requests.
 
 ## Implementation Plan
 
@@ -212,7 +215,9 @@ The `attachments` field on ChatMessage is reserved for future use:
 - Tutorial messages rendered with accent styling
 - Tutorial messages not deletable/editable
 
-### Phase 5: Attachments (future)
-- Image paste/drop in note editing
-- Inline rendering in timeline
-- Storage as data URLs
+### Phase 5: Attachments (note images) — implemented
+- "Add image" button in the note editor (PNG/JPEG/WebP, 1 MB, one per note)
+- Inline `<img>` rendering in timeline; `×` to remove while editing
+- Base64 data URLs stored inline; export/import carry them transparently
+- Snapshot redaction for diagnostics
+- Not yet: drag/drop + paste, Blob storage, multi-image, attachments in AI requests

@@ -17,6 +17,7 @@ export interface ParsedMermaidGraph {
   nodes: ParsedMermaidNode[];
   edges: ParsedMermaidEdge[];
   equationsByMermaidId: Map<string, string>;
+  tagsByMermaidId: Map<string, string[]>;
 }
 
 interface NodeSpec {
@@ -63,9 +64,10 @@ export function buildMermaidMarkdown(nodes: Node[], edges: Edge[], edgeTypes: Ed
 }
 
 export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
-  const body = removeKnograEquationSection(extractMermaidBody(source));
+  const body = removeKnograMetadataSections(extractMermaidBody(source));
   const lines = normalizeMermaidLines(body);
   const equationsByMermaidId = parseKnograEquationSection(source);
+  const tagsByMermaidId = parseKnograTagsSection(source);
 
   const headerIndex = lines.findIndex(line => /^(flowchart|graph)\s+/i.test(line));
   if (headerIndex < 0) {
@@ -118,7 +120,7 @@ export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
     throw new Error('No nodes found in Mermaid flowchart.');
   }
 
-  return { nodes: [...nodes.values()], edges, equationsByMermaidId };
+  return { nodes: [...nodes.values()], edges, equationsByMermaidId, tagsByMermaidId };
 }
 
 function extractMermaidBody(source: string): string {
@@ -126,9 +128,13 @@ function extractMermaidBody(source: string): string {
   return fenced?.[1] ?? source;
 }
 
+const KNOGRA_EQUATION_HEADING = /^#{1,6}\s+Knogra equations\s*$/i;
+const KNOGRA_TAGS_HEADING = /^#{1,6}\s+Knogra tags\s*$/i;
+const KNOGRA_METADATA_HEADING = /^#{1,6}\s+Knogra (equations|tags)\s*$/i;
+
 function parseKnograEquationSection(source: string): Map<string, string> {
   const equations = new Map<string, string>();
-  const section = extractKnograEquationSection(source);
+  const section = extractKnograSection(source, KNOGRA_EQUATION_HEADING);
   if (!section) return equations;
 
   for (const rawLine of section.split(/\r?\n/)) {
@@ -143,9 +149,29 @@ function parseKnograEquationSection(source: string): Map<string, string> {
   return equations;
 }
 
-function extractKnograEquationSection(source: string): string {
+function parseKnograTagsSection(source: string): Map<string, string[]> {
+  const tagsByMermaidId = new Map<string, string[]>();
+  const section = extractKnograSection(source, KNOGRA_TAGS_HEADING);
+  if (!section) return tagsByMermaidId;
+
+  for (const rawLine of section.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const match = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.+)$/);
+    if (!match) continue;
+
+    const tags = match[2]
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(tag => tag.length > 0);
+    if (tags.length > 0) tagsByMermaidId.set(match[1], [...new Set(tags)]);
+  }
+
+  return tagsByMermaidId;
+}
+
+function extractKnograSection(source: string, heading: RegExp): string {
   const lines = source.split(/\r?\n/);
-  const startIndex = lines.findIndex(line => /^#{1,6}\s+Knogra equations\s*$/i.test(line.trim()));
+  const startIndex = lines.findIndex(line => heading.test(line.trim()));
   if (startIndex < 0) return '';
 
   const sectionLines: string[] = [];
@@ -157,23 +183,23 @@ function extractKnograEquationSection(source: string): string {
   return sectionLines.join('\n');
 }
 
-function removeKnograEquationSection(source: string): string {
+function removeKnograMetadataSections(source: string): string {
   const lines = source.split(/\r?\n/);
   const result: string[] = [];
-  let inEquationSection = false;
+  let inMetadataSection = false;
 
   for (const line of lines) {
     const isHeading = /^#{1,6}\s+/.test(line.trim());
-    if (/^#{1,6}\s+Knogra equations\s*$/i.test(line.trim())) {
-      inEquationSection = true;
+    if (KNOGRA_METADATA_HEADING.test(line.trim())) {
+      inMetadataSection = true;
       continue;
     }
 
-    if (inEquationSection && isHeading) {
-      inEquationSection = false;
+    if (inMetadataSection && isHeading) {
+      inMetadataSection = false;
     }
 
-    if (!inEquationSection) result.push(line);
+    if (!inMetadataSection) result.push(line);
   }
 
   return result.join('\n');

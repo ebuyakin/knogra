@@ -17,6 +17,7 @@ import type { BackgroundEditor } from './background-editor';
 import type { ThemeEditor } from './theme-editor';
 import type { QuizPanel } from './quiz-panel';
 import type { AnchorLinkTooltip } from './anchor-link-tooltip';
+import type { PasteStyleDialog } from './paste-style-dialog';
 import { graphStore } from '../../storage/graph-store';
 import { getAppMode, isEditMode, setAppMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
@@ -52,11 +53,12 @@ export class ContextMenu {
   #themeEditor: ThemeEditor;
   #quizPanel: QuizPanel;
   #anchorLinkTooltip: AnchorLinkTooltip;
+  #pasteStyleDialog: PasteStyleDialog;
   #menuElement: HTMLDivElement | null = null;
   #copiedEdgeStyle: CopiedEdgeStyle | null = null;
-  #copiedNodeDesign: { design: { id: string; params: Record<string, unknown> }; scale: number } | null = null;
+  #copiedNodeDesign: { design: { id: string; params: Record<string, unknown> }; scale: number; sourceNodeId: NodeId; sourceTags: string[] } | null = null;
 
-  constructor(cy: Core, container: HTMLElement, features: FeatureAPI, edgeCreationMode: EdgeCreationMode, nodeEditor: NodeEditor, edgeEditor: EdgeEditor, edgeTypeManager: EdgeTypeManager, edgeTypeVisibilityModal: EdgeTypeVisibilityModal, _nodePicker: NodePicker, nodeManager: NodeManager, backgroundEditor: BackgroundEditor, themeEditor: ThemeEditor, quizPanel: QuizPanel, anchorLinkTooltip: AnchorLinkTooltip) {
+  constructor(cy: Core, container: HTMLElement, features: FeatureAPI, edgeCreationMode: EdgeCreationMode, nodeEditor: NodeEditor, edgeEditor: EdgeEditor, edgeTypeManager: EdgeTypeManager, edgeTypeVisibilityModal: EdgeTypeVisibilityModal, _nodePicker: NodePicker, nodeManager: NodeManager, backgroundEditor: BackgroundEditor, themeEditor: ThemeEditor, quizPanel: QuizPanel, anchorLinkTooltip: AnchorLinkTooltip, pasteStyleDialog: PasteStyleDialog) {
     this.#cy = cy;
     this.#container = container;
     this.#features = features;
@@ -70,6 +72,7 @@ export class ContextMenu {
     this.#themeEditor = themeEditor;
     this.#quizPanel = quizPanel;
     this.#anchorLinkTooltip = anchorLinkTooltip;
+    this.#pasteStyleDialog = pasteStyleDialog;
     this.#setupContextMenuListeners();
   }
 
@@ -207,7 +210,9 @@ export class ContextMenu {
           if (ctx) {
             this.#copiedNodeDesign = {
               design: { id: ctx.design.id, params: { ...ctx.design.params } },
-              scale: ctx.scale
+              scale: ctx.scale,
+              sourceNodeId: nodeId,
+              sourceTags: ctx.nodeData.tags ?? []
             };
           }
         }
@@ -215,17 +220,33 @@ export class ContextMenu {
       (() => {
         const selectedNodes = this.#cy.nodes(':selected');
         const count = selectedNodes.length;
+        const copied = this.#copiedNodeDesign;
+        const isSourceSelfPaste = copied !== null && count <= 1 && nodeId === copied.sourceNodeId;
+        if (isSourceSelfPaste) {
+          return {
+            label: 'Paste style…',
+            enabled: editMode,
+            action: () => {
+              this.#pasteStyleDialog.open({
+                design: copied.design,
+                scale: copied.scale,
+                sourceNodeId: copied.sourceNodeId,
+                sourceTags: copied.sourceTags
+              });
+            }
+          };
+        }
         const label = count > 1 ? `Paste style to ${count} nodes` : 'Paste style';
         return {
           label,
-          enabled: editMode && this.#copiedNodeDesign !== null,
+          enabled: editMode && copied !== null,
           action: async () => {
-            if (!this.#copiedNodeDesign) return;
+            if (!copied) return;
             const targets = count > 1 ? selectedNodes : this.#cy.getElementById(nodeId);
             for (const target of targets) {
               await this.#features.scene.updateNodeStyle(target.id() as NodeId, {
-                design: { id: this.#copiedNodeDesign.design.id, params: { ...this.#copiedNodeDesign.design.params } },
-                scale: this.#copiedNodeDesign.scale
+                design: { id: copied.design.id, params: { ...copied.design.params } },
+                scale: copied.scale
               });
             }
             // Re-select to restore active borders after stylesheet updates
@@ -579,6 +600,13 @@ export class ContextMenu {
         label: 'Scene',
         children: [
           {
+            label: 'Auto-layout',
+            enabled: editMode,
+            action: () => {
+              this.#features.autolayout.apply(this.#features.scene.getCentralNodeId());
+            }
+          },
+          {
             label: 'Edges visibility',
             action: () => {
               this.#edgeTypeVisibilityModal.show();
@@ -597,13 +625,23 @@ export class ContextMenu {
             action: async () => {
               const currentThemeId = this.#features.scene.getThemeId();
               const containerRect = this.#container.getBoundingClientRect();
-              const selectedThemeId = await this.#themeEditor.show(currentThemeId, containerRect);
-              if (selectedThemeId) {
-                await this.#features.scene.setTheme(selectedThemeId);
-                const sceneId = this.#features.scene.getCurrentSceneId();
-                if (sceneId) {
-                  await this.#features.transition.openScene(sceneId, { skipAnimation: true });
-                }
+              const result = await this.#themeEditor.show(currentThemeId, containerRect);
+              if (!result) return;
+
+              if (result.scope === 'all') {
+                const sceneCount = this.#features.scene.getSceneCount();
+                const confirmed = window.confirm(
+                  `Apply theme "${result.themeId}" to all ${sceneCount} scene${sceneCount === 1 ? '' : 's'}? This replaces each scene's current theme.`
+                );
+                if (!confirmed) return;
+                await this.#features.scene.setThemeForAllScenes(result.themeId);
+              } else {
+                await this.#features.scene.setTheme(result.themeId);
+              }
+
+              const sceneId = this.#features.scene.getCurrentSceneId();
+              if (sceneId) {
+                await this.#features.transition.openScene(sceneId, { skipAnimation: true });
               }
             }
           },

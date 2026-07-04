@@ -26,10 +26,12 @@ import { resolveScenePan } from '../utils/cy/viewport-utils';
 import { SceneNodeOps } from './node-ops';
 import { SceneEdgeOps } from './edge-ops';
 import { FoldManager } from './fold-manager';
+import type { TagStyleParams, TagStylePlan } from './tag-style-plan';
 
 // re-export types for external consumers
 export type { NodeEditContext } from './node-ops';
 export type { EdgeEditContext } from './edge-ops';
+export type { TagStyleParams, TagStylePlan } from './tag-style-plan';
 
 export interface EdgeTypeVisibilityEntry {
   typeId: EdgeTypeId;
@@ -122,6 +124,31 @@ export class Scene {
   }
 
   /**
+   * Apply a theme to EVERY scene in the workspace. A named cross-scene write,
+   * mirroring scaleAllScenesZoom: loops all scenes and persists each. The
+   * caller is responsible for re-rendering the current scene afterwards.
+   */
+  async setThemeForAllScenes(themeId: string): Promise<void> {
+    if (!isEditMode()) {
+      if (isDebug('d_scene')) console.log(`[Scene] Skipped bulk theme persistence in View mode: ${themeId}`);
+      return;
+    }
+
+    for (const scene of graphStore.scenes) {
+      if (scene.themeId === themeId) continue;
+      await graphStore.updateScene({ ...scene, themeId, updatedAt: new Date() });
+    }
+    if (isDebug('d_scene')) console.log(`[Scene] Applied theme to all scenes: ${themeId}`);
+  }
+
+  /**
+   * Number of scenes in the workspace (used for bulk-operation confirmations).
+   */
+  getSceneCount(): number {
+    return graphStore.scenes.length;
+  }
+
+  /**
    * Get central node ID for current scene
    */
   getCentralNodeId(): NodeId | null {
@@ -177,6 +204,17 @@ export class Scene {
     updates: { design?: { id: string; params: Record<string, unknown> }; scale?: number }
   ): Promise<void> {
     return this.#nodeOps.updateNodeStyle(nodeId, updates);
+  }
+
+  planTaggedStyleApplication(params: TagStyleParams): TagStylePlan {
+    return this.#nodeOps.planTaggedStyleApplication(params);
+  }
+
+  async applyStyleToTaggedNodes(
+    style: { design: { id: string; params: Record<string, unknown> }; scale: number },
+    params: TagStyleParams
+  ): Promise<void> {
+    return this.#nodeOps.applyStyleToTaggedNodes(style, params);
   }
 
   // ==========================================================================

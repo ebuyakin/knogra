@@ -33,6 +33,7 @@ import {
   hasMeaningfulWorkspaceData,
   showImportWorkspaceDialog,
   showNewWorkspaceDialog,
+  showScaleToFitDialog,
   showValidationErrorDialog,
 } from './workspace/dialogs';
 import { validateGraphData } from './workspace/validate';
@@ -60,6 +61,57 @@ const WORKSPACE_VERSION = '1.0';
 // ============================================================================
 // HELPERS
 // ============================================================================
+
+/**
+ * Read the live Cytoscape container size in CSS pixels, or null if unavailable.
+ */
+function getCyContainerSize(): { w: number; h: number } | null {
+  const el = document.getElementById('cy');
+  if (!el) return null;
+  const w = el.clientWidth;
+  const h = el.clientHeight;
+  if (w <= 0 || h <= 0) return null;
+  return { w, h };
+}
+
+/**
+ * Deviation beyond which the imported graph is considered authored for a
+ * meaningfully different screen and the scale-to-fit prompt is offered.
+ */
+const SCALE_TO_FIT_THRESHOLD = 0.15;
+
+/**
+ * Given the authoring container size and the live container size, return the
+ * uniform zoom factor that makes every scene occupy the same fraction of the
+ * viewport as on the authoring screen. Uses the smaller axis ratio so content
+ * that fit before never clips. Returns null when no meaningful rescale applies
+ * (missing/invalid baseline, or difference under the threshold).
+ */
+function computeScaleToFitFactor(
+  authoring: { w: number; h: number } | undefined,
+  live: { w: number; h: number } | null
+): number | null {
+  if (!authoring || !live) return null;
+  if (!(authoring.w > 0) || !(authoring.h > 0)) return null;
+
+  const factor = Math.min(live.w / authoring.w, live.h / authoring.h);
+  if (!Number.isFinite(factor) || factor <= 0) return null;
+  if (Math.abs(factor - 1) <= SCALE_TO_FIT_THRESHOLD) return null;
+  return factor;
+}
+
+/**
+ * Multiply every scene's stored `viewport.zoom` by `factor` in place. Pan and
+ * focalPoint are left untouched: focalPoint is graph-space and zoom-invariant,
+ * so content re-centers on the same point, only smaller/larger.
+ */
+function scaleImportedScenesZoom(scenes: unknown[], factor: number): void {
+  for (const scene of scenes) {
+    const viewport = (scene as { viewport?: { zoom?: unknown } }).viewport;
+    if (!viewport || typeof viewport.zoom !== 'number' || viewport.zoom <= 0) continue;
+    viewport.zoom *= factor;
+  }
+}
 
 
 // ============================================================================
@@ -115,7 +167,11 @@ export async function exportWorkspace(): Promise<void> {
   const paths = await exportPaths();
   zip.file('paths.json', JSON.stringify(paths, null, 2));
   
-  // 8. Export app state from localStorage
+  // 8. Export app state from localStorage.
+  // Record the current container size first so the file carries the authoring
+  // screen dimensions (used by import to offer a proportional scale-to-fit).
+  const container = getCyContainerSize();
+  if (container) AppStateManager.saveAuthoringContainerSize(container.w, container.h);
   const appState = AppStateManager.getAppState();
   zip.file('app-state.json', JSON.stringify(appState, null, 2));
   
@@ -276,6 +332,19 @@ export async function importWorkspace(file: File): Promise<boolean> {
     if (!validation.valid) {
       const proceed = await showValidationErrorDialog(validation.errors);
       if (!proceed) return false;
+    }
+
+    // 3b. Scale-to-fit: if the graph was authored on a meaningfully different
+    //     screen than this one, offer to proportionally rescale every scene's
+    //     zoom so the first impression matches the author's. Applied to the
+    //     in-memory scenes BEFORE they are written, so the post-reload render is
+    //     correct from the first frame (no flash). Pan/focalPoint untouched.
+    const authoringSize = (appState as { authoringContainerSize?: { w: number; h: number } })
+      .authoringContainerSize;
+    const scaleFactor = computeScaleToFitFactor(authoringSize, getCyContainerSize());
+    if (scaleFactor !== null) {
+      const accepted = await showScaleToFitDialog();
+      if (accepted) scaleImportedScenesZoom(graph.scenes, scaleFactor);
     }
 
     // 4. Capture local API keys BEFORE clearing — clearAllData() wipes localStorage

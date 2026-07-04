@@ -5,7 +5,7 @@
 
 import Dexie from 'dexie';
 import type { NodeId } from '../core/main-types';
-import type { Conversation, ChatMessage, MessageId, MessageSource } from '../core/chat-types';
+import type { Conversation, ChatMessage, MessageId, MessageSource, NoteImageAttachment } from '../core/chat-types';
 
 const DB_NAME = 'knogra-chat';
 const DB_VERSION = 1;
@@ -101,6 +101,30 @@ class ChatDataStore {
     if (!message) return;
 
     message.content = newContent;
+    conversation.updatedAt = new Date();
+    await this.saveConversation(conversation);
+  }
+
+  /**
+   * Replace a message's attachments (for note images).
+   * Passing an empty array clears attachments.
+   */
+  async setMessageAttachments(
+    nodeId: NodeId,
+    messageId: MessageId,
+    attachments: NoteImageAttachment[]
+  ): Promise<void> {
+    const conversation = await this.getConversation(nodeId);
+    if (!conversation) return;
+
+    const message = conversation.messages.find(m => m.id === messageId);
+    if (!message) return;
+
+    if (attachments.length > 0) {
+      message.attachments = attachments;
+    } else {
+      delete message.attachments;
+    }
     conversation.updatedAt = new Date();
     await this.saveConversation(conversation);
   }

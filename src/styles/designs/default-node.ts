@@ -19,6 +19,8 @@ export interface DefaultNodeParams {
   minWidth?: number;        // Minimum node width before padding (default 100)
   aspectRatio?: number;     // Target aspect ratio, width/height (default 16/9 ≈ 1.78)
   fixedAspect?: boolean;    // true = exact aspect ratio with adjusted padding; false = fixed padding (default)
+  hPadding?: number;        // Horizontal padding each side (default 18)
+  vPadding?: number;        // Vertical padding each side (default 18)
   colorOverrides?: ColorOverrides;
   effects?: VisualEffects;
   gradient?: GradientConfig;
@@ -33,9 +35,19 @@ const DEFAULT_FONT_SIZE = 14;
 const DEFAULT_MIN_WIDTH = 100;
 const LINE_HEIGHT_FACTOR = 1.4;
 const CHAR_WIDTH_FACTOR = 0.6;   // Average char width / fontSize for sans-serif
-const H_PADDING = 28;            // Horizontal padding each side
-const V_PADDING = 18;            // Vertical padding each side
+const H_PADDING = 18;            // Horizontal padding each side (default; overridable via params.hPadding)
+const V_PADDING = 18;            // Vertical padding each side (default; overridable via params.vPadding)
 const BORDER_RADIUS = 8;
+
+// Short function words that should never sit alone on a wrapped line: they are
+// glued to the word that follows them (typographic "non-breaking" convention),
+// so titles like "Laws of Nature" wrap as "Laws / of Nature" rather than
+// "Laws / of / Nature".
+const FUNCTION_WORDS = new Set([
+  'a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'and', 'or',
+  'nor', 'but', 'as', 'is', 'if', 'vs', 'via', 'per', 'with', 'from', 'into',
+  'over', 'than', 'that', 'no', 'not'
+]);
 
 // =============================================================================
 // HELPERS (color, gradient, effects — same pattern as other designs)
@@ -166,24 +178,55 @@ function computeOptimalLineCount(textLength: number, fontSize: number, targetAsp
 }
 
 /**
+ * Group words so that short function words stay attached to the following word.
+ * Consecutive function words chain onto the same following word
+ * (e.g. "out of the box" → ["out", "of the box"]). Trailing function words with
+ * no following word attach to the previous group instead of dangling.
+ */
+function groupFunctionWords(words: string[]): string[] {
+  const groups: string[] = [];
+  let pending = '';
+
+  for (const word of words) {
+    if (FUNCTION_WORDS.has(word.toLowerCase())) {
+      pending = pending ? `${pending} ${word}` : word;
+    } else {
+      groups.push(pending ? `${pending} ${word}` : word);
+      pending = '';
+    }
+  }
+
+  if (pending) {
+    if (groups.length > 0) {
+      groups[groups.length - 1] = `${groups[groups.length - 1]} ${pending}`;
+    } else {
+      groups.push(pending);
+    }
+  }
+
+  return groups;
+}
+
+/**
  * Word-wrap text to fit within a target width (in pixels).
+ * Function words are glued to the following word so they never wrap alone.
  * Returns array of lines.
  */
 function wordWrap(text: string, targetWidthPx: number, fontSize: number): string[] {
   const charWidth = fontSize * CHAR_WIDTH_FACTOR;
   const maxCharsPerLine = Math.max(1, Math.floor(targetWidthPx / charWidth));
-  const words = text.split(/\s+/);
+  const groups = groupFunctionWords(text.split(/\s+/));
   const lines: string[] = [];
   let current = '';
 
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word;
+  for (const group of groups) {
+    const test = current ? `${current} ${group}` : group;
     if (test.length <= maxCharsPerLine || current === '') {
-      // Accept the word (also accept if it's the first word on the line, even if too long)
+      // Accept the group (also accept if it's the first group on the line, even if too long)
       current = test;
     } else {
       lines.push(current);
-      current = word;
+      current = group;
     }
   }
   if (current) lines.push(current);
@@ -204,7 +247,9 @@ function computeTextLayout(
   title: string,
   fontSize: number,
   minWidth: number,
-  targetAspect: number
+  targetAspect: number,
+  hPadding: number,
+  vPadding: number
 ): { lines: string[]; contentWidth: number; contentHeight: number } {
   const charWidth = fontSize * CHAR_WIDTH_FACTOR;
   const lineHeight = fontSize * LINE_HEIGHT_FACTOR;
@@ -213,7 +258,7 @@ function computeTextLayout(
   if (title.includes('\n')) {
     const lines = title.split('\n');
     const longestLine = Math.max(...lines.map(l => l.length));
-    const contentWidth = Math.max(longestLine * charWidth, minWidth - H_PADDING * 2);
+    const contentWidth = Math.max(longestLine * charWidth, minWidth - hPadding * 2);
     const contentHeight = lines.length * lineHeight;
     return { lines, contentWidth, contentHeight };
   }
@@ -233,10 +278,10 @@ function computeTextLayout(
 
     // Actual content dimensions
     const longestLine = Math.max(...lines.map(l => l.length));
-    const cw = Math.max(longestLine * charWidth, minWidth - H_PADDING * 2);
+    const cw = Math.max(longestLine * charWidth, minWidth - hPadding * 2);
     const ch = lines.length * lineHeight;
-    const totalW = cw + H_PADDING * 2;
-    const totalH = ch + V_PADDING * 2;
+    const totalW = cw + hPadding * 2;
+    const totalH = ch + vPadding * 2;
     const aspect = totalW / totalH;
     const diff = Math.abs(aspect - targetAspect);
 
@@ -247,7 +292,7 @@ function computeTextLayout(
   }
 
   const longestLine = Math.max(...bestLines.map(l => l.length));
-  const contentWidth = Math.max(longestLine * charWidth, minWidth - H_PADDING * 2);
+  const contentWidth = Math.max(longestLine * charWidth, minWidth - hPadding * 2);
   const contentHeight = bestLines.length * lineHeight;
 
   return { lines: bestLines, contentWidth, contentHeight };
@@ -266,16 +311,18 @@ function renderSVG(
   const minWidth = params.minWidth ?? DEFAULT_MIN_WIDTH;
   const targetAspect = params.aspectRatio ?? DEFAULT_ASPECT;
   const fixedAspect = params.fixedAspect ?? false;
+  const hPadding = params.hPadding ?? H_PADDING;
+  const vPadding = params.vPadding ?? V_PADDING;
   const lineHeight = fontSize * LINE_HEIGHT_FACTOR;
 
   // Compute text layout
   const { lines, contentWidth, contentHeight } = computeTextLayout(
-    nodeData.title, fontSize, minWidth, targetAspect
+    nodeData.title, fontSize, minWidth, targetAspect, hPadding, vPadding
   );
 
   // Final rect dimensions
-  let rectWidth = Math.max(contentWidth + H_PADDING * 2, minWidth);
-  let rectHeight = contentHeight + V_PADDING * 2;
+  let rectWidth = Math.max(contentWidth + hPadding * 2, minWidth);
+  let rectHeight = contentHeight + vPadding * 2;
 
   // Fixed aspect mode: enforce exact aspect ratio by expanding the smaller dimension
   if (fixedAspect) {

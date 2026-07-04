@@ -504,6 +504,57 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
   },
 
   {
+    id: 'autolayout',
+    label: 'Auto-layout',
+    icon: '◇',
+    description: 'Automatic re-arrangement of the current scene into a regular radial shape, rooted at the scene\'s central node.',
+    settings: [
+      {
+        key: 'autolayout.layoutType',
+        label: 'Layout',
+        description: 'Arrangement algorithm (more to come)',
+        type: 'select',
+        options: [
+          { value: 'radial', label: 'Radial (sectors)' }
+        ]
+      },
+      {
+        key: 'autolayout.ringSpacing',
+        label: 'Ring Spacing',
+        description: 'Base distance between concentric depth rings (px)',
+        type: 'number',
+        min: 80,
+        max: 600,
+        step: 10
+      },
+      {
+        key: 'autolayout.siblingGap',
+        label: 'Sibling Gap',
+        description: 'Minimum gap between neighbouring nodes on a ring (px)',
+        type: 'number',
+        min: 0,
+        max: 300,
+        step: 5
+      },
+      {
+        key: 'autolayout.animate',
+        label: 'Animate',
+        description: 'Animate nodes to their new positions instead of snapping',
+        type: 'boolean'
+      },
+      {
+        key: 'autolayout.animationDuration',
+        label: 'Animation Duration',
+        description: 'Duration of the re-arrangement animation (ms)',
+        type: 'number',
+        min: 0,
+        max: 3000,
+        step: 50
+      }
+    ]
+  },
+
+  {
     id: 'ai',
     label: 'AI Assistant',
     icon: '◇',

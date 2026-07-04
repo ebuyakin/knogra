@@ -4,13 +4,13 @@
  * Handles markdown conversion and MathJax typesetting.
  */
 
-import type { ChatMessage, MessageId, MessageSource } from '../../../core/chat-types';
+import type { ChatMessage, MessageId, MessageSource, NoteImageAttachment } from '../../../core/chat-types';
 
 /** Callback for context menu on a message */
 export type MessageContextMenuHandler = (event: MouseEvent, messageId: MessageId, source: MessageSource | undefined) => void;
 
 /** Callback for editing a note (double-click) */
-export type NoteEditHandler = (noteEl: HTMLElement, messageId: MessageId, content: string) => void;
+export type NoteEditHandler = (noteEl: HTMLElement, messageId: MessageId, content: string, attachments: NoteImageAttachment[]) => void;
 
 // ============================================================================
 // PUBLIC API
@@ -77,14 +77,34 @@ export function buildNoteElement(
 
   if (onEdit) {
     messageEl.addEventListener('dblclick', () => {
-      onEdit(messageEl, message.id, message.content);
+      onEdit(messageEl, message.id, message.content, message.attachments ?? []);
     });
     messageEl.style.cursor = 'default';
   }
 
   messageEl.appendChild(headerEl);
   messageEl.appendChild(contentEl);
+
+  if (message.attachments?.length) {
+    messageEl.appendChild(buildNoteAttachments(message.attachments));
+  }
+
   return messageEl;
+}
+
+/** Build the container holding a note's image attachments (display mode) */
+export function buildNoteAttachments(attachments: NoteImageAttachment[]): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'note-attachments';
+  for (const attachment of attachments) {
+    const img = document.createElement('img');
+    img.className = 'note-image';
+    img.src = attachment.dataUrl;
+    img.alt = attachment.name;
+    img.loading = 'lazy';
+    wrap.appendChild(img);
+  }
+  return wrap;
 }
 
 /** Render a note and append it to the container */
