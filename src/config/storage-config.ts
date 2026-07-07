@@ -40,3 +40,8 @@ export const THEME_DB_SCHEMA = {
 export const STATE_KEY = 'knogra.state';       // App session state
 export const SETTINGS_KEY = 'knogra.settings'; // User preferences (consolidated object)
 export const SHELF_KEY = 'knogra.shelf';       // AI suggestions
+
+// Mermaid-import authoring preferences. Deliberately isolated from SETTINGS_KEY
+// so publisher-only layout knobs never travel inside an exported .knogra
+// workspace (settings.json) nor get overwritten on import.
+export const MERMAID_IMPORT_KEY = 'knogra.mermaid.import';

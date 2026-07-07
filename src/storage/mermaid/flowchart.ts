@@ -18,6 +18,7 @@ export interface ParsedMermaidGraph {
   edges: ParsedMermaidEdge[];
   equationsByMermaidId: Map<string, string>;
   tagsByMermaidId: Map<string, string[]>;
+  notesByMermaidId: Map<string, string>;
 }
 
 interface NodeSpec {
@@ -68,6 +69,7 @@ export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
   const lines = normalizeMermaidLines(body);
   const equationsByMermaidId = parseKnograEquationSection(source);
   const tagsByMermaidId = parseKnograTagsSection(source);
+  const notesByMermaidId = parseKnograNotesSection(source);
 
   const headerIndex = lines.findIndex(line => /^(flowchart|graph)\s+/i.test(line));
   if (headerIndex < 0) {
@@ -120,7 +122,7 @@ export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
     throw new Error('No nodes found in Mermaid flowchart.');
   }
 
-  return { nodes: [...nodes.values()], edges, equationsByMermaidId, tagsByMermaidId };
+  return { nodes: [...nodes.values()], edges, equationsByMermaidId, tagsByMermaidId, notesByMermaidId };
 }
 
 function extractMermaidBody(source: string): string {
@@ -130,7 +132,9 @@ function extractMermaidBody(source: string): string {
 
 const KNOGRA_EQUATION_HEADING = /^#{1,6}\s+Knogra equations\s*$/i;
 const KNOGRA_TAGS_HEADING = /^#{1,6}\s+Knogra tags\s*$/i;
-const KNOGRA_METADATA_HEADING = /^#{1,6}\s+Knogra (equations|tags)\s*$/i;
+const KNOGRA_NOTES_HEADING = /^#{1,6}\s+Knogra notes\s*$/i;
+const KNOGRA_METADATA_HEADING = /^#{1,6}\s+Knogra (equations|tags|notes)\s*$/i;
+const KNOGRA_NOTE_END = '</note>';
 
 function parseKnograEquationSection(source: string): Map<string, string> {
   const equations = new Map<string, string>();
@@ -169,6 +173,90 @@ function parseKnograTagsSection(source: string): Map<string, string[]> {
   return tagsByMermaidId;
 }
 
+/**
+ * Parse the `Knogra notes` section into per-node multiline note text.
+ *
+ * Each note starts with `<mermaidId>:` (optionally with inline text on the
+ * same line) and runs until a `</note>` marker, which may sit inline at the
+ * end of a content line or alone on its own line. Bodies are preserved
+ * verbatim (indentation, blank lines, markdown, colons) with only outer blank
+ * lines trimmed. A note left open at section end is captured leniently. Last
+ * note wins on duplicate ids.
+ */
+function parseKnograNotesSection(source: string): Map<string, string> {
+  const notes = new Map<string, string>();
+  const sectionLines = extractKnograNotesSection(source);
+  if (sectionLines.length === 0) return notes;
+
+  let currentId: string | null = null;
+  let bodyLines: string[] = [];
+
+  const flush = (): void => {
+    if (currentId === null) return;
+    const content = trimOuterBlankLines(bodyLines).join('\n');
+    if (content.length > 0) notes.set(currentId, content);
+    currentId = null;
+    bodyLines = [];
+  };
+
+  for (const rawLine of sectionLines) {
+    // Opening a note consumes the `<id>:` prefix; the remainder of that line
+    // is the note's first line of content.
+    let text = rawLine;
+    if (currentId === null) {
+      const startMatch = rawLine.trim().match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
+      if (!startMatch) continue;
+      currentId = startMatch[1];
+      bodyLines = [];
+      text = startMatch[2];
+    }
+
+    // The end marker may sit inline at the end of a content line or alone on
+    // its own line. Content before it (if any) is kept; the note then closes.
+    const endIndex = text.indexOf(KNOGRA_NOTE_END);
+    if (endIndex >= 0) {
+      const before = text.slice(0, endIndex);
+      if (before.trim().length > 0) bodyLines.push(before);
+      flush();
+      continue;
+    }
+
+    bodyLines.push(text);
+  }
+
+  // Lenient close: a note left open at section end is still captured.
+  flush();
+
+  return notes;
+}
+
+/**
+ * Extract the raw lines of the `Knogra notes` section. Unlike equation/tag
+ * sections, this runs until the next Knogra metadata heading (or EOF) rather
+ * than the next arbitrary heading, so prose notes may contain `#` markdown
+ * headings without truncating the section.
+ */
+function extractKnograNotesSection(source: string): string[] {
+  const lines = source.split(/\r?\n/);
+  const startIndex = lines.findIndex(line => KNOGRA_NOTES_HEADING.test(line.trim()));
+  if (startIndex < 0) return [];
+
+  const sectionLines: string[] = [];
+  for (let index = startIndex + 1; index < lines.length; index++) {
+    if (KNOGRA_METADATA_HEADING.test(lines[index].trim())) break;
+    sectionLines.push(lines[index]);
+  }
+  return sectionLines;
+}
+
+function trimOuterBlankLines(lines: string[]): string[] {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start].trim().length === 0) start += 1;
+  while (end > start && lines[end - 1].trim().length === 0) end -= 1;
+  return lines.slice(start, end);
+}
+
 function extractKnograSection(source: string, heading: RegExp): string {
   const lines = source.split(/\r?\n/);
   const startIndex = lines.findIndex(line => heading.test(line.trim()));
@@ -188,15 +276,14 @@ function removeKnograMetadataSections(source: string): string {
   const result: string[] = [];
   let inMetadataSection = false;
 
+  // A Knogra metadata section runs until the next Knogra metadata heading or
+  // EOF. Arbitrary (non-Knogra) headings do not close it, so prose in the
+  // notes section may contain `#` markdown headings without leaking into the
+  // mermaid body. By convention these sections are appended after the diagram.
   for (const line of lines) {
-    const isHeading = /^#{1,6}\s+/.test(line.trim());
     if (KNOGRA_METADATA_HEADING.test(line.trim())) {
       inMetadataSection = true;
       continue;
-    }
-
-    if (inMetadataSection && isHeading) {
-      inMetadataSection = false;
     }
 
     if (!inMetadataSection) result.push(line);

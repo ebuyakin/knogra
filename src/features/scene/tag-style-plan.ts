@@ -16,7 +16,11 @@ export interface TagStyleParams {
   applyDesign: boolean;
   applyScale: boolean;
   currentSceneId: SceneId | null;
-  /** The copied-from node — excluded from the plan (it is the template). */
+  /**
+   * The copied-from node (the style template). Only its instance in the
+   * current scene is excluded from the plan — instances of the same node in
+   * other scenes are still restyled, matching the live paste behaviour.
+   */
   excludeNodeId?: NodeId | null;
 }
 
@@ -48,7 +52,6 @@ export function computeTagStylePlan(
   if (!params.applyDesign && !params.applyScale) return EMPTY_PLAN;
 
   const targetNodeIds = collectTargetNodeIds(nodeTags, wanted);
-  if (params.excludeNodeId) targetNodeIds.delete(params.excludeNodeId);
   if (targetNodeIds.size === 0) return EMPTY_PLAN;
 
   const scenesInScope = params.scope === 'current'
@@ -60,7 +63,14 @@ export function computeTagStylePlan(
   let totalNodeInstances = 0;
 
   for (const scene of scenesInScope) {
-    const nodeIds = Object.keys(scene.nodes).filter(id => targetNodeIds.has(id as NodeId)) as NodeId[];
+    // The template node is only excluded within the current scene; its
+    // instances in other scenes are legitimate restyle targets.
+    const excludeInScene = params.excludeNodeId && scene.id === params.currentSceneId
+      ? params.excludeNodeId
+      : null;
+    const nodeIds = Object.keys(scene.nodes).filter(
+      id => targetNodeIds.has(id as NodeId) && id !== excludeInScene
+    ) as NodeId[];
     if (nodeIds.length === 0) continue;
     perScene.push({ sceneId: scene.id, nodeIds });
     totalNodeInstances += nodeIds.length;

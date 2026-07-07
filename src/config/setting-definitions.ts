@@ -8,6 +8,7 @@
 
 import type { SettingKey } from './index';
 import { DESIGN_MANIFEST } from './design-manifest';
+import { AUTOLAYOUT_ALGORITHMS } from './autolayout-settings';
 
 const BASE_THEME_OPTIONS = [
   { value: 'default', label: 'Black & White' },
@@ -514,9 +515,7 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         label: 'Layout',
         description: 'Arrangement algorithm (more to come)',
         type: 'select',
-        options: [
-          { value: 'radial', label: 'Radial (sectors)' }
-        ]
+        options: AUTOLAYOUT_ALGORITHMS.map(algorithm => ({ value: algorithm.id, label: algorithm.label }))
       },
       {
         key: 'autolayout.ringSpacing',
@@ -550,6 +549,26 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         min: 0,
         max: 3000,
         step: 50
+      },
+      {
+        key: 'autolayout.growDirection',
+        label: 'Grow Direction',
+        description: 'Grow & Arrange: which neighbours to pull in from the central node',
+        type: 'select',
+        options: [
+          { value: 'both', label: 'Both (undirected)' },
+          { value: 'children', label: 'Children (outgoing)' },
+          { value: 'parents', label: 'Parents (incoming)' }
+        ]
+      },
+      {
+        key: 'autolayout.growConfirmThreshold',
+        label: 'Grow Confirm Threshold',
+        description: 'Grow & Arrange: confirm before adding more than this many nodes to the scene',
+        type: 'number',
+        min: 0,
+        max: 500,
+        step: 5
       }
     ]
   },
@@ -661,6 +680,28 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         description: 'Additional instructions appended only when using the Connect shortcut.',
         type: 'textarea',
         placeholder: 'e.g. Prioritize existing nodes that clarify prerequisites or resolve gaps in this scene.'
+      }
+    ]
+  },
+  {
+    id: 'notes',
+    label: 'Notes',
+    icon: '◇',
+    settings: [
+      {
+        key: 'ai.imageResultCount',
+        label: 'Image Results',
+        description: 'How many images an online image search retrieves per request (1–10)',
+        type: 'number',
+        min: 1,
+        max: 10,
+        step: 1
+      },
+      {
+        key: 'ai.storeRetrievedImages',
+        label: 'Store Found Images Offline',
+        description: 'Keep a local copy of images found online so they work offline. Off: only the link is kept and the image is fetched each time its note is opened. Affects found images only.',
+        type: 'boolean'
       }
     ]
   },

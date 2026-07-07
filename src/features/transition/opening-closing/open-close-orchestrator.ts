@@ -97,13 +97,14 @@ export class OpenCloseOrchestrator {
           id: edgeId,
           source: edgeData.sourceId,
           target: edgeData.targetId,
-          design: sceneEdgeData?.design
+          design: sceneEdgeData?.design,
+          curve: sceneEdgeData?.curve
         }
       });
 
-      if (StyleGenerator.hasEdgeStyleOverride(sceneEdgeData?.design)) {
+      if (StyleGenerator.hasEdgeStyleOverride(sceneEdgeData)) {
         const edgeStyle = StyleGenerator.generateEdgeStyleForId(
-          edgeId, sceneEdgeData.design, themeId
+          edgeId, sceneEdgeData ?? null, themeId
         );
         edgeStylesheet = StyleGenerator.updateEdgeInStylesheet(
           edgeStylesheet, edgeId, edgeStyle

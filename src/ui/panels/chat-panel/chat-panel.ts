@@ -7,11 +7,12 @@
 import type { Core } from 'cytoscape';
 import type { NodeId, SceneId } from '../../../core/main-types';
 import type { ProposedAction } from '../../../ai/types';
-import type { ChatMessage, MessageSource } from '../../../core/chat-types';
+import type { ChatMessage, MessageSource, ChatImageAttachment } from '../../../core/chat-types';
 import type { SceneContext } from '../../../ai/context-builder';
 
 import { chatSession } from '../../../ai/chat-session';
 import { chatStore } from '../../../storage/chat-store';
+import { localiseAttachment } from '../../../ai/image-search/image-search';
 import { QUICK_ACTIONS, resolveQuickActionMessage } from '../../../ai/prompts';
 import { getSetting } from '../../../config';
 
@@ -104,6 +105,13 @@ export class ChatPanel {
     }
   }
 
+  /** Title of the current central node, used as the default image-search query. */
+  #currentNodeTitle(): string {
+    const nodeId = chatSession.getCurrentNodeId();
+    if (!nodeId) return '';
+    return (this.#cy.getElementById(nodeId).data('title') as string | undefined)?.trim() ?? '';
+  }
+
   // ==========================================================================
   // PRIVATE: SETUP
   // ==========================================================================
@@ -114,6 +122,7 @@ export class ChatPanel {
     for (const action of QUICK_ACTIONS) {
       const button = document.createElement('button');
       button.className = 'quick-action-btn';
+      button.dataset.action = action.id;
       button.title = action.id === 'clear' ? 'Clear chat history' : (action.displayText ?? action.prompt);
       button.innerHTML = `<span class="quick-action-label">${action.label}</span>`;
 
@@ -168,6 +177,7 @@ export class ChatPanel {
         }
         this.#scrollChat();
         this.#updatePlaceholder(nodeId);
+        void this.#localiseRetrievedImages(nodeId);
       },
       onActionsReceived: (actions) => {
         this.#onActionsReceived?.(actions);
@@ -299,6 +309,40 @@ export class ChatPanel {
     renderAIMessage(message, this.#messagesContainer, this.#messageContextMenuHandler);
   }
 
+  /**
+   * Heal link-only retrieved images to stored bytes once, in the background,
+   * when a node's chat is opened (lazy localise). No-op unless the offline
+   * setting is on. Persists to storage only; the already-rendered link keeps
+   * showing, so there is no DOM churn — stored bytes serve the next open.
+   */
+  async #localiseRetrievedImages(nodeId: NodeId): Promise<void> {
+    if (!getSetting('ai.storeRetrievedImages')) return;
+
+    const conversation = await chatStore.getConversation(nodeId);
+    if (!conversation) return;
+
+    for (const message of conversation.messages) {
+      const attachments = message.attachments;
+      if (!attachments?.length) continue;
+
+      const targets = attachments.filter(
+        att => att.origin === 'retrieved' && !att.dataUrl && att.sourceUrl
+      );
+      if (targets.length === 0) continue;
+
+      const localised = await Promise.all(targets.map(localiseAttachment));
+      if (localised.every(result => result === null)) continue;
+
+      const byId = new Map<string, ChatImageAttachment>();
+      targets.forEach((att, i) => {
+        const result = localised[i];
+        if (result) byId.set(att.id, result);
+      });
+      const updated = attachments.map(att => byId.get(att.id) ?? att);
+      await chatStore.setMessageAttachments(nodeId, message.id, updated);
+    }
+  }
+
   /** Bound handler for context menu on any message */
   #messageContextMenuHandler: MessageContextMenuHandler = (event, messageId, source) => {
     showMessageContextMenu(event, messageId, source, this.#contextMenuActions());
@@ -311,7 +355,8 @@ export class ChatPanel {
       this.#messagesContainer,
       chatSession.getCurrentNodeId(),
       this.#messageContextMenuHandler,
-      this.#noteEditHandler
+      this.#noteEditHandler,
+      this.#currentNodeTitle()
     );
   };
 
@@ -323,7 +368,8 @@ export class ChatPanel {
         chatSession.getCurrentNodeId(),
         this.#messageContextMenuHandler,
         this.#noteEditHandler,
-        afterEl
+        afterEl,
+        this.#currentNodeTitle()
       ),
       onEditNote: (messageEl, messageId) => {
         const msg = chatSession.getMessages().find(m => m.id === messageId);
@@ -373,9 +419,10 @@ export class ChatPanel {
 
     buttons.forEach(btn => {
       const button = btn as HTMLButtonElement;
-      const isClear = button.title === 'Clear chat history';
-      button.disabled = isClear ? false : !hasKey;
-      button.classList.toggle('ai-disabled', isClear ? false : !hasKey);
+      const action = button.dataset.action;
+      const alwaysOn = action === 'clear';
+      button.disabled = alwaysOn ? false : !hasKey;
+      button.classList.toggle('ai-disabled', alwaysOn ? false : !hasKey);
     });
   }
 

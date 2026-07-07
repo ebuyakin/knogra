@@ -135,6 +135,14 @@ export interface Scene {
   }>;
   edges: Record<EdgeId, {
     design: {id: DesignId, params: Record<DesignParameterId, unknown>},
+    /**
+     * Individual per-edge curve/layout override, stored as raw Cytoscape curve
+     * keys (curve-style, control-point-*, segment-*, taxi-*, edge-distances).
+     * Absent = default automatic bezier. Kept separate from `design` (visual
+     * style) because the curve is layout, tied to this scene's node positions,
+     * and never cascades or is copied collectively.
+     */
+    curve?: Record<string, unknown>,
     sourceEndpoint?: string,  // e.g., 'top', 'bottom', 'left', 'right'
     targetEndpoint?: string,
     controlPoints?: {x: number, y: number}[]  // For curved edges

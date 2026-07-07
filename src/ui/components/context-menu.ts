@@ -21,6 +21,7 @@ import type { PasteStyleDialog } from './paste-style-dialog';
 import { graphStore } from '../../storage/graph-store';
 import { getAppMode, isEditMode, setAppMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
+import { pickVisualParams } from '../../styles/edge-visual-resolver';
 import { exportWorkspace, showImportDialog, newWorkspace } from '../../storage/workspace';
 import { exportMermaidGraph, showImportMermaidDialog } from '../../storage/mermaid';
 import { SettingsModal } from './settings-modal';
@@ -287,7 +288,14 @@ export class ContextMenu {
             }
           },
           {
-            label: 'Exclude descendants (Shift+C)',
+            label: 'Exclude neighbours (Shift+C)',
+            enabled: editMode,
+            action: async () => {
+              await this.#features.scene.excludeNeighboursAnimated(nodeId);
+            }
+          },
+          {
+            label: 'Exclude descendants (Shift+J)',
             enabled: editMode,
             action: async () => {
               await this.#features.scene.collapseNodeAnimated(nodeId);
@@ -411,8 +419,11 @@ export class ContextMenu {
       context,
       (id, payload) => {
         this.#features.edge.update(id, { typeId: payload.typeId });
-        if (payload.params !== undefined) {
-          this.#features.scene.updateEdgeStyle(id, payload.params);
+        if (payload.visualParams !== undefined) {
+          this.#features.scene.updateEdgeStyle(id, payload.visualParams);
+        }
+        if (payload.curveParams !== undefined) {
+          this.#features.scene.updateEdgeCurve(id, payload.curveParams);
         }
       }
     );
@@ -494,9 +505,13 @@ export class ContextMenu {
             context,
             (edgeId, payload) => {
               this.#features.edge.update(edgeId, { typeId: payload.typeId });
-              if (payload.params !== undefined) {
-                // Save edge style via scene feature
-                this.#features.scene.updateEdgeStyle(edgeId, payload.params);
+              if (payload.visualParams !== undefined) {
+                // Save edge visual style via scene feature
+                this.#features.scene.updateEdgeStyle(edgeId, payload.visualParams);
+              }
+              if (payload.curveParams !== undefined) {
+                // Save edge curve/layout via scene feature
+                this.#features.scene.updateEdgeCurve(edgeId, payload.curveParams);
               }
             }
           );
@@ -517,7 +532,7 @@ export class ContextMenu {
           if (context) {
             this.#copiedEdgeStyle = {
               typeId: context.typeId,
-              params: context.hasStyleOverride ? { ...context.design.params } : null
+              params: context.hasStyleOverride ? pickVisualParams(context.design.params) : null
             };
           }
         }
@@ -601,10 +616,36 @@ export class ContextMenu {
         children: [
           {
             label: 'Auto-layout',
-            enabled: editMode,
-            action: () => {
-              this.#features.autolayout.apply(this.#features.scene.getCentralNodeId());
-            }
+            children: [
+              {
+                label: 'No expansion',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.apply(this.#features.scene.getCentralNodeId());
+                }
+              },
+              {
+                label: '1 degree',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 1);
+                }
+              },
+              {
+                label: '2 degrees',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 2);
+                }
+              },
+              {
+                label: '3 degrees',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 3);
+                }
+              }
+            ]
           },
           {
             label: 'Edges visibility',

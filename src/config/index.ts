@@ -171,6 +171,7 @@ export function importSettings(settings: Partial<SettingsObject>): void {
     edge: { ...ALL_DEFAULTS.edge, ...settings.edge },
     customTheme: { ...ALL_DEFAULTS.customTheme, ...settings.customTheme },
     interaction: { ...ALL_DEFAULTS.interaction, ...settings.interaction },
+    autolayout: { ...ALL_DEFAULTS.autolayout, ...settings.autolayout },
   };
   saveAllSettings(merged);
 }

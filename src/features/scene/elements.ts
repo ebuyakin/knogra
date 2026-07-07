@@ -53,7 +53,8 @@ export function buildElements(
         ...edge,
         source: edge.sourceId,
         target: edge.targetId,
-        design: sceneEdge.design
+        design: sceneEdge.design,
+        curve: sceneEdge.curve
       },
       classes: sceneEdge.design?.id || ''
     });

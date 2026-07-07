@@ -4,8 +4,12 @@
  */
 
 import type { NodeId } from '../../../core/main-types';
-import type { ChatMessage, MessageId, NoteImageAttachment, NoteImageMimeType } from '../../../core/chat-types';
+import type { ChatMessage, MessageId, ChatImageAttachment, NoteImageMimeType } from '../../../core/chat-types';
 import { chatStore } from '../../../storage/chat-store';
+import { chatSession } from '../../../ai/chat-session';
+import { searchImages, toRetrievedAttachment } from '../../../ai/image-search/image-search';
+import type { ImageCandidate } from '../../../ai/image-search/image-source';
+import { getSetting } from '../../../config';
 import { buildNoteElement, scrollToBottom } from './chat-message-renderer';
 import type { MessageContextMenuHandler, NoteEditHandler } from './chat-message-renderer';
 
@@ -22,8 +26,8 @@ function generateAttachmentId(): string {
   return `att-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-/** Read + validate a file into a NoteImageAttachment. Rejects with a user message on failure. */
-function readImageAttachment(file: File): Promise<NoteImageAttachment> {
+/** Read + validate a file into a ChatImageAttachment. Rejects with a user message on failure. */
+function readImageAttachment(file: File): Promise<ChatImageAttachment> {
   return new Promise((resolve, reject) => {
     if (!ALLOWED_NOTE_IMAGE_MIME_TYPES.has(file.type as NoteImageMimeType)) {
       reject(new Error('Only PNG, JPEG, and WebP images are allowed.'));
@@ -48,6 +52,7 @@ function readImageAttachment(file: File): Promise<NoteImageAttachment> {
         resolve({
           id: generateAttachmentId(),
           type: 'image',
+          origin: 'note',
           mimeType: file.type as NoteImageMimeType,
           name: file.name,
           dataUrl,
@@ -63,7 +68,7 @@ function readImageAttachment(file: File): Promise<NoteImageAttachment> {
 
 /** Controls a single-image attachment zone inside a note editor. */
 interface AttachmentZone {
-  getAttachments(): NoteImageAttachment[];
+  getAttachments(): ChatImageAttachment[];
   /** True while the native file picker is open (blur-save must be suppressed). */
   isBusy(): boolean;
 }
@@ -74,11 +79,14 @@ interface AttachmentZone {
  */
 function createAttachmentZone(
   editorEl: HTMLElement,
-  initial: NoteImageAttachment[],
-  textarea: HTMLTextAreaElement
+  initial: ChatImageAttachment[],
+  textarea: HTMLTextAreaElement,
+  defaultQuery: string
 ): AttachmentZone {
-  let attachment: NoteImageAttachment | null = initial[0] ?? null;
+  let attachment: ChatImageAttachment | null = initial[0] ?? null;
   let picking = false;
+  let searching = false;
+  let shownUrls = new Set<string>();
 
   const zone = document.createElement('div');
   zone.className = 'note-attach-zone';
@@ -86,13 +94,41 @@ function createAttachmentZone(
   const preview = document.createElement('div');
   preview.className = 'note-attach-preview';
 
+  const strip = document.createElement('div');
+  strip.className = 'note-attach-strip';
+  strip.style.display = 'none';
+
   const toolbar = document.createElement('div');
   toolbar.className = 'note-attach-toolbar';
+
+  const panel = document.createElement('div');
+  panel.className = 'note-attach-panel';
+
+  const panelTitle = document.createElement('div');
+  panelTitle.className = 'note-attach-panel-title';
+  panelTitle.textContent = 'Image';
 
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'note-attach-btn';
-  addBtn.textContent = 'Add image';
+  addBtn.textContent = 'Upload';
+
+  const findBtn = document.createElement('button');
+  findBtn.type = 'button';
+  findBtn.className = 'note-attach-btn';
+  findBtn.textContent = 'Search online';
+
+  const moreBtn = document.createElement('button');
+  moreBtn.type = 'button';
+  moreBtn.className = 'note-attach-btn';
+  moreBtn.textContent = 'Show more';
+  moreBtn.style.display = 'none';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'note-attach-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.display = 'none';
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -107,7 +143,7 @@ function createAttachmentZone(
     if (attachment) {
       const img = document.createElement('img');
       img.className = 'note-image';
-      img.src = attachment.dataUrl;
+      img.src = attachment.dataUrl ?? attachment.sourceUrl ?? '';
       img.alt = attachment.name;
 
       const removeBtn = document.createElement('button');
@@ -126,7 +162,91 @@ function createAttachmentZone(
       frame.append(img, removeBtn);
       preview.appendChild(frame);
     }
-    addBtn.textContent = attachment ? 'Replace image' : 'Add image';
+    addBtn.textContent = attachment ? 'Replace from disk' : 'Upload';
+    findBtn.textContent = attachment ? 'Search online again' : 'Search online';
+  };
+
+  // ---- Online image search (pick-one strip) ---------------------------
+
+  const showStrip = (): void => {
+    strip.style.display = '';
+    preview.style.display = 'none';
+    addBtn.style.display = 'none';
+    findBtn.style.display = 'none';
+    moreBtn.style.display = '';
+    cancelBtn.style.display = '';
+  };
+  const hideStrip = (): void => {
+    strip.style.display = 'none';
+    preview.style.display = '';
+    addBtn.style.display = '';
+    findBtn.style.display = '';
+    moreBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+  };
+
+  const setStripStatus = (text: string): void => {
+    strip.innerHTML = '';
+    const status = document.createElement('div');
+    status.className = 'note-attach-strip-status';
+    status.textContent = text;
+    strip.appendChild(status);
+  };
+
+  const renderResults = (candidates: ImageCandidate[]): void => {
+    strip.innerHTML = '';
+
+    const grid = document.createElement('div');
+    grid.className = 'note-attach-strip-grid';
+    for (const candidate of candidates) {
+      if (candidate.sourceUrl) shownUrls.add(candidate.sourceUrl);
+      const thumb = document.createElement('img');
+      thumb.className = 'note-attach-thumb';
+      thumb.src = candidate.sourceUrl;
+      thumb.alt = candidate.title;
+      thumb.title = candidate.title;
+      thumb.addEventListener('mousedown', (e) => e.preventDefault());
+      thumb.addEventListener('click', () => { void pickCandidate(candidate); });
+      grid.appendChild(thumb);
+    }
+    strip.appendChild(grid);
+  };
+
+  /**
+   * Turn a picked candidate into the note's image. Downloads and stores bytes
+   * when the offline setting is on; otherwise keeps a link-only attachment.
+   */
+  const pickCandidate = async (candidate: ImageCandidate): Promise<void> => {
+    setStripStatus('Adding image…');
+    const store = getSetting('ai.storeRetrievedImages');
+    attachment = await toRetrievedAttachment(candidate, { store });
+    shownUrls = new Set();
+    hideStrip();
+    render();
+  };
+
+  const runSearch = async (): Promise<void> => {
+    const query = textarea.value.trim() || defaultQuery;
+    if (!query) {
+      errorEl.textContent = 'Type a description to search for an image.';
+      return;
+    }
+    errorEl.textContent = '';
+    searching = true;
+    showStrip();
+    setStripStatus(`Searching for "${query}"…`);
+    try {
+      const results = await searchImages(query, { exclude: shownUrls });
+      if (results.length === 0) {
+        setStripStatus('No images found.');
+      } else {
+        renderResults(results);
+      }
+    } catch (err) {
+      setStripStatus(`Search failed: ${(err as Error).message}`);
+    } finally {
+      searching = false;
+    }
   };
 
   // Opening the native file dialog blurs the textarea. Guard against the
@@ -148,6 +268,15 @@ function createAttachmentZone(
 
   addBtn.addEventListener('mousedown', (e) => e.preventDefault());
   addBtn.addEventListener('click', beginPick);
+  findBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  findBtn.addEventListener('click', () => {
+    shownUrls = new Set();
+    void runSearch();
+  });
+  moreBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  moreBtn.addEventListener('click', () => { void runSearch(); });
+  cancelBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  cancelBtn.addEventListener('click', () => hideStrip());
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     fileInput.value = '';
@@ -155,20 +284,22 @@ function createAttachmentZone(
     errorEl.textContent = '';
     try {
       attachment = await readImageAttachment(file);
+      hideStrip();
       render();
     } catch (err) {
       errorEl.textContent = (err as Error).message;
     }
   });
 
-  toolbar.append(addBtn, errorEl);
-  zone.append(preview, toolbar, fileInput);
+  toolbar.append(addBtn, findBtn, moreBtn, cancelBtn);
+  panel.append(panelTitle, toolbar, errorEl);
+  zone.append(preview, strip, panel, fileInput);
   editorEl.appendChild(zone);
   render();
 
   return {
     getAttachments: () => (attachment ? [attachment] : []),
-    isBusy: () => picking,
+    isBusy: () => picking || searching,
   };
 }
 
@@ -185,7 +316,8 @@ export function createNoteEditor(
   nodeId: NodeId | null,
   onContextMenu: MessageContextMenuHandler,
   onEdit: NoteEditHandler,
-  afterEl?: HTMLElement | null
+  afterEl?: HTMLElement | null,
+  defaultQuery: string = ''
 ): void {
   // Don't create if one is already open
   if (container.querySelector('.note-editor')) return;
@@ -224,7 +356,7 @@ export function createNoteEditor(
   });
 
   editorEl.appendChild(textarea);
-  const zone = createAttachmentZone(editorEl, [], textarea);
+  const zone = createAttachmentZone(editorEl, [], textarea, defaultQuery);
 
   // Insert after the target message, or at the end
   if (afterEl?.nextSibling) {
@@ -245,11 +377,12 @@ export function editNote(
   noteEl: HTMLElement,
   messageId: MessageId,
   currentContent: string,
-  currentAttachments: NoteImageAttachment[],
+  currentAttachments: ChatImageAttachment[],
   container: HTMLElement,
   nodeId: NodeId | null,
   onContextMenu: MessageContextMenuHandler,
-  onEdit: NoteEditHandler
+  onEdit: NoteEditHandler,
+  defaultQuery: string = ''
 ): void {
   // Don't edit if another editor is already open
   if (container.querySelector('.note-editor')) return;
@@ -281,7 +414,7 @@ export function editNote(
   });
 
   editorEl.appendChild(textarea);
-  const zone = createAttachmentZone(editorEl, currentAttachments);
+  const zone = createAttachmentZone(editorEl, currentAttachments, textarea, defaultQuery);
   noteEl.replaceWith(editorEl);
   textarea.focus();
   // Place cursor at end
@@ -299,7 +432,7 @@ async function saveNote(
   nodeId: NodeId | null,
   onContextMenu: MessageContextMenuHandler,
   onEdit: NoteEditHandler,
-  attachments: NoteImageAttachment[]
+  attachments: ChatImageAttachment[]
 ): Promise<void> {
   if ((!content && attachments.length === 0) || !nodeId) {
     editorEl.remove();
@@ -311,6 +444,7 @@ async function saveNote(
     await chatStore.setMessageAttachments(nodeId, message.id, attachments);
     message.attachments = attachments;
   }
+  await chatSession.refreshMessages();
 
   // Replace editor with rendered note in the same position
   const noteEl = buildNoteElement(message, onContextMenu, onEdit);
@@ -326,13 +460,14 @@ async function updateNote(
   onContextMenu: MessageContextMenuHandler,
   onEdit: NoteEditHandler,
   originalContent: string,
-  attachments: NoteImageAttachment[]
+  attachments: ChatImageAttachment[]
 ): Promise<void> {
   if (!nodeId) { editorEl.remove(); return; }
 
   // Empty note (no text, no image) — remove entirely
   if (!content && attachments.length === 0) {
     await chatStore.deleteMessage(nodeId, messageId);
+    await chatSession.refreshMessages();
     editorEl.remove();
     return;
   }
@@ -342,6 +477,7 @@ async function updateNote(
     await chatStore.updateMessage(nodeId, messageId, content);
   }
   await chatStore.setMessageAttachments(nodeId, messageId, attachments);
+  await chatSession.refreshMessages();
 
   const conversation = await chatStore.getConversation(nodeId);
   const msg = conversation?.messages.find(m => m.id === messageId);

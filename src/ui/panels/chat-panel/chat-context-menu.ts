@@ -6,6 +6,7 @@
 
 import type { MessageId, MessageSource } from '../../../core/chat-types';
 import { chatSession } from '../../../ai/chat-session';
+import { openImageViewer } from './image-lightbox';
 
 // ============================================================================
 // TYPES
@@ -137,6 +138,18 @@ export function showMessageContextMenu(
   const menu = createMenu(event.clientX, event.clientY);
   const isNote = source === 'note';
   const isTutorial = source === 'tutorial';
+
+  // View image (any message carrying an image attachment)
+  const message = chatSession.getMessages().find(m => m.id === messageId);
+  const imageAttachment = message?.attachments?.find(a => a.type === 'image');
+  if (imageAttachment) {
+    const viewBtn = createMenuButton('View image');
+    viewBtn.onclick = () => {
+      menu.remove();
+      openImageViewer(imageAttachment);
+    };
+    menu.appendChild(viewBtn);
+  }
 
   // Copy Block (AI and tutorial only)
   if (!isNote) {

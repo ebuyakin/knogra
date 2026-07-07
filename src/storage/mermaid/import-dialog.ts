@@ -2,23 +2,27 @@ import type { EdgeStyleSlotId } from '../../core/main-types';
 import { getDefaultEdgeStyleSlotId, getEdgeStyleSlotIds } from '../../config/edge-type-settings';
 import type { ParsedMermaidGraph } from './flowchart';
 import { getMermaidSceneSlice, MERMAID_SCENE_LIMITS } from './scene-slice';
+import { buildEdgeSceneFlags, normalizeMermaidEdgeLabel, sanitizeMermaidEdgeLabel, type MermaidEdgeLabelMapping } from './edge-mapping';
+import { getMermaidImportLayoutSettings, type MermaidImportLayoutSettings } from './import-settings-store';
+import { showMermaidLayoutOptionsDialog, layoutHasOptions } from './import-options-dialog';
 
-export interface MermaidEdgeLabelMapping {
-  sourceLabelKey: string;
-  edgeTypeName: string;
-  thematicStyleSlotId: EdgeStyleSlotId;
-}
+export type { MermaidEdgeLabelMapping };
 
 export interface MermaidImportSelection {
   anchorMermaidId: string;
   depth: number;
   allLevels: boolean;
-  layout: 'radial' | 'top-down' | 'left-right';
+  layout: 'radial' | 'top-down' | 'left-right' | 'fan';
   importEquations: boolean;
   importTags: boolean;
+  importNotes: boolean;
   sceneGeneration: 'anchor' | 'hubs' | 'all';
   subSceneDepth: number;
   edgeLabelMappings: MermaidEdgeLabelMapping[];
+  /** Snapshot of the layout knobs at import time (taken from the persistent
+   *  `knogra.mermaid.import` store), so the builder stays a pure function of the
+   *  selection. */
+  layoutParams: MermaidImportLayoutSettings;
 }
 
 export function showMermaidImportSelectionDialog(
@@ -29,6 +33,7 @@ export function showMermaidImportSelectionDialog(
   const edgeLabelRows = getEdgeLabelRows(parsed);
   const equationMetadataStatus = getEquationMetadataStatus(parsed);
   const tagMetadataStatus = getTagMetadataStatus(parsed);
+  const noteMetadataStatus = getNotesMetadataStatus(parsed);
   const hubNodeCount = countHubNodes(parsed);
   const totalNodeCount = parsed.nodes.length;
 
@@ -154,15 +159,40 @@ export function showMermaidImportSelectionDialog(
     layoutSelect.style.cssText = 'width:180px;padding:8px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;';
     layoutSelect.innerHTML = `
       <option value="radial">Radial context</option>
+      <option value="fan">Fan (nested scenes)</option>
       <option value="top-down">Top-down flow</option>
       <option value="left-right">Left-right flow</option>
     `;
 
     const layoutHint = document.createElement('div');
-    layoutHint.textContent = 'Radial suits graph-like maps; flow layouts follow Mermaid edge direction.';
+    layoutHint.textContent = 'Radial suits graph-like maps; flow layouts follow Mermaid edge direction; fan continues the parent scene into nested sub-scenes.';
     layoutHint.style.cssText = 'color:#8b949e;line-height:1.5;font-size:12px;';
 
-    layoutLabel.appendChild(layoutSelect);
+    const layoutRow = document.createElement('div');
+    layoutRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
+
+    const layoutOptionsButton = document.createElement('button');
+    layoutOptionsButton.type = 'button';
+    layoutOptionsButton.textContent = 'Layout options…';
+    layoutOptionsButton.style.cssText = 'padding:8px 12px;border-radius:6px;border:1px solid #30363d;background:none;color:#c9d1d9;cursor:pointer;font-size:13px;white-space:nowrap;';
+
+    const syncLayoutOptionsButton = (): void => {
+      const enabled = layoutHasOptions(layoutSelect.value as MermaidImportSelection['layout']);
+      layoutOptionsButton.disabled = !enabled;
+      layoutOptionsButton.style.opacity = enabled ? '1' : '0.5';
+      layoutOptionsButton.style.cursor = enabled ? 'pointer' : 'not-allowed';
+    };
+    layoutSelect.addEventListener('change', syncLayoutOptionsButton);
+    layoutOptionsButton.addEventListener('click', () => {
+      const layout = layoutSelect.value as MermaidImportSelection['layout'];
+      if (!layoutHasOptions(layout)) return;
+      void showMermaidLayoutOptionsDialog(layout);
+    });
+    syncLayoutOptionsButton();
+
+    layoutRow.appendChild(layoutSelect);
+    layoutRow.appendChild(layoutOptionsButton);
+    layoutLabel.appendChild(layoutRow);
     depthPanel.appendChild(layoutLabel);
     depthPanel.appendChild(layoutHint);
 
@@ -207,6 +237,27 @@ export function showMermaidImportSelectionDialog(
     tagLabel.appendChild(tagInput);
     tagLabel.appendChild(tagText);
     depthPanel.appendChild(tagLabel);
+
+    const canImportNotes = noteMetadataStatus.total > 0;
+
+    const noteLabel = document.createElement('label');
+    noteLabel.style.cssText = `display:flex;align-items:flex-start;gap:8px;color:${canImportNotes ? '#c9d1d9' : '#8b949e'};cursor:${canImportNotes ? 'pointer' : 'not-allowed'};font-size:13px;margin-top:4px;`;
+
+    const noteInput = document.createElement('input');
+    noteInput.type = 'checkbox';
+    noteInput.disabled = !canImportNotes;
+    noteInput.style.accentColor = '#58a6ff';
+    noteInput.style.marginTop = '2px';
+    noteInput.style.opacity = canImportNotes ? '1' : '0.5';
+
+    const noteText = document.createElement('span');
+    noteText.textContent = canImportNotes
+      ? `Import notes (${noteMetadataStatus.matched} matched${noteMetadataStatus.unmatched > 0 ? `, ${noteMetadataStatus.unmatched} unmatched` : ''})`
+      : 'Import notes (none found)';
+
+    noteLabel.appendChild(noteInput);
+    noteLabel.appendChild(noteText);
+    depthPanel.appendChild(noteLabel);
 
     const sceneGenLabel = document.createElement('label');
     sceneGenLabel.style.cssText = 'display:flex;flex-direction:column;gap:6px;color:#c9d1d9;font-size:13px;margin-top:12px;';
@@ -260,13 +311,16 @@ export function showMermaidImportSelectionDialog(
     const edgeTypeGrid = document.createElement('div');
     edgeTypeGrid.style.cssText = 'border:1px solid #30363d;border-radius:6px;background:#0d1117;overflow:auto;max-height:28vh;';
     edgeTypeGrid.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:720px;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:820px;">
         <thead style="position:sticky;top:0;background:#161b22;z-index:1;">
           <tr>
             <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;">Mermaid label</th>
             <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:70px;">Count</th>
             <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:230px;">Knogra edge type name</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:170px;">Thematic style</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:120px;">Thematic style</th>
+            <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:76px;" title="Include this label's children (source→target) in generated scenes">Children</th>
+            <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:76px;" title="Include this label's parents (target→source) in generated scenes">Parents</th>
+            <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:90px;" title="Draw this label between nodes already in a scene (non-structural cross-links)">Cross-links</th>
           </tr>
         </thead>
         <tbody>
@@ -282,6 +336,9 @@ export function showMermaidImportSelectionDialog(
                   ${getEdgeStyleSlotIds().map(slotId => `<option value="${slotId}" ${slotId === row.defaultStyleSlotId ? 'selected' : ''}>${formatStyleSlot(slotId)}</option>`).join('')}
                 </select>
               </td>
+              <td style="padding:8px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-children" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
+              <td style="padding:8px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-parents" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
+              <td style="padding:8px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-cross" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
             </tr>
           `).join('')}
         </tbody>
@@ -349,17 +406,23 @@ export function showMermaidImportSelectionDialog(
         const labelKey = (row as HTMLElement).dataset.labelKey ?? '';
         const nameInput = row.querySelector('.mi-edge-type-name') as HTMLInputElement | null;
         const styleSelect = row.querySelector('.mi-edge-style') as HTMLSelectElement | null;
+        const childrenCb = row.querySelector('.mi-edge-children') as HTMLInputElement | null;
+        const parentsCb = row.querySelector('.mi-edge-parents') as HTMLInputElement | null;
+        const crossCb = row.querySelector('.mi-edge-cross') as HTMLInputElement | null;
         return {
           sourceLabelKey: labelKey,
           edgeTypeName: sanitizeEdgeTypeName(nameInput?.value ?? '') || 'related',
           thematicStyleSlotId: (styleSelect?.value || getDefaultEdgeStyleSlotId()) as EdgeStyleSlotId,
+          includeChildren: childrenCb?.checked ?? true,
+          includeParents: parentsCb?.checked ?? true,
+          includeCrossEdges: crossCb?.checked ?? true,
         };
       });
     };
 
     const updateSceneSizeStatus = (): void => {
       try {
-        const slice = getMermaidSceneSlice(parsed, getSelectedAnchorId(), getDepth(), allLevelsInput.checked);
+        const slice = getMermaidSceneSlice(parsed, getSelectedAnchorId(), getDepth(), allLevelsInput.checked, buildEdgeSceneFlags(parsed.edges, getEdgeLabelMappings()));
         const countText = `${slice.nodeCount} node${slice.nodeCount === 1 ? '' : 's'}, ${slice.edgeCount} edge${slice.edgeCount === 1 ? '' : 's'}`;
         if (slice.overLimit) {
           sceneSizeStatus.textContent = `Starting scene: ${countText}. Limit is ${MERMAID_SCENE_LIMITS.maxNodes} nodes / ${MERMAID_SCENE_LIMITS.maxEdges} edges. Reduce depth or choose another origin.`;
@@ -403,6 +466,11 @@ export function showMermaidImportSelectionDialog(
     edgeTypeGrid.addEventListener('change', event => {
       const target = event.target as HTMLElement;
       if (target.classList.contains('mi-edge-style') || target.classList.contains('mi-edge-type-name')) syncEdgeStyleGroups();
+      if (
+        target.classList.contains('mi-edge-children') ||
+        target.classList.contains('mi-edge-parents') ||
+        target.classList.contains('mi-edge-cross')
+      ) updateSceneSizeStatus();
     });
 
     importButton.addEventListener('click', () => {
@@ -414,9 +482,11 @@ export function showMermaidImportSelectionDialog(
         layout: layoutSelect.value as MermaidImportSelection['layout'],
         importEquations: equationInput.checked && !equationInput.disabled,
         importTags: tagInput.checked && !tagInput.disabled,
+        importNotes: noteInput.checked && !noteInput.disabled,
         sceneGeneration: sceneGenSelect.value as MermaidImportSelection['sceneGeneration'],
         subSceneDepth: subDepthSelect.value === '2' ? 2 : 1,
         edgeLabelMappings: getEdgeLabelMappings(),
+        layoutParams: getMermaidImportLayoutSettings(),
       });
     });
 
@@ -454,6 +524,18 @@ function getTagMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matc
   let matched = 0;
 
   for (const mermaidId of parsed.tagsByMermaidId.keys()) {
+    if (nodeIds.has(mermaidId)) matched += 1;
+  }
+
+  return { total, matched, unmatched: total - matched };
+}
+
+function getNotesMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matched: number; unmatched: number } {
+  const nodeIds = new Set(parsed.nodes.map(node => node.mermaidId));
+  const total = parsed.notesByMermaidId.size;
+  let matched = 0;
+
+  for (const mermaidId of parsed.notesByMermaidId.keys()) {
     if (nodeIds.has(mermaidId)) matched += 1;
   }
 
@@ -504,16 +586,8 @@ function getEdgeLabelRows(parsed: ParsedMermaidGraph): EdgeLabelRow[] {
     }));
 }
 
-export function normalizeMermaidEdgeLabel(label: string): string {
-  return sanitizeMermaidEdgeLabel(label).toLowerCase();
-}
-
 export function normalizeEdgeTypeName(name: string): string {
   return sanitizeEdgeTypeName(name).toLowerCase();
-}
-
-function sanitizeMermaidEdgeLabel(label: string): string {
-  return label.trim().replace(/\s+/g, ' ');
 }
 
 function sanitizeEdgeTypeName(name: string): string {

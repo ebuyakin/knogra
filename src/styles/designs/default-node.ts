@@ -39,15 +39,20 @@ const H_PADDING = 18;            // Horizontal padding each side (default; overr
 const V_PADDING = 18;            // Vertical padding each side (default; overridable via params.vPadding)
 const BORDER_RADIUS = 8;
 
-// Short function words that should never sit alone on a wrapped line: they are
-// glued to the word that follows them (typographic "non-breaking" convention),
-// so titles like "Laws of Nature" wrap as "Laws / of Nature" rather than
-// "Laws / of / Nature".
-const FUNCTION_WORDS = new Set([
-  'a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'and', 'or',
-  'nor', 'but', 'as', 'is', 'if', 'vs', 'via', 'per', 'with', 'from', 'into',
-  'over', 'than', 'that', 'no', 'not'
+// Minor words that should never sit alone on a wrapped line: they are glued to
+// the word that follows them (typographic "non-breaking" convention), so titles
+// like "Laws of Nature" wrap as "Laws / of Nature" rather than "Laws / of /
+// Nature". Any word of 3 characters or fewer counts as minor — this also keeps
+// symbols and abbreviations (e.g. "&", "AI") from stranding. A few longer
+// function words that read poorly when stranded are included explicitly.
+const MINOR_WORD_MAX_LENGTH = 3;
+const LONG_FUNCTION_WORDS = new Set([
+  'with', 'from', 'into', 'over', 'than', 'that'
 ]);
+
+function isMinorWord(word: string): boolean {
+  return word.length <= MINOR_WORD_MAX_LENGTH || LONG_FUNCTION_WORDS.has(word.toLowerCase());
+}
 
 // =============================================================================
 // HELPERS (color, gradient, effects — same pattern as other designs)
@@ -178,17 +183,17 @@ function computeOptimalLineCount(textLength: number, fontSize: number, targetAsp
 }
 
 /**
- * Group words so that short function words stay attached to the following word.
- * Consecutive function words chain onto the same following word
- * (e.g. "out of the box" → ["out", "of the box"]). Trailing function words with
+ * Group words so that short "minor" words stay attached to the following word.
+ * Consecutive minor words chain onto the same following word
+ * (e.g. "out of the box" → ["out", "of the box"]). Trailing minor words with
  * no following word attach to the previous group instead of dangling.
  */
-function groupFunctionWords(words: string[]): string[] {
+function groupMinorWords(words: string[]): string[] {
   const groups: string[] = [];
   let pending = '';
 
   for (const word of words) {
-    if (FUNCTION_WORDS.has(word.toLowerCase())) {
+    if (isMinorWord(word)) {
       pending = pending ? `${pending} ${word}` : word;
     } else {
       groups.push(pending ? `${pending} ${word}` : word);
@@ -209,13 +214,13 @@ function groupFunctionWords(words: string[]): string[] {
 
 /**
  * Word-wrap text to fit within a target width (in pixels).
- * Function words are glued to the following word so they never wrap alone.
+ * Minor words are glued to the following word so they never wrap alone.
  * Returns array of lines.
  */
 function wordWrap(text: string, targetWidthPx: number, fontSize: number): string[] {
   const charWidth = fontSize * CHAR_WIDTH_FACTOR;
   const maxCharsPerLine = Math.max(1, Math.floor(targetWidthPx / charWidth));
-  const groups = groupFunctionWords(text.split(/\s+/));
+  const groups = groupMinorWords(text.split(/\s+/));
   const lines: string[] = [];
   let current = '';
 

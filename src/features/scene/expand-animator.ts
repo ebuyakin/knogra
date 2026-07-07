@@ -4,16 +4,16 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { NodeId } from '../../../core/main-types';
+import type { NodeId } from '../../core/main-types';
 
-import { graphStore } from '../../../storage/graph-store';
-import { StyleGenerator } from '../../../styles/style-generator';
+import { graphStore } from '../../storage/graph-store';
+import { StyleGenerator } from '../../styles/style-generator';
 
-import { findDirectChildren, findDirectParents, mapPositionsToNodes, findRelevantEdges } from '../pure/scene-calculations';
-import { circularSpreadSafe } from '../pure/position-expansion';
-import { placeExpansionFan, type NodeObstacle, type EdgeObstacle, type ViewportRect } from '../pure/donut-placement';
-import { getSetting } from '../../../config';
-import { isDebug } from '../../../config/debug-flags';
+import { findDirectChildren, findDirectParents, mapPositionsToNodes, findRelevantEdges } from '../utils/pure/scene-calculations';
+import { circularSpreadSafe } from '../utils/pure/position-expansion';
+import { placeExpansionFan, type NodeObstacle, type EdgeObstacle, type ViewportRect } from '../utils/pure/donut-placement';
+import { getSetting } from '../../config';
+import { isDebug } from '../../config/debug-flags';
 
 /**
  * Delay utility

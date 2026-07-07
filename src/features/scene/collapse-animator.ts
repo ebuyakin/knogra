@@ -4,12 +4,12 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { NodeId, EdgeConnection, SceneId } from '../../../core/main-types';
-import { graphStore } from '../../../storage/graph-store';
-import { calculateDistances, findMaxDistance, filterNodesByDistance, findLeafNodes } from '../pure/scene-calculations';
-import { findDescendants, determineNodesToKeep } from '../../scene/traversal';
-import { getSetting } from '../../../config';
-import { isDebug } from '../../../config/debug-flags';
+import type { NodeId, EdgeConnection, SceneId } from '../../core/main-types';
+import { graphStore } from '../../storage/graph-store';
+import { calculateDistances, findMaxDistance, filterNodesByDistance, findLeafNodes, computeUndirectedLayers } from '../utils/pure/scene-calculations';
+import { findDescendants, determineNodesToKeep, findPrivateNeighbourhood } from './traversal';
+import { getSetting } from '../../config';
+import { isDebug } from '../../config/debug-flags';
 
 /**
  * Delay utility
@@ -269,4 +269,86 @@ export async function collapseNodesCascading(
     cy.remove(cy.collection(selector));
   }
   if (isDebug('d_transition')) console.log('[collapseNodesCascading] nodes in cy after remove:', cy.nodes().map(n => n.id()));
+}
+
+/**
+ * Exclude the "private neighbourhood" of a node with the same layered shrink
+ * animation as descendant collapse, but traversing edges undirected. Removes
+ * every node that is held in the scene only through the collapsing node (in any
+ * direction), keeping nodes still anchored to the central node. The collapsing
+ * node itself and the central node are never removed.
+ *
+ * @mutates Cytoscape instance
+ * @param cy - Cytoscape instance
+ * @param rootNodeId - The selected node whose private branches are excluded
+ */
+export async function excludeNeighboursCascading(
+  cy: Core,
+  rootNodeId: NodeId
+): Promise<void> {
+  const rootCyNode = cy.getElementById(rootNodeId);
+  if (rootCyNode.length === 0) return;
+
+  const nodesInScene = new Set<NodeId>(cy.nodes().map(n => n.id() as NodeId));
+  const edgeConnections: EdgeConnection[] = cy.edges().map(edge => ({
+    source: edge.source().id() as NodeId,
+    target: edge.target().id() as NodeId
+  }));
+
+  const currentSceneId = cy.scratch('currentSceneId') as SceneId | undefined;
+  const currentScene = currentSceneId ? graphStore.scenes.find(s => s.id === currentSceneId) : null;
+  const centralNodeId = currentScene?.centralNodeId;
+  if (!centralNodeId) {
+    if (isDebug('d_transition')) console.log('[excludeNeighboursCascading] No central node found, aborting');
+    return;
+  }
+
+  const nodesToRemove = findPrivateNeighbourhood(rootNodeId, centralNodeId, edgeConnections, nodesInScene);
+  if (isDebug('d_transition')) {
+    console.log(`[excludeNeighboursCascading] root=${rootNodeId}, central=${centralNodeId}, removing ${nodesToRemove.size}`, [...nodesToRemove]);
+  }
+  if (nodesToRemove.size === 0) return;
+
+  // Undirected layers from the root: farthest nodes collapse first, each
+  // shrinking toward its predecessor (the neighbour one step closer to root).
+  const edgesForDistance = cy.edges().map(edge => ({
+    sourceId: edge.source().id() as NodeId,
+    targetId: edge.target().id() as NodeId
+  }));
+  const { distances, predecessors } = computeUndirectedLayers(rootNodeId, nodesToRemove, edgesForDistance);
+
+  const duration = getSetting('fold.collapseDuration');
+  const delayBetweenLayers = getSetting('fold.collapseDelayBetweenLayers');
+
+  const shrinkTargetPosition = (nodeId: NodeId): { x: number; y: number } => {
+    const predecessorId = predecessors.get(nodeId);
+    const target = predecessorId ? cy.getElementById(predecessorId) : rootCyNode;
+    if (target.length > 0) return target.position();
+    return rootCyNode.position();
+  };
+
+  const remaining = new Set(nodesToRemove);
+  const allAnimatedNodes: NodeId[] = [];
+
+  while (remaining.size > 0) {
+    const maxDistance = findMaxDistance(remaining, distances);
+    let layer = filterNodesByDistance(remaining, distances, maxDistance);
+    if (layer.length === 0) layer = [...remaining]; // safety: never loop forever
+
+    await Promise.all(
+      layer.map(nodeId => shrinkNodeToParent(cy, nodeId, shrinkTargetPosition(nodeId), duration, false))
+    );
+
+    allAnimatedNodes.push(...layer);
+    layer.forEach(nodeId => remaining.delete(nodeId));
+
+    if (remaining.size > 0) {
+      await delay(delayBetweenLayers);
+    }
+  }
+
+  const selector = allAnimatedNodes.map(id => `#${id}`).join(', ');
+  if (selector) {
+    cy.remove(cy.collection(selector));
+  }
 }

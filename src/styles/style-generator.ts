@@ -16,7 +16,9 @@ import {
   resolveBaseEdgeStyle,
   resolveEdgeDesignStyle,
   resolveEdgeTypeStyle,
-  resolveEdgeTypeVisibilityStyle
+  resolveEdgeTypeVisibilityStyle,
+  pickCurveParams,
+  type EdgeOverrideInput
 } from './edge-visual-resolver';
 
 export class StyleGenerator {
@@ -87,12 +89,20 @@ export class StyleGenerator {
    * @param themeId - Theme identifier (default: 'dark')
    * @returns Cytoscape style object for this edge
    */
+  /**
+   * Generate the sparse per-edge override rule for a specific edge by ID.
+   * Takes the whole scene-edge record so both the visual override (`design`)
+   * and the curve override (`curve`) are emitted into the rule.
+   *
+   * @param sceneEdge - Scene edge record `{ design, curve }` (or null)
+   * @returns Cytoscape style object for this edge's per-edge rule
+   */
   static generateEdgeStyleForId(
     _edgeId: EdgeId,
-    design: { id: string; params: Record<string, unknown> } | null,
-    themeId: string = 'dark'
+    sceneEdge: EdgeOverrideInput | null,
+    _themeId: string = 'dark'
   ): any {
-    return resolveEdgeDesignStyle(design, themeId);
+    return resolveEdgeDesignStyle(sceneEdge?.design ?? null, sceneEdge?.curve);
   }
 
   // ===========================================================================
@@ -407,11 +417,35 @@ export class StyleGenerator {
     return typeof selector === 'string' && /^edge\[typeId = ".+"\]\[id\]$/.test(selector);
   }
 
-  /** Scene edge designs only need per-edge rules when they carry actual overrides. */
+  /** Scene edges only need per-edge rules when they carry a visual or curve override. */
   static hasEdgeStyleOverride(
-    design: { id: string; params: Record<string, unknown> } | null | undefined
+    sceneEdge: EdgeOverrideInput | null | undefined
   ): boolean {
-    return !!design && (design.id === 'custom' || Object.keys(design.params ?? {}).length > 0);
+    if (!sceneEdge) return false;
+    const design = sceneEdge.design;
+    const hasVisual = !!design && (design.id === 'custom' || Object.keys(design.params ?? {}).length > 0);
+    const hasCurve = !!sceneEdge.curve && Object.keys(sceneEdge.curve).length > 0;
+    // Legacy edges keep curve keys inside design.params; hasVisual already
+    // covers them, but keep the explicit check for clarity/robustness.
+    const hasLegacyCurve = !!design && Object.keys(pickCurveParams(design.params)).length > 0;
+    return hasVisual || hasCurve || hasLegacyCurve;
+  }
+
+  /**
+   * Insert, replace, or remove the per-edge override rule for one edge in a
+   * stylesheet, based on whether the edge carries any override. Single home for
+   * the "update-or-remove" composition so callers (scene edit ops, auto-layout)
+   * don't each reimplement it.
+   */
+  static applyEdgeOverrideToStylesheet(
+    stylesheet: any[],
+    edgeId: EdgeId,
+    sceneEdge: EdgeOverrideInput | null | undefined,
+    themeId: string = 'dark'
+  ): any[] {
+    return this.hasEdgeStyleOverride(sceneEdge)
+      ? this.updateEdgeInStylesheet(stylesheet, edgeId, this.generateEdgeStyleForId(edgeId, sceneEdge ?? null, themeId))
+      : this.removeEdgeFromStylesheet(stylesheet, edgeId);
   }
 
 }

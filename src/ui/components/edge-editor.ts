@@ -15,7 +15,10 @@ import '../../styles/edge-editor.css';
 
 export interface EdgeEditorSavePayload {
   typeId: EdgeTypeId;
-  params?: Record<string, unknown> | null;
+  /** Visual override: object = set, null = clear, undefined = leave unchanged. */
+  visualParams?: Record<string, unknown> | null;
+  /** Curve override: object = set, null = reset to default, undefined = leave unchanged. */
+  curveParams?: Record<string, unknown> | null;
 }
 
 /**
@@ -41,7 +44,6 @@ export class EdgeEditor {
   #typeSelect: HTMLSelectElement | null = null;
   #overrideCheckbox: HTMLInputElement | null = null;
   #initialTypeId: EdgeTypeId | null = null;
-  #initialParams: Record<string, unknown> | null = null;
   #hasInitialStyleOverride = false;
 
   // Middle section container
@@ -50,6 +52,9 @@ export class EdgeEditor {
   // Bezier state
   #controlPointDistances: number[] = [20, -20];
   #controlPointWeights: number[] = [0.25, 0.75];
+
+  // Curve/layout override params for this edge (independent of visual style)
+  #curveParams: Record<string, unknown> = {};
 
   // Drag state
   #isDragging = false;
@@ -72,21 +77,20 @@ export class EdgeEditor {
     this.#edgeId = edgeId;
     this.#onSave = onSave;
     this.#initialTypeId = context.typeId;
-    this.#initialParams = null;
     this.#hasInitialStyleOverride = context.hasStyleOverride;
+    this.#curveParams = { ...context.curveParams };
 
-    // Initialize bezier state from params
+    // Initialize bezier state from curve params
     this.#controlPointDistances = this.#parseArrayParam(
-      currentParams['control-point-distances'],
+      this.#curveParams['control-point-distances'],
       getSetting('edge.bezierControlDistances')
     );
     this.#controlPointWeights = this.#parseArrayParam(
-      currentParams['control-point-weights'],
+      this.#curveParams['control-point-weights'],
       getSetting('edge.bezierControlWeights')
     );
 
     this.#render(currentParams, context);
-    this.#initialParams = this.#collectParams();
   }
 
   /**
@@ -101,7 +105,6 @@ export class EdgeEditor {
       this.#typeSelect = null;
       this.#overrideCheckbox = null;
       this.#initialTypeId = null;
-      this.#initialParams = null;
       this.#hasInitialStyleOverride = false;
     }
   }
@@ -131,7 +134,7 @@ export class EdgeEditor {
     dialog.appendChild(this.#middleSection);
 
     // Render initial style section
-    this.#updateMiddleSection(params);
+    this.#updateMiddleSection();
     this.#setStyleControlsEnabled(context.hasStyleOverride);
 
     // === BOTTOM SECTION ===
@@ -191,7 +194,7 @@ export class EdgeEditor {
     ]);
 
     // Style type selector (full width)
-    const styleControl = this.#createStyleTypeControl(params);
+    const styleControl = this.#createStyleTypeControl();
 
     const top = el('div', 'edge-editor-top', {}, [
         header,
@@ -352,7 +355,7 @@ export class EdgeEditor {
     ]);
   }
 
-  #createStyleTypeControl(params: Record<string, unknown>): HTMLDivElement {
+  #createStyleTypeControl(): HTMLDivElement {
     this.#curveStyleSelect = el('select', 'edge-editor-select');
 
     const options = [
@@ -366,7 +369,7 @@ export class EdgeEditor {
       { value: 'haystack', label: 'Haystack' }
     ];
 
-    const currentValue = (params['curve-style'] as string) || getSetting('edge.defaultCurveStyle');
+    const currentValue = (this.#curveParams['curve-style'] as string) || getSetting('edge.defaultCurveStyle');
     options.forEach(opt => {
         this.#curveStyleSelect!.appendChild(
             el('option', '', { value: opt.value, selected: opt.value === currentValue }, [opt.label])
@@ -374,7 +377,7 @@ export class EdgeEditor {
     });
 
     this.#curveStyleSelect.addEventListener('change', () => {
-      this.#updateMiddleSection(params);
+      this.#updateMiddleSection();
     });
 
     return el('div', 'edge-editor-control edge-editor-curve-style-control', {}, [
@@ -391,7 +394,7 @@ export class EdgeEditor {
   // MIDDLE SECTION - Style-specific parameters
   // ===========================================================================
 
-  #updateMiddleSection(params: Record<string, unknown>): void {
+  #updateMiddleSection(): void {
     if (!this.#middleSection || !this.#curveStyleSelect) return;
 
     this.#middleSection.innerHTML = '';
@@ -404,13 +407,13 @@ export class EdgeEditor {
         content = this.#createBezierSection();
         break;
       case 'round-segments':
-        content = this.#createRoundSegmentsSection(params);
+        content = this.#createRoundSegmentsSection();
         break;
       case 'round-taxi':
-        content = this.#createRoundTaxiSection(params);
+        content = this.#createRoundTaxiSection();
         break;
       case 'taxi':
-        content = this.#createTaxiSection(params);
+        content = this.#createTaxiSection();
         break;
       default:
         content = this.#createEmptyState(curveStyle);
@@ -507,12 +510,12 @@ export class EdgeEditor {
     });
   }
 
-  #createRoundSegmentsSection(params: Record<string, unknown>): HTMLDivElement {
+  #createRoundSegmentsSection(): HTMLDivElement {
     const section = el('div', 'edge-editor-style-section active', {}, [
         el('h4', '', {}, ['Segment Radii'])
     ]);
 
-    const radii = (params['segment-radii'] as number[]) || getSetting('edge.segmentRadii');
+    const radii = (this.#curveParams['segment-radii'] as number[]) || getSetting('edge.segmentRadii');
 
     radii.forEach((radius, idx) => {
         section.appendChild(el('div', 'edge-editor-point-row', {}, [
@@ -527,10 +530,10 @@ export class EdgeEditor {
     return section;
   }
 
-  #createRoundTaxiSection(params: Record<string, unknown>): HTMLDivElement {
+  #createRoundTaxiSection(): HTMLDivElement {
     const radiusInput = el('input', 'edge-editor-slider', {
         type: 'range', id: 'taxi-radius', min: '5', max: '50', step: '1',
-        value: String((params['taxi-radius'] as number) || getSetting('edge.taxiRadius'))
+        value: String((this.#curveParams['taxi-radius'] as number) || getSetting('edge.taxiRadius'))
     });
     
     const radiusValue = el('span', 'edge-editor-slider-value', {}, [
@@ -553,7 +556,7 @@ export class EdgeEditor {
     ]);
   }
 
-  #createTaxiSection(params: Record<string, unknown>): HTMLDivElement {
+  #createTaxiSection(): HTMLDivElement {
     const directions = [
       { value: 'auto', label: 'Auto' },
       { value: 'vertical', label: 'Vertical' },
@@ -564,7 +567,7 @@ export class EdgeEditor {
       { value: 'leftward', label: 'Leftward' }
     ];
 
-    const currentDir = (params['taxi-direction'] as string) || getSetting('edge.taxiDirection');
+    const currentDir = (this.#curveParams['taxi-direction'] as string) || getSetting('edge.taxiDirection');
     const dirSelect = el('select', 'edge-editor-select', { id: 'taxi-direction' });
     
     directions.forEach(d => {
@@ -606,65 +609,76 @@ export class EdgeEditor {
   #handleSave(): void {
     if (!this.#onSave || !this.#edgeId) return;
 
-    const params = this.#collectParams();
     const overrideEnabled = this.#overrideCheckbox?.checked ?? false;
     const payload: EdgeEditorSavePayload = {
       typeId: (this.#typeSelect?.value || this.#initialTypeId || '') as EdgeTypeId
     };
 
+    // Visual style is gated by the "Override style" checkbox.
     if (overrideEnabled) {
-      payload.params = params;
+      payload.visualParams = this.#collectVisualParams();
     } else if (this.#hasInitialStyleOverride) {
-      payload.params = null;
+      payload.visualParams = null;
     }
+
+    // Curve is always authored (individual property, no override gate).
+    // Default bezier with no extra parameters clears the curve override.
+    const curve = this.#collectCurveParams();
+    payload.curveParams = this.#isDefaultCurve(curve) ? null : curve;
 
     this.#onSave(this.#edgeId, payload);
     this.hide();
   }
 
-  #collectParams(): Record<string, unknown> {
+  #isDefaultCurve(curve: Record<string, unknown>): boolean {
+    const keys = Object.keys(curve);
+    if (keys.length === 0) return true;
+    return keys.length === 1 && curve['curve-style'] === getSetting('edge.defaultCurveStyle');
+  }
+
+  #collectVisualParams(): Record<string, unknown> {
     const params: Record<string, unknown> = {};
 
-    // Basic styling
     if (this.#colorInput) {
       params['line-color'] = this.#colorInput.value;
       params['target-arrow-color'] = this.#colorInput.value;
     }
     if (this.#opacityInput) params['line-opacity'] = parseFloat(this.#opacityInput.value);
     if (this.#widthInput) params['width'] = parseFloat(this.#widthInput.value);
-
-    // Arrow
     if (this.#arrowShapeSelect) params['target-arrow-shape'] = this.#arrowShapeSelect.value;
     if (this.#arrowScaleInput) params['arrow-scale'] = parseFloat(this.#arrowScaleInput.value);
 
-    // Curve style
-    if (this.#curveStyleSelect) {
-      const curveStyle = this.#curveStyleSelect.value;
-      params['curve-style'] = curveStyle;
+    return params;
+  }
 
-      // Style-specific params
-      if (curveStyle === 'unbundled-bezier') {
-        if (this.#controlPointDistances.length > 0) {
-          params['control-point-distances'] = [...this.#controlPointDistances];
-          params['control-point-weights'] = [...this.#controlPointWeights];
-        }
-      } else if (curveStyle === 'round-segments') {
-        const radiiInputs = this.#middleSection?.querySelectorAll('[id^="segment-radius-"]');
-        if (radiiInputs && radiiInputs.length > 0) {
-          params['segment-radii'] = Array.from(radiiInputs).map(
-            (input) => parseFloat((input as HTMLInputElement).value) || 10
-          );
-        }
-      } else if (curveStyle === 'round-taxi') {
-        const radiusInput = this.#middleSection?.querySelector('#taxi-radius') as HTMLInputElement;
-        if (radiusInput) {
-          params['taxi-radius'] = parseFloat(radiusInput.value) || 15;
-        }
-      } else if (curveStyle === 'taxi') {
-        const dirSelect = this.#middleSection?.querySelector('#taxi-direction') as HTMLSelectElement;
-        if (dirSelect) {
-          params['taxi-direction'] = dirSelect.value;
-        }
+  #collectCurveParams(): Record<string, unknown> {
+    const params: Record<string, unknown> = {};
+    if (!this.#curveStyleSelect) return params;
+
+    const curveStyle = this.#curveStyleSelect.value;
+    params['curve-style'] = curveStyle;
+
+    if (curveStyle === 'unbundled-bezier') {
+      if (this.#controlPointDistances.length > 0) {
+        params['control-point-distances'] = [...this.#controlPointDistances];
+        params['control-point-weights'] = [...this.#controlPointWeights];
+      }
+    } else if (curveStyle === 'round-segments') {
+      const radiiInputs = this.#middleSection?.querySelectorAll('[id^="segment-radius-"]');
+      if (radiiInputs && radiiInputs.length > 0) {
+        params['segment-radii'] = Array.from(radiiInputs).map(
+          (input) => parseFloat((input as HTMLInputElement).value) || 10
+        );
+      }
+    } else if (curveStyle === 'round-taxi') {
+      const radiusInput = this.#middleSection?.querySelector('#taxi-radius') as HTMLInputElement;
+      if (radiusInput) {
+        params['taxi-radius'] = parseFloat(radiusInput.value) || 15;
+      }
+    } else if (curveStyle === 'taxi') {
+      const dirSelect = this.#middleSection?.querySelector('#taxi-direction') as HTMLSelectElement;
+      if (dirSelect) {
+        params['taxi-direction'] = dirSelect.value;
       }
     }
 
@@ -676,19 +690,17 @@ export class EdgeEditor {
   // ===========================================================================
 
   #setStyleControlsEnabled(enabled: boolean): void {
+    // Only the visual-style controls are gated by "Override style". Curve
+    // controls are always editable — curve is an individual property with no
+    // override concept.
     [
       this.#colorInput,
       this.#opacityInput,
       this.#widthInput,
       this.#arrowShapeSelect,
-      this.#arrowScaleInput,
-      this.#curveStyleSelect
+      this.#arrowScaleInput
     ].forEach(control => {
       if (control) control.disabled = !enabled;
-    });
-
-    this.#middleSection?.querySelectorAll('input, select, button').forEach(control => {
-      (control as HTMLInputElement | HTMLSelectElement | HTMLButtonElement).disabled = !enabled;
     });
   }
 

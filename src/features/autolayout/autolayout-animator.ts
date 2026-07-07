@@ -8,7 +8,7 @@
 
 import type { Core } from 'cytoscape';
 import type { NodeId } from '../../core/main-types';
-import type { Position } from './layout';
+import type { Position } from './algorithms/types';
 
 export interface AnimateOptions {
   animate: boolean;

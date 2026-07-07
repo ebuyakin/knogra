@@ -12,7 +12,7 @@ import { getShadowPadding, buildShadowFilter } from './shadow-utils'
 
 export interface EquationCompactNodeParams {
   topHeight?: number;           // Height of title section (default: 30)
-  horizontalPadding?: number;   // Horizontal padding (default: 40)
+  horizontalPadding?: number;   // Horizontal padding (default: 20)
   paddingAbove?: number;        // Padding above equation (default: 25)
   paddingBelow?: number;        // Padding below equation (default: 35, larger to counterweight title)
   borderRadius?: number;        // Corner radius (default: 6)
@@ -192,7 +192,7 @@ function renderSVG(
   theme: ColorTheme
 ): { svg: string; width: number; height: number } {
   const topHeight = params.topHeight ?? 30;
-  const horizontalPadding = params.horizontalPadding ?? 40;
+  const horizontalPadding = params.horizontalPadding ?? 20;
   const paddingAbove = params.paddingAbove ?? 25;
   const paddingBelow = params.paddingBelow ?? 35;
   const borderRadius = params.borderRadius ?? 6;

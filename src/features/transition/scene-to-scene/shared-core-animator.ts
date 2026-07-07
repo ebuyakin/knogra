@@ -263,8 +263,8 @@ export class SharedCoreAnimator {
 
     // Update per-edge stylesheet rules for tween edges (new target style)
     for (const edgeId of analysis.edges.tween) {
-      const targetDesign = targetScene.edges?.[edgeId]?.design;
-      if (!StyleGenerator.hasEdgeStyleOverride(targetDesign)) continue;
+      const targetSceneEdge = targetScene.edges?.[edgeId];
+      if (!StyleGenerator.hasEdgeStyleOverride(targetSceneEdge)) continue;
       const newStyle = this.#resolveEdgeTargetStyle(edgeId, targetScene);
       updatedStylesheet = StyleGenerator.updateEdgeInStylesheet(
         updatedStylesheet,
@@ -421,8 +421,8 @@ export class SharedCoreAnimator {
 
   /**
    * Commit edge design data after animations are done.
-   * Ensures cyEdge.data('design') matches the target scene so graphSaver
-   * persists the correct design when it next syncs.
+   * Ensures cyEdge.data('design') and cyEdge.data('curve') match the target
+   * scene so graphSaver persists the correct override when it next syncs.
    */
   #commitEdgeData(analysis: TransitionAnalysis, targetScene: Scene): void {
     this.#cy.startBatch();
@@ -430,6 +430,7 @@ export class SharedCoreAnimator {
       const edge = this.#cy.getElementById(change.edgeId);
       if (edge.length > 0) {
         edge.data('design', change.newParams);
+        this.#commitEdgeCurve(edge, change.edgeId, targetScene);
       }
     }
     // Also commit data for tween edges (color/width changes)
@@ -438,9 +439,24 @@ export class SharedCoreAnimator {
       if (edge.length > 0) {
         const newDesign = targetScene.edges?.[edgeId]?.design ?? null;
         edge.data('design', newDesign);
+        this.#commitEdgeCurve(edge, edgeId, targetScene);
       }
     }
     this.#cy.endBatch();
+  }
+
+  /** Commit the target scene's curve override onto a shared edge. */
+  #commitEdgeCurve(
+    edge: ReturnType<Core['getElementById']>,
+    edgeId: string,
+    targetScene: Scene
+  ): void {
+    const curve = targetScene.edges?.[edgeId]?.curve;
+    if (curve && Object.keys(curve).length > 0) {
+      edge.data('curve', curve);
+    } else {
+      edge.removeData('curve');
+    }
   }
 
   /**
@@ -490,10 +506,12 @@ export class SharedCoreAnimator {
         };
         if (scaleFrom !== undefined && scaleTo !== undefined && scaleFrom !== scaleTo) {
           const ratio = scaleTo / scaleFrom;
-          mover.w0 = ele.width();
-          mover.h0 = ele.height();
-          mover.w1 = mover.w0 * ratio;
-          mover.h1 = mover.h0 * ratio;
+          const w0 = ele.width();
+          const h0 = ele.height();
+          mover.w0 = w0;
+          mover.h0 = h0;
+          mover.w1 = w0 * ratio;
+          mover.h1 = h0 * ratio;
         }
         movers.push(mover);
       };

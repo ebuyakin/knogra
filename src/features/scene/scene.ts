@@ -18,8 +18,8 @@ import { StyleGenerator } from '../../styles/style-generator';
 import { resolveSceneEdgeVisualState } from '../../styles/edge-visual-resolver';
 
 // shared utilities imports
-import { collapseNodesCascading } from '../utils/cy/collapse-animator';
-import { expandNodeConnections, type ExpandMode } from '../utils/cy/expand-animator';
+import { collapseNodesCascading, excludeNeighboursCascading } from './collapse-animator';
+import { expandNodeConnections, type ExpandMode } from './expand-animator';
 import { resolveScenePan } from '../utils/cy/viewport-utils';
 
 // scene sub-modules
@@ -39,6 +39,14 @@ export interface EdgeTypeVisibilityEntry {
   count: number;
   mode: EdgeTypeVisibilityMode;
 }
+
+/**
+ * Upper bound on the zoom the `F` (fit) command may zoom *in* to. Fitting a
+ * scene with very few nodes would otherwise blow a single node up to fill the
+ * whole screen. This cap is local to the fit command — the user can still zoom
+ * in arbitrarily far by hand; it only limits automatic fitting.
+ */
+const FIT_MAX_ZOOM = 1.5;
 
 export class Scene {
   #cy: Core;
@@ -236,6 +244,13 @@ export class Scene {
     return this.#edgeOps.updateEdgeStyle(edgeId, params);
   }
 
+  async updateEdgeCurve(
+    edgeId: EdgeId,
+    curveParams: Record<string, unknown> | null
+  ): Promise<void> {
+    return this.#edgeOps.updateEdgeCurve(edgeId, curveParams);
+  }
+
   async adjustEdgeBend(
     edgeId: EdgeId,
     command: 'strengthDown' | 'strengthUp' | 'positionTowardSource' | 'positionTowardTarget',
@@ -244,8 +259,8 @@ export class Scene {
     return this.#edgeOps.adjustEdgeBend(edgeId, command, options);
   }
 
-  async resetEdgeStyleOverride(edgeId: EdgeId): Promise<boolean> {
-    return this.#edgeOps.resetEdgeStyleOverride(edgeId);
+  async resetEdgeCurveOverride(edgeId: EdgeId): Promise<boolean> {
+    return this.#edgeOps.resetEdgeCurveOverride(edgeId);
   }
 
   includeAllIncidentEdges(nodeId: NodeId): number {
@@ -386,6 +401,22 @@ export class Scene {
   }
 
   /**
+   * Exclude a node's private neighbourhood with animation: collapses every node
+   * held in the scene only through this node (in any direction), keeping nodes
+   * still anchored to the central node. The selected node and central node stay.
+   */
+  async excludeNeighboursAnimated(nodeId: NodeId): Promise<void> {
+    const graphSaveSuspension = graphSaver.suspend('scene:excludeNeighboursAnimated');
+    try {
+      await excludeNeighboursCascading(this.#cy, nodeId);
+    } finally {
+      graphSaver.resume(graphSaveSuspension);
+    }
+    await this.#forceSaveIfEditMode();
+    if (isDebug('d_scene')) console.log(`[Scene.excludeNeighboursAnimated] Complete for ${nodeId}`);
+  }
+
+  /**
    * Expand node with animation
    */
   async expandNodeAnimated(nodeId: NodeId, mode: ExpandMode = 'children'): Promise<void> {
@@ -422,11 +453,43 @@ export class Scene {
   // ==========================================================================
 
   /**
-   * Fit all elements to viewport with animation
+   * Fit all elements to viewport with animation.
+   *
+   * Unlike Cytoscape's native `cy.fit()` (which zooms in up to the global
+   * `maxZoom`), the target zoom is capped at FIT_MAX_ZOOM so scenes with only a
+   * few nodes are not blown up to fill the screen. Falls back to native fit when
+   * there is nothing to measure.
    */
   fit(padding: number = 50, duration: number = 300): void {
+    const elements = this.#cy.elements();
+    const container = this.#cy.container();
+    if (elements.length === 0 || !container) {
+      this.#cy.animate({
+        fit: { eles: elements, padding }
+      }, {
+        duration,
+        easing: 'ease-out'
+      });
+      return;
+    }
+
+    const bounds = elements.boundingBox();
+    const availW = Math.max(container.clientWidth - 2 * padding, 1);
+    const availH = Math.max(container.clientHeight - 2 * padding, 1);
+    const bboxW = Math.max(bounds.w, 1);
+    const bboxH = Math.max(bounds.h, 1);
+    const rawZoom = Math.min(availW / bboxW, availH / bboxH, FIT_MAX_ZOOM);
+    const zoom = rawZoom > 0 && Number.isFinite(rawZoom) ? rawZoom : 1;
+
+    const centerX = bounds.x1 + bounds.w / 2;
+    const centerY = bounds.y1 + bounds.h / 2;
+
     this.#cy.animate({
-      fit: { eles: this.#cy.elements(), padding }
+      zoom,
+      pan: {
+        x: container.clientWidth / 2 - centerX * zoom,
+        y: container.clientHeight / 2 - centerY * zoom
+      }
     }, {
       duration,
       easing: 'ease-out'

@@ -3,7 +3,7 @@
  * Handles graph structure operations: adding/removing nodes and edges
  */
 
-import type { Core } from 'cytoscape';
+import type { Core, SingularElementReturnValue } from 'cytoscape';
 import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../../core/main-types';
 import type { AnchorLinkResult } from './anchor-traversal';
 import type { GraphStatistics } from './statistics';
@@ -232,7 +232,12 @@ export class Graph {
       minRadius
     );
 
-    const newPos = newPositions[0];
+    // circularSpreadSafe returns [] when the ring around the node is full (no
+    // free sector / radius too large). Without a fallback the position would be
+    // undefined and Cytoscape would drop the node at (0,0), stacking every
+    // subsequent node on top of the central node. Instead, stack on the most
+    // recent connected node with a small diagonal shift so it stays visible.
+    const newPos = newPositions[0] ?? this.#stackedFallbackPosition(nodeId, direction);
 
     // Create new node with determined design and scale (title will be auto-generated if not provided)
     const newNodeId = await this.addFreeNode(newPos, title, nodeDesign, properties, nodeScale);
@@ -247,6 +252,33 @@ export class Graph {
     }
 
     return newNodeId;
+  }
+
+  /**
+   * Fallback placement when the ring around a node is full: stack the new node
+   * onto the most recently created connected node (children for 'child',
+   * parents for 'parent') with a small diagonal shift. Node ids are
+   * timestamp-based and fixed-format, so the lexicographically largest id is the
+   * newest — making each stacked node the anchor for the next, forming a short
+   * diagonal staircase instead of an exact overlap.
+   */
+  #stackedFallbackPosition(nodeId: NodeId, direction: 'child' | 'parent'): { x: number; y: number } {
+    const STACK_SHIFT = 24;
+    const node = this.#cy.getElementById(nodeId);
+    const connected = direction === 'child' ? node.outgoers('node') : node.incomers('node');
+
+    let anchor: SingularElementReturnValue = node;
+    let newestId = '';
+    connected.forEach(candidate => {
+      const id = candidate.id();
+      if (id > newestId) {
+        newestId = id;
+        anchor = candidate;
+      }
+    });
+
+    const base = anchor.position();
+    return { x: base.x + STACK_SHIFT, y: base.y + STACK_SHIFT };
   }
 
   /**

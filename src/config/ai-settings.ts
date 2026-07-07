@@ -30,6 +30,17 @@ export interface AISettings {
   
   /** Where to scroll when opening a scene's chat: 'bottom' or 'top' */
   chatScrollPosition: 'bottom' | 'top';
+
+  /** Number of images returned per image-search request */
+  imageResultCount: number;
+
+  /**
+   * Store retrieved images locally for offline use. On: a picked image's bytes
+   * are downloaded and kept, and link-only retrieved images heal to stored on
+   * first display. Off: only the source link is kept and the image is fetched
+   * on every open. Affects retrieved images only; never purges existing bytes.
+   */
+  storeRetrievedImages: boolean;
   
   /** Language for AI responses and suggestions (empty = English) */
   responseLanguage: string;
@@ -89,6 +100,8 @@ export const AI_DEFAULTS: AISettings = {
   webSearchEnabled: true,
   thinkingLevel: 'low',
   chatScrollPosition: 'bottom',
+  imageResultCount: 3,
+  storeRetrievedImages: true,
   responseLanguage: '',
   customInstructions: '',
   scenePromptInstructions: '',

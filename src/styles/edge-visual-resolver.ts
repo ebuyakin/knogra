@@ -11,6 +11,67 @@ import { getTheme } from './themes';
 
 type EdgeDesign = { id: string; params: Record<string, unknown> } | null | undefined;
 
+/** A scene edge's authored overrides: visual style (`design`) + curve/layout (`curve`). */
+export interface EdgeOverrideInput {
+  design?: EdgeDesign;
+  curve?: Record<string, unknown>;
+}
+
+/**
+ * Cytoscape style keys that describe an edge's curve/layout (its path), as
+ * opposed to its visual style (colour/width/arrow). This is the single source
+ * of truth for the visual-vs-curve partition; every module that splits, strips,
+ * or merges edge overrides imports from here.
+ */
+export const CURVE_STYLE_KEYS: readonly string[] = [
+  'curve-style',
+  'control-point-distances',
+  'control-point-weights',
+  'segment-distances',
+  'segment-weights',
+  'segment-radii',
+  'edge-distances',
+  'taxi-direction',
+  'taxi-turn',
+  'taxi-radius'
+];
+
+const CURVE_KEY_SET = new Set<string>(CURVE_STYLE_KEYS);
+
+/** Keep only curve/layout keys from a raw params bag. */
+export function pickCurveParams(params: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  if (!params) return {};
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(params)) {
+    if (CURVE_KEY_SET.has(key)) out[key] = params[key];
+  }
+  return out;
+}
+
+/** Keep only visual-style keys from a raw params bag. */
+export function pickVisualParams(params: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  if (!params) return {};
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(params)) {
+    if (!CURVE_KEY_SET.has(key)) out[key] = params[key];
+  }
+  return out;
+}
+
+/**
+ * Resolve the effective curve override for an edge. Prefers the dedicated
+ * `curve` field; falls back to curve keys embedded in a legacy `design.params`
+ * so old workspaces render correctly without migration. Empty when neither
+ * exists, letting the theme/type default (automatic bezier) apply.
+ */
+function resolveCurveParams(
+  curve: Record<string, unknown> | null | undefined,
+  legacyParams: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  if (curve && Object.keys(curve).length > 0) return curve;
+  return pickCurveParams(legacyParams);
+}
+
 export interface ResolvedEdgeVisualState {
   style: Record<string, unknown>;
   opacity: number;
@@ -33,14 +94,20 @@ export function resolveEdgeTypeStyle(edgeType: EdgeType | undefined, themeId: st
   });
 }
 
-export function resolveEdgeDesignStyle(design: EdgeDesign, themeId: string = 'dark'): Record<string, unknown> {
-  const defaultStyle = resolveBaseEdgeStyle(themeId);
-  if (!design?.params) return defaultStyle;
-
-  return withEdgeUnderlayColor({
-    ...defaultStyle,
-    ...design.params
-  });
+/**
+ * Build the sparse per-edge override style for the `edge[id = "…"]` stylesheet
+ * rule. Emits only the keys the edge actually overrides (visual + curve), so
+ * unspecified properties fall through to the edge-type/base rules. This is what
+ * lets a curve-only edge keep its edge-type colour, and lets theme changes reach
+ * edges that were only bent.
+ */
+export function resolveEdgeDesignStyle(
+  design: EdgeDesign,
+  curve?: Record<string, unknown>
+): Record<string, unknown> {
+  const visual = pickVisualParams(design?.params);
+  const curveOverride = resolveCurveParams(curve, design?.params);
+  return withEdgeUnderlayColor({ ...visual, ...curveOverride });
 }
 
 export function resolveSceneEdgeVisualState(args: {
@@ -51,11 +118,14 @@ export function resolveSceneEdgeVisualState(args: {
 }): ResolvedEdgeVisualState {
   const themeId = args.themeId ?? args.scene.themeId ?? 'dark';
   const edgeType = args.edgeTypes.find(type => type.id === args.edge.typeId);
-  const edgeDesign = args.scene.edges[args.edge.id]?.design;
+  const sceneEdge = args.scene.edges[args.edge.id];
+  const designParams = sceneEdge?.design?.params;
+  const curveOverride = resolveCurveParams(sceneEdge?.curve, designParams);
   const visibilityMode = args.scene.edgeTypeVisibility?.[args.edge.typeId] ?? 'show';
   const baseStyle = withEdgeUnderlayColor({
     ...resolveEdgeTypeStyle(edgeType, themeId),
-    ...(edgeDesign?.params ?? {})
+    ...pickVisualParams(designParams),
+    ...curveOverride
   });
   const baseOpacity = typeof baseStyle.opacity === 'number' ? baseStyle.opacity : 1;
   const visibilityStyle = resolveEdgeTypeVisibilityStyle(visibilityMode);

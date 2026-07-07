@@ -1,5 +1,6 @@
 import Dexie from 'dexie';
 import type { EdgeType, EdgeTypeId } from '../../core/main-types';
+import type { ChatImageAttachment, Conversation } from '../../core/chat-types';
 import { createStarterEdgeTypes, getDefaultEdgeStyleSlotId, getDefaultEdgeTypeId, isEdgeStyleSlotId } from '../../config/edge-type-settings';
 
 import {
@@ -89,6 +90,86 @@ export async function exportConversations(): Promise<unknown[]> {
   const db = new Dexie(CHAT_DB_NAME);
   db.version(CHAT_DB_VERSION).stores(CHAT_DB_SCHEMA);
   return db.table('conversations').toArray();
+}
+
+/** Number of in-note image attachments by origin, across all conversations. */
+export interface InNoteImageCounts {
+  uploaded: number;
+  retrieved: number;
+}
+
+/** Which categories of in-note image bytes to keep when transferring a workspace. */
+export interface ImageInclusionOptions {
+  includeUploaded: boolean;
+  includeRetrieved: boolean;
+}
+
+/**
+ * Count in-note images that carry stored bytes, by origin (drives the
+ * export/import image dialogs). Link-only images are ignored: they have no
+ * bytes to strip or keep, so they are irrelevant to the size choice.
+ */
+export function countInNoteImages(conversations: unknown[]): InNoteImageCounts {
+  let uploaded = 0;
+  let retrieved = 0;
+  for (const conv of conversations) {
+    const messages = (conv as Conversation)?.messages;
+    if (!Array.isArray(messages)) continue;
+    for (const message of messages) {
+      const attachments = message?.attachments;
+      if (!Array.isArray(attachments)) continue;
+      for (const attachment of attachments) {
+        if (!attachment?.dataUrl) continue;
+        if (attachment.origin === 'retrieved') retrieved++;
+        else if (attachment.origin === 'note') uploaded++;
+      }
+    }
+  }
+  return { uploaded, retrieved };
+}
+
+/**
+ * Return a copy of `conversations` with in-note image bytes filtered per `opts`.
+ * - Retrieved image, excluded, with a `sourceUrl` → keep as link only (drop `dataUrl`).
+ * - Retrieved image without a `sourceUrl` → kept intact (stripping would orphan it).
+ * - Uploaded image, excluded → dropped entirely (it has no link to fall back on).
+ * Never mutates the input.
+ */
+export function stripConversationImages(
+  conversations: unknown[],
+  opts: ImageInclusionOptions
+): unknown[] {
+  if (opts.includeUploaded && opts.includeRetrieved) return conversations;
+
+  return conversations.map(conv => {
+    const conversation = conv as Conversation;
+    if (!Array.isArray(conversation?.messages)) return conv;
+
+    const messages = conversation.messages.map(message => {
+      const attachments = message?.attachments;
+      if (!Array.isArray(attachments) || attachments.length === 0) return message;
+
+      const kept: ChatImageAttachment[] = [];
+      for (const attachment of attachments) {
+        if (attachment.origin === 'note') {
+          if (opts.includeUploaded) kept.push(attachment);
+          continue;
+        }
+        if (attachment.origin === 'retrieved') {
+          if (opts.includeRetrieved || !attachment.sourceUrl) {
+            kept.push(attachment);
+          } else {
+            kept.push({ ...attachment, dataUrl: undefined });
+          }
+          continue;
+        }
+        kept.push(attachment);
+      }
+      return { ...message, attachments: kept };
+    });
+
+    return { ...conversation, messages };
+  });
 }
 
 export async function exportBackgroundImages(): Promise<unknown[]> {

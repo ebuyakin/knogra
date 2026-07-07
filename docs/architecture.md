@@ -1,7 +1,7 @@
 # Knogra Architecture
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-14  
+> **Last reviewed:** 2026-07-09  
 > **Authority:** Main authoritative architecture document for layers, dependency direction, module responsibilities, persistence ownership, and coding standards. For detailed scene, fold, visibility, and transition terminology, defer to [Scene Transitions](scene-transitions.md). For typed edge styling and scene-local edge type visibility, defer to [Edge Types Architecture](edge-types-architecture.md).  
 > **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Scene transitions](scene-transitions.md), [Edge Types Architecture](edge-types-architecture.md)
 
@@ -225,8 +225,9 @@ Application settings and user preferences.
 **ThemeStore** (`theme-store.ts`)
 - Separate persistence for custom themes merged into `styles/themes.ts`
 
-**Mermaid** (`mermaid.ts`, `mermaid-flowchart.ts`, `mermaid-import-dialog.ts`)
-- Graph-only interchange path for Mermaid flowcharts; it replaces graph data without preserving the rest of the workspace
+**Mermaid** (`storage/mermaid/`)
+- Graph-only interchange path for Mermaid flowcharts; parses the source, slices it into scenes, and lays each scene out (radial, flow, or fan) before replacing graph data without preserving the rest of the workspace
+- Import options cover configurable edge-type scene inclusion and branch/leaf tagging; the scene-composition and fan-continuity model lives in [mermaid-fan-layout.md](mermaid-fan-layout.md)
 
 #### Workspace
 

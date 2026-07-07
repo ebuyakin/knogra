@@ -231,7 +231,8 @@ export class ArrivalAnimator {
           id: edgeId,
           source: edgeData.sourceId,
           target: edgeData.targetId,
-          design: scene.edges[edgeId]?.design
+          design: scene.edges[edgeId]?.design,
+          curve: scene.edges[edgeId]?.curve
         }
       });
       edgeEl.style('opacity', 0);
@@ -285,7 +286,7 @@ export class ArrivalAnimator {
       if (!edgeData) continue;
       const edgeEl = this.#cy.add({
         group: 'edges',
-        data: { ...edgeData, id: edgeId, source: edgeData.sourceId, target: edgeData.targetId, design: scene.edges[edgeId]?.design }
+        data: { ...edgeData, id: edgeId, source: edgeData.sourceId, target: edgeData.targetId, design: scene.edges[edgeId]?.design, curve: scene.edges[edgeId]?.curve }
       });
       edgeEl.style('opacity', 0);
       addedEdgeIds.push(edgeId);
@@ -311,9 +312,9 @@ export class ArrivalAnimator {
     let stylesheet = (this.#cy.style() as any).json();
     let changed = false;
     for (const edgeId of edgeIds) {
-      const design = scene.edges[edgeId]?.design;
-      if (!StyleGenerator.hasEdgeStyleOverride(design)) continue;
-      const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, design ?? null, themeId);
+      const sceneEdge = scene.edges[edgeId];
+      if (!StyleGenerator.hasEdgeStyleOverride(sceneEdge)) continue;
+      const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, sceneEdge ?? null, themeId);
       stylesheet = StyleGenerator.updateEdgeInStylesheet(stylesheet, edgeId, edgeStyle);
       changed = true;
     }

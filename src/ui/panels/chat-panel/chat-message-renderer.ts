@@ -4,13 +4,13 @@
  * Handles markdown conversion and MathJax typesetting.
  */
 
-import type { ChatMessage, MessageId, MessageSource, NoteImageAttachment } from '../../../core/chat-types';
+import type { ChatMessage, MessageId, MessageSource, ChatImageAttachment, ImageAttribution } from '../../../core/chat-types';
 
 /** Callback for context menu on a message */
 export type MessageContextMenuHandler = (event: MouseEvent, messageId: MessageId, source: MessageSource | undefined) => void;
 
 /** Callback for editing a note (double-click) */
-export type NoteEditHandler = (noteEl: HTMLElement, messageId: MessageId, content: string, attachments: NoteImageAttachment[]) => void;
+export type NoteEditHandler = (noteEl: HTMLElement, messageId: MessageId, content: string, attachments: ChatImageAttachment[]) => void;
 
 // ============================================================================
 // PUBLIC API
@@ -93,18 +93,45 @@ export function buildNoteElement(
 }
 
 /** Build the container holding a note's image attachments (display mode) */
-export function buildNoteAttachments(attachments: NoteImageAttachment[]): HTMLElement {
+export function buildNoteAttachments(attachments: ChatImageAttachment[]): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'note-attachments';
   for (const attachment of attachments) {
     const img = document.createElement('img');
     img.className = 'note-image';
-    img.src = attachment.dataUrl;
+    img.src = attachment.dataUrl ?? attachment.sourceUrl ?? '';
     img.alt = attachment.name;
     img.loading = 'lazy';
     wrap.appendChild(img);
+
+    if (attachment.attribution) {
+      wrap.appendChild(buildAttributionCaption(attachment.attribution));
+    }
   }
   return wrap;
+}
+
+/** Build a small credit line under a retrieved image (author · license · source). */
+function buildAttributionCaption(attribution: ImageAttribution): HTMLElement {
+  const caption = document.createElement('div');
+  caption.className = 'note-image-credit';
+
+  const parts: string[] = [];
+  if (attribution.author) parts.push(attribution.author);
+  if (attribution.license) parts.push(attribution.license);
+  const text = parts.join(' · ') || attribution.sourceName;
+
+  if (attribution.sourcePageUrl) {
+    const link = document.createElement('a');
+    link.href = attribution.sourcePageUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = text;
+    caption.appendChild(link);
+  } else {
+    caption.textContent = text;
+  }
+  return caption;
 }
 
 /** Render a note and append it to the container */

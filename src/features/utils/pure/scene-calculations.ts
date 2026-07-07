@@ -55,6 +55,52 @@ export function calculateDistances(
 }
 
 /**
+ * Undirected BFS from a root node, returning each reachable node's layer
+ * distance and its predecessor (the neighbour one step closer to the root).
+ * Traversal is restricted to `nodeIds` (plus the root), which is exactly the
+ * closed set produced by the Exclude-neighbours calculation. The predecessor
+ * gives the "shrink toward" target so upstream nodes collapse inward correctly.
+ *
+ * @pure No side effects
+ */
+export function computeUndirectedLayers(
+  rootNodeId: NodeId,
+  nodeIds: Set<NodeId>,
+  edges: Array<{ sourceId: NodeId; targetId: NodeId }>
+): { distances: Map<NodeId, number>; predecessors: Map<NodeId, NodeId> } {
+  const adjacency = new Map<NodeId, NodeId[]>();
+  const link = (from: NodeId, to: NodeId): void => {
+    if (!adjacency.has(from)) adjacency.set(from, []);
+    adjacency.get(from)!.push(to);
+  };
+  for (const edge of edges) {
+    link(edge.sourceId, edge.targetId);
+    link(edge.targetId, edge.sourceId);
+  }
+
+  const distances = new Map<NodeId, number>([[rootNodeId, 0]]);
+  const predecessors = new Map<NodeId, NodeId>();
+  let queue: NodeId[] = [rootNodeId];
+  let distance = 0;
+
+  while (queue.length > 0) {
+    const nextQueue: NodeId[] = [];
+    for (const nodeId of queue) {
+      for (const neighbour of adjacency.get(nodeId) ?? []) {
+        if (distances.has(neighbour) || !nodeIds.has(neighbour)) continue;
+        distances.set(neighbour, distance + 1);
+        predecessors.set(neighbour, nodeId);
+        nextQueue.push(neighbour);
+      }
+    }
+    queue = nextQueue;
+    distance++;
+  }
+
+  return { distances, predecessors };
+}
+
+/**
  * Find maximum distance among a set of nodes
  * 
  * @pure No side effects

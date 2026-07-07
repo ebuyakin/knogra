@@ -206,8 +206,10 @@ class GraphSaver {
     this.#cy.edges().forEach(cyEdge => {
       const edgeId = cyEdge.id() as EdgeId;
       const design = cyEdge.data('design');
+      const curve = cyEdge.data('curve') as Record<string, unknown> | undefined;
       scene.edges[edgeId] = {
         design: design ? { ...design } : { id: 'default', params: {} },
+        curve: curve && Object.keys(curve).length > 0 ? { ...curve } : undefined,
         controlPoints: cyEdge.data('controlPoints') || undefined
       };
     });

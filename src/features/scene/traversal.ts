@@ -147,3 +147,81 @@ export function determineNodesToKeep(
 
   return nodesToKeep;
 }
+
+/**
+ * Build an undirected adjacency map from the scene edges, restricted to nodes
+ * that are actually present in the scene.
+ */
+function buildUndirectedAdjacency(
+  edgesInScene: EdgeConnection[],
+  nodesInScene: Set<NodeId>
+): Map<NodeId, NodeId[]> {
+  const adjacency = new Map<NodeId, NodeId[]>();
+  for (const { source, target } of edgesInScene) {
+    if (!nodesInScene.has(source) || !nodesInScene.has(target)) continue;
+    if (!adjacency.has(source)) adjacency.set(source, []);
+    if (!adjacency.has(target)) adjacency.set(target, []);
+    adjacency.get(source)!.push(target);
+    adjacency.get(target)!.push(source);
+  }
+  return adjacency;
+}
+
+/**
+ * Undirected reachability (BFS) from a start node. A single node id may be
+ * `blocked` — the traversal never enters it, which lets callers ask "what is
+ * still reachable if this node were removed?".
+ */
+function undirectedReach(
+  start: NodeId,
+  adjacency: Map<NodeId, NodeId[]>,
+  blocked: NodeId | null
+): Set<NodeId> {
+  const visited = new Set<NodeId>([start]);
+  const queue: NodeId[] = [start];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const neighbour of adjacency.get(current) ?? []) {
+      if (neighbour === blocked || visited.has(neighbour)) continue;
+      visited.add(neighbour);
+      queue.push(neighbour);
+    }
+  }
+  return visited;
+}
+
+/**
+ * Compute the "private neighbourhood" of a node for the Exclude-neighbours
+ * command: every node that is held in the scene *only* through the collapsing
+ * node. Traversal is undirected, so both upstream and downstream branches are
+ * considered — unlike descendant collapse.
+ *
+ * A node N is returned iff:
+ *   1. N is reachable from the collapsing node (undirected), and
+ *   2. once the collapsing node is removed, N is no longer connected to the
+ *      central (anchor) node.
+ *
+ * The collapsing node, the central node, and any node not reachable from the
+ * collapsing node are never included. When the collapsing node *is* the central
+ * node there is no anchor, so every node connected to it is returned.
+ */
+export function findPrivateNeighbourhood(
+  collapsingNodeId: NodeId,
+  centralNodeId: NodeId,
+  edgesInScene: EdgeConnection[],
+  nodesInScene: Set<NodeId>
+): Set<NodeId> {
+  const adjacency = buildUndirectedAdjacency(edgesInScene, nodesInScene);
+
+  const reachableFromCollapsing = undirectedReach(collapsingNodeId, adjacency, null);
+  const anchorComponent = collapsingNodeId === centralNodeId
+    ? new Set<NodeId>()
+    : undirectedReach(centralNodeId, adjacency, collapsingNodeId);
+
+  const result = new Set<NodeId>();
+  for (const nodeId of reachableFromCollapsing) {
+    if (nodeId === collapsingNodeId || nodeId === centralNodeId) continue;
+    if (!anchorComponent.has(nodeId)) result.add(nodeId);
+  }
+  return result;
+}

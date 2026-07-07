@@ -334,14 +334,14 @@ export class KeyboardHandler {
     // SCENE MANIPULATION SHORTCUTS
     // =========================================================================
 
-    // Shift+C - Collapse node
+    // Shift+C - Exclude neighbours (private branches, any direction)
     if (key === 'c' && event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       const selected = this.#cy.$('node:selected');
       if (selected.length > 0) {
         const nodeId = selected.first().id() as NodeId;
-        await this.#features.scene.collapseNodeAnimated(nodeId);
+        await this.#features.scene.excludeNeighboursAnimated(nodeId);
       }
       return;
     }
@@ -374,13 +374,25 @@ export class KeyboardHandler {
     }
 
     // J - Expand children
-    if (key === 'j' && !ctrl) {
+    if (key === 'j' && !event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       const selected = this.#cy.$('node:selected');
       if (selected.length > 0) {
         const nodeId = selected.first().id() as NodeId;
         await this.#features.scene.expandNodeAnimated(nodeId, 'children');
+      }
+      return;
+    }
+
+    // Shift+J - Exclude descendants (collapse downstream subtree)
+    if (key === 'j' && event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      const selected = this.#cy.$('node:selected');
+      if (selected.length > 0) {
+        const nodeId = selected.first().id() as NodeId;
+        await this.#features.scene.collapseNodeAnimated(nodeId);
       }
       return;
     }
@@ -492,7 +504,7 @@ export class KeyboardHandler {
     if (!edgeId) return false;
 
     if (key === 'r') {
-      return this.#features.scene.resetEdgeStyleOverride(edgeId);
+      return this.#features.scene.resetEdgeCurveOverride(edgeId);
     }
 
     const commands = {

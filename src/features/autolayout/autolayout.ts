@@ -10,21 +10,19 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { NodeId } from '../../core/main-types';
+import type { NodeId, EdgeId } from '../../core/main-types';
 import { graphSaver } from '../../storage/graph-saver';
+import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
 import { isDebug } from '../../config/debug-flags';
-import {
-  computeRadialSectorLayout,
-  type LayoutInputEdge,
-  type LayoutInputNode,
-  type Position,
-} from './layout';
-import { AutoLayoutAnimator, type ViewportTarget } from './autolayout-animator';
-
-/** Viewport padding (px) around the fitted layout, matching Scene.fit(). */
-const FIT_PADDING = 50;
+import { StyleGenerator } from '../../styles/style-generator';
+import { pickCurveParams, pickVisualParams } from '../../styles/edge-visual-resolver';
+import type { LayoutInputEdge, LayoutInputNode, Position } from './algorithms/types';
+import { resolveLayout } from './algorithms/registry';
+import { AutoLayoutAnimator } from './autolayout-animator';
+import { computeFitViewport } from './fit';
+import { computeNeighbourhoodBall, seedEntrants, growEntrants, readCurrentThemeId } from './grow-arrange';
 
 export class AutoLayout {
   #cy: Core;
@@ -68,9 +66,14 @@ export class AutoLayout {
       }
     });
 
-    const relative = computeRadialSectorLayout(nodes, edges, centralNodeId, {
-      ringSpacing: getSetting('autolayout.ringSpacing'),
-      siblingGap: getSetting('autolayout.siblingGap'),
+    const relative = resolveLayout(getSetting('autolayout.layoutType')).compute({
+      nodes,
+      edges,
+      centralId: centralNodeId,
+      params: {
+        ringSpacing: getSetting('autolayout.ringSpacing'),
+        siblingGap: getSetting('autolayout.siblingGap'),
+      },
     });
     if (relative.size === 0) return;
 
@@ -84,12 +87,20 @@ export class AutoLayout {
 
     // Re-frame the viewport onto the final layout, animated concurrently.
     const footprints = new Map(nodes.map(node => [node.id, node.footprint]));
-    const viewport = this.#computeFitViewport(targets, footprints);
+    const viewport = computeFitViewport(targets, footprints, this.#cy);
 
     // Suspend auto-save so intermediate animation frames are not persisted,
     // then force one save of the final positions.
     const suspension = graphSaver.suspend('autolayout');
     try {
+      // The new radial layout invalidates every hand-tuned edge path, so reset
+      // each affected edge's curve to the default automatic bezier. Visual
+      // style overrides are preserved.
+      const affectedEdgeIds: EdgeId[] = this.#cy.edges()
+        .filter(edge => visibleIds.has(edge.source().id() as NodeId) && visibleIds.has(edge.target().id() as NodeId))
+        .map(edge => edge.id() as EdgeId);
+      this.#resetEdgeCurves(affectedEdgeIds);
+
       await this.#animator.apply(
         targets,
         {
@@ -107,42 +118,163 @@ export class AutoLayout {
   }
 
   /**
-   * Compute the zoom/pan that fits the final layout into the container, using
-   * the same math as Cytoscape's fit so framing matches Scene.fit().
+   * Grow the current scene by its central node's degree-≤`degree` neighbourhood,
+   * then radial-arrange the enlarged scene. New nodes emerge from the centre and
+   * settle into place while existing nodes glide and the camera re-fits — a
+   * single "unfolding" gesture. Add-only: nodes already in the scene are kept.
+   * Each entrant brings only its generative edge (to its BFS predecessor); use
+   * Include-all-scene-edges (Shift+S) afterwards for cross-links. Edit mode only.
+   *
+   * @param centralNodeId The scene's central node (layout root).
+   * @param degree Neighbourhood radius in hops (1, 2, or 3).
    */
-  #computeFitViewport(
-    targets: Map<NodeId, Position>,
-    footprints: Map<NodeId, { width: number; height: number }>
-  ): ViewportTarget {
-    let x1 = Infinity;
-    let y1 = Infinity;
-    let x2 = -Infinity;
-    let y2 = -Infinity;
-    for (const [nodeId, position] of targets) {
-      const footprint = footprints.get(nodeId);
-      if (!footprint) continue;
-      const halfWidth = footprint.width / 2;
-      const halfHeight = footprint.height / 2;
-      x1 = Math.min(x1, position.x - halfWidth);
-      x2 = Math.max(x2, position.x + halfWidth);
-      y1 = Math.min(y1, position.y - halfHeight);
-      y2 = Math.max(y2, position.y + halfHeight);
+  async growAndArrange(centralNodeId: NodeId | null, degree: number): Promise<void> {
+    if (!isEditMode()) {
+      if (isDebug('d_scene')) console.log('[AutoLayout] Grow skipped: View mode');
+      return;
+    }
+    if (!centralNodeId) return;
+
+    const central = this.#cy.getElementById(centralNodeId);
+    if (central.length === 0 || !central.visible()) return;
+
+    // 1. Degree-≤N ball from the central node; keep only nodes not yet present.
+    const { entrantIds, generativeEdges } = computeNeighbourhoodBall(
+      centralNodeId,
+      degree,
+      graphStore.edges,
+      getSetting('autolayout.growDirection')
+    );
+    const newEntrantIds = entrantIds.filter(id => this.#cy.getElementById(id).length === 0);
+
+    // Nothing new to include → a plain re-arrange is the right behaviour.
+    if (newEntrantIds.length === 0) {
+      await this.apply(centralNodeId);
+      return;
     }
 
-    const width = this.#cy.width();
-    const height = this.#cy.height();
-    const boxWidth = Math.max(1, x2 - x1);
-    const boxHeight = Math.max(1, y2 - y1);
+    // 2. Hub safety: confirm before pulling in a large number of nodes.
+    const threshold = getSetting('autolayout.growConfirmThreshold');
+    if (
+      newEntrantIds.length > threshold &&
+      !window.confirm(`This will add ${newEntrantIds.length} nodes to the scene. Continue?`)
+    ) {
+      return;
+    }
 
-    let zoom = Math.min((width - 2 * FIT_PADDING) / boxWidth, (height - 2 * FIT_PADDING) / boxHeight);
-    zoom = Math.max(this.#cy.minZoom(), Math.min(this.#cy.maxZoom(), zoom));
+    const centralPosition = central.position();
 
-    return {
-      zoom,
-      pan: {
-        x: (width - zoom * (x1 + x2)) / 2,
-        y: (height - zoom * (y1 + y2)) / 2,
-      },
-    };
+    // Existing (pre-seed) visible nodes and their footprints for the union layout.
+    const existingNodes: LayoutInputNode[] = this.#cy.nodes(':visible').map(node => {
+      const box = node.boundingBox();
+      return { id: node.id() as NodeId, footprint: { width: box.w, height: box.h } };
+    });
+
+    const suspension = graphSaver.suspend('autolayout:grow');
+    try {
+      // 3. Seed entrants: add + measure, then shrink to size 0 / opacity 0.
+      const themeId = await readCurrentThemeId(this.#cy);
+      const seed = await seedEntrants(this.#cy, newEntrantIds, generativeEdges, centralPosition, themeId);
+
+      // 4. Union layout over existing + entrants.
+      const nodes: LayoutInputNode[] = [...existingNodes];
+      for (const [id, footprint] of seed.footprints) nodes.push({ id, footprint });
+      const unionIds = new Set(nodes.map(node => node.id));
+
+      const edges: LayoutInputEdge[] = [];
+      this.#cy.edges().forEach((edge, index) => {
+        const sourceId = edge.source().id() as NodeId;
+        const targetId = edge.target().id() as NodeId;
+        if (unionIds.has(sourceId) && unionIds.has(targetId)) edges.push({ sourceId, targetId, order: index });
+      });
+
+      const relative = resolveLayout(getSetting('autolayout.layoutType')).compute({
+        nodes,
+        edges,
+        centralId: centralNodeId,
+        params: {
+          ringSpacing: getSetting('autolayout.ringSpacing'),
+          siblingGap: getSetting('autolayout.siblingGap'),
+        },
+      });
+      if (relative.size === 0) return;
+
+      const allTargets = new Map<NodeId, Position>();
+      for (const [id, position] of relative) {
+        allTargets.set(id, { x: centralPosition.x + position.x, y: centralPosition.y + position.y });
+      }
+
+      // Split targets: existing nodes glide (animator), entrants grow.
+      const entrantSet = new Set(newEntrantIds);
+      const existingTargets = new Map<NodeId, Position>();
+      const entrantTargets = new Map<NodeId, Position>();
+      for (const [id, position] of allTargets) {
+        (entrantSet.has(id) ? entrantTargets : existingTargets).set(id, position);
+      }
+
+      // Viewport frames the whole union.
+      const footprints = new Map(nodes.map(node => [node.id, node.footprint]));
+      const viewport = computeFitViewport(allTargets, footprints, this.#cy);
+
+      // Reset curves of every edge among the union (incl. new generative edges).
+      const affectedEdgeIds: EdgeId[] = this.#cy.edges()
+        .filter(edge => unionIds.has(edge.source().id() as NodeId) && unionIds.has(edge.target().id() as NodeId))
+        .map(edge => edge.id() as EdgeId);
+      this.#resetEdgeCurves(affectedEdgeIds);
+
+      const options = {
+        animate: getSetting('autolayout.animate'),
+        duration: getSetting('autolayout.animationDuration'),
+      };
+
+      if (options.animate && options.duration > 0) {
+        await Promise.all([
+          this.#animator.apply(existingTargets, options, viewport),
+          growEntrants(this.#cy, entrantTargets, centralPosition, seed, options.duration),
+        ]);
+      } else {
+        // No animation: place everything and reveal the entrants immediately.
+        await this.#animator.apply(allTargets, { animate: false, duration: 0 }, viewport);
+        for (const [id] of entrantTargets) {
+          const node = this.#cy.getElementById(id);
+          const visual = seed.visuals.get(id);
+          if (node.length > 0 && visual) node.style({ width: visual.width, height: visual.height, opacity: 1 });
+        }
+        for (const edgeId of seed.edgeIds) this.#cy.getElementById(edgeId).style('opacity', 1);
+      }
+    } finally {
+      graphSaver.resume(suspension);
+      await graphSaver.forceSave();
+    }
+
+    if (isDebug('d_scene')) console.log(`[AutoLayout] Grew ${newEntrantIds.length} nodes at degree ${degree}`);
+  }
+
+  /**
+   * Reset the curve/layout override of the given edges to the default automatic
+   * bezier, dropping any dedicated `curve` data and stripping legacy curve keys
+   * embedded in `design.params` (old workspaces). Visual overrides are kept.
+   * Mutates cy data and per-edge stylesheet rules directly — the same cy-level
+   * work the rest of auto-layout performs.
+   */
+  #resetEdgeCurves(edgeIds: EdgeId[]): void {
+    let stylesheet = (this.#cy.style() as any).json();
+    let changed = false;
+    for (const edgeId of edgeIds) {
+      const cyEdge = this.#cy.getElementById(edgeId);
+      if (cyEdge.length === 0) continue;
+
+      cyEdge.removeData('curve');
+      const design = cyEdge.data('design');
+      if (design?.params && Object.keys(pickCurveParams(design.params)).length > 0) {
+        cyEdge.data('design', { id: design.id, params: pickVisualParams(design.params) });
+      }
+
+      const sceneEdge = { design: cyEdge.data('design'), curve: undefined };
+      stylesheet = StyleGenerator.applyEdgeOverrideToStylesheet(stylesheet, edgeId, sceneEdge);
+      changed = true;
+    }
+
+    if (changed) this.#cy.style().fromJson(stylesheet).update();
   }
 }

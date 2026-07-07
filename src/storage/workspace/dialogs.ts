@@ -12,6 +12,7 @@ import {
   PATH_DB_SCHEMA,
   SHELF_KEY,
 } from '../../config/storage-config';
+import type { ImageInclusionOptions, InNoteImageCounts } from './transfer';
 
 export interface ImportWorkspaceOptions {
   exportFirst: boolean;
@@ -331,6 +332,111 @@ export function showValidationErrorDialog(errors: string[], mode: 'import' | 'ex
     });
   });
 }
+/**
+ * Ask which categories of in-note image bytes to include when exporting, or to
+ * keep when importing. Shown only when the workspace/file actually contains
+ * in-note images. On export, "found images" default OFF (light file, links are
+ * recoverable); on import they default ON (keep what the file provides).
+ * Uploaded images default ON in both directions (no link to fall back on).
+ * Resolves the inclusion options, or null if the user cancels.
+ */
+export function showImageTransferDialog(
+  mode: 'export' | 'import',
+  counts: InNoteImageCounts
+): Promise<ImageInclusionOptions | null> {
+  const isExport = mode === 'export';
+
+  return new Promise(resolve => {
+    const cyContainer = document.getElementById('cy');
+    const rect = cyContainer?.getBoundingClientRect();
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000;
+      display: flex; align-items: center; justify-content: center;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position: relative;
+      left: ${rect ? (rect.left + rect.width / 2 - window.innerWidth / 2) : 0}px;
+      top: ${rect ? (rect.top + rect.height / 2 - window.innerHeight / 2) : 0}px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 24px; width: 460px; max-width: 90vw; color: #e6edf3; font-size: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    `;
+
+    const title = isExport ? 'Export Images' : 'Import Images';
+    const intro = isExport
+      ? 'This workspace has images in notes. Choose what to include in the file.'
+      : 'This file has images in notes. Choose what to bring in.';
+    const confirmLabel = isExport ? 'Export' : 'Import';
+
+    const uploadedDesc = isExport
+      ? 'If checked, the images you added from disk are exported. If unchecked, they are omitted — they have no link, so they cannot be restored later.'
+      : 'If checked, the images added from disk are imported. If unchecked, they are dropped — they have no link, so they cannot be restored later.';
+    const retrievedDesc = isExport
+      ? 'If unchecked, only the links are exported and re-downloaded later (smaller file). If checked, the stored image files are embedded — usable offline from the start, but a larger file.'
+      : 'If unchecked, only the links are imported and re-downloaded later per your offline setting. If checked, the stored image files are imported — usable offline from the start, but a heavier workspace.';
+
+    const row = (id: string, label: string, count: number, desc: string, checked: boolean): string => `
+      <label style="display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; cursor:pointer;">
+        <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} style="accent-color:#58a6ff; margin-top:3px;">
+        <span>
+          <span style="display:block; color:#e6edf3;">${label} <span style="color:#8b949e;">(${count})</span></span>
+          <span style="display:block; color:#8b949e; font-size:12px; line-height:1.4; margin-top:2px;">${desc}</span>
+        </span>
+      </label>`;
+
+    const uploadedRow = counts.uploaded > 0
+      ? row('it-uploaded', 'Images uploaded locally', counts.uploaded, uploadedDesc, true)
+      : '';
+    const retrievedRow = counts.retrieved > 0
+      ? row('it-retrieved', 'Images retrieved online', counts.retrieved, retrievedDesc, !isExport)
+      : '';
+
+    dialog.innerHTML = `
+      <h3 style="margin:0 0 12px; font-size:16px; font-weight:600;">${title}</h3>
+      <p style="margin:0 0 16px; color:#8b949e; line-height:1.5;">${intro}</p>
+      ${uploadedRow}
+      ${retrievedRow}
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
+        <button id="it-cancel" style="padding:6px 16px; border-radius:6px; border:1px solid #30363d;
+          background:none; color:#c9d1d9; cursor:pointer; font-size:13px;">Cancel</button>
+        <button id="it-ok" style="padding:6px 16px; border-radius:6px; border:none;
+          background:#58a6ff; color:#fff; cursor:pointer; font-size:13px; font-weight:600;">${confirmLabel}</button>
+      </div>
+    `;
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    const cleanup = (): void => { overlay.remove(); };
+
+    const readCheckbox = (id: string, absentDefault: boolean): boolean => {
+      const el = dialog.querySelector(`#${id}`) as HTMLInputElement | null;
+      return el ? el.checked : absentDefault;
+    };
+
+    dialog.querySelector('#it-cancel')?.addEventListener('click', () => {
+      cleanup();
+      resolve(null);
+    });
+
+    dialog.querySelector('#it-ok')?.addEventListener('click', () => {
+      cleanup();
+      resolve({
+        includeUploaded: readCheckbox('it-uploaded', true),
+        includeRetrieved: readCheckbox('it-retrieved', true),
+      });
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { cleanup(); resolve(null); }
+    });
+  });
+}
+
 export function showNewWorkspaceDialog(): Promise<NewWorkspaceOptions | null> {
   return new Promise(resolve => {
     const cyContainer = document.getElementById('cy');

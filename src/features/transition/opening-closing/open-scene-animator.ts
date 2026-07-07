@@ -363,7 +363,8 @@ export class OpenSceneAnimator {
           id: edgeId,
           source: edgeData.sourceId,
           target: edgeData.targetId,
-          design: sceneEdgeData?.design
+          design: sceneEdgeData?.design,
+          curve: sceneEdgeData?.curve
         }
       });
       edgeEl.style('opacity', 0);
@@ -373,10 +374,10 @@ export class OpenSceneAnimator {
     let currentStylesheet = (this.#cy.style() as any).json();
     for (const edgeId of edgeIds) {
       const sceneEdgeData = scene.edges[edgeId];
-      if (!StyleGenerator.hasEdgeStyleOverride(sceneEdgeData?.design)) continue;
+      if (!StyleGenerator.hasEdgeStyleOverride(sceneEdgeData)) continue;
 
       const edgeStyle = StyleGenerator.generateEdgeStyleForId(
-        edgeId, sceneEdgeData.design, themeId
+        edgeId, sceneEdgeData ?? null, themeId
       );
       currentStylesheet = StyleGenerator.updateEdgeInStylesheet(
         currentStylesheet, edgeId, edgeStyle
@@ -432,14 +433,14 @@ export class OpenSceneAnimator {
       const sceneEdgeData = scene.edges[edgeId];
       const edgeEl = this.#cy.add({
         group: 'edges',
-        data: { ...edgeData, id: edgeId, source: edgeData.sourceId, target: edgeData.targetId, design: sceneEdgeData?.design }
+        data: { ...edgeData, id: edgeId, source: edgeData.sourceId, target: edgeData.targetId, design: sceneEdgeData?.design, curve: sceneEdgeData?.curve }
       });
       edgeEl.style('opacity', 0);
 
       // Apply per-edge style if scene has custom design for this edge
-      if (StyleGenerator.hasEdgeStyleOverride(sceneEdgeData?.design)) {
+      if (StyleGenerator.hasEdgeStyleOverride(sceneEdgeData)) {
         let currentStylesheet = (this.#cy.style() as any).json();
-        const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, sceneEdgeData.design, themeId);
+        const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, sceneEdgeData ?? null, themeId);
         currentStylesheet = StyleGenerator.updateEdgeInStylesheet(currentStylesheet, edgeId, edgeStyle);
         this.#cy.style().fromJson(currentStylesheet).update();
       }

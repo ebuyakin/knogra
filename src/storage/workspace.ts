@@ -11,6 +11,7 @@ import { ping } from '../utils/telemetry';
 
 import {
   clearAllData,
+  countInNoteImages,
   exportBackgroundImages,
   exportConversations,
   exportGraphData,
@@ -27,10 +28,12 @@ import {
   importShelf,
   importThemes,
   readLocalApiKeys,
+  stripConversationImages,
   type GraphData,
 } from './workspace/transfer';
 import {
   hasMeaningfulWorkspaceData,
+  showImageTransferDialog,
   showImportWorkspaceDialog,
   showNewWorkspaceDialog,
   showScaleToFitDialog,
@@ -151,8 +154,17 @@ export async function exportWorkspace(): Promise<void> {
   const settings = exportSettings();
   zip.file('settings.json', JSON.stringify(settings, null, 2));
   
-  // 4. Export chat conversations from IndexedDB
-  const conversations = await exportConversations();
+  // 4. Export chat conversations from IndexedDB.
+  // When the workspace holds in-note images, let the user choose which
+  // categories' bytes to embed (found images default to links-only for a
+  // lighter file). Cancelling the dialog aborts the export.
+  let conversations = await exportConversations();
+  const imageCounts = countInNoteImages(conversations);
+  if (imageCounts.uploaded > 0 || imageCounts.retrieved > 0) {
+    const inclusion = await showImageTransferDialog('export', imageCounts);
+    if (!inclusion) return;
+    conversations = stripConversationImages(conversations, inclusion);
+  }
   zip.file('chat-history.json', JSON.stringify(conversations, null, 2));
   
   // 5. Export background images from IndexedDB
@@ -302,7 +314,7 @@ export async function importWorkspace(file: File): Promise<boolean> {
       ? JSON.parse(await settingsFile.async('string'))
       : {};
     
-    const conversations: unknown[] = chatFile
+    let conversations: unknown[] = chatFile
       ? JSON.parse(await chatFile.async('string'))
       : [];
     
@@ -345,6 +357,16 @@ export async function importWorkspace(file: File): Promise<boolean> {
     if (scaleFactor !== null) {
       const accepted = await showScaleToFitDialog();
       if (accepted) scaleImportedScenesZoom(graph.scenes, scaleFactor);
+    }
+
+    // 3c. In-note images: when the file carries them, let the user choose which
+    //     categories to keep. Found images kept as links heal to offline later
+    //     per the storage setting. Cancelling aborts the import.
+    const importImageCounts = countInNoteImages(conversations);
+    if (importImageCounts.uploaded > 0 || importImageCounts.retrieved > 0) {
+      const inclusion = await showImageTransferDialog('import', importImageCounts);
+      if (!inclusion) return false;
+      conversations = stripConversationImages(conversations, inclusion);
     }
 
     // 4. Capture local API keys BEFORE clearing — clearAllData() wipes localStorage

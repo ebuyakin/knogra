@@ -10,6 +10,7 @@ import type { SceneId, NodeId, EdgeId, DesignId, Edge, EdgeType, EdgeTypeId } fr
 import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
 import { StyleGenerator } from '../../styles/style-generator';
+import { pickCurveParams, pickVisualParams } from '../../styles/edge-visual-resolver';
 import { isDebug } from '../../config/debug-flags';
 import { getSetting } from '../../config';
 import { getDefaultEdgeTypeId } from '../../config/edge-type-settings';
@@ -21,9 +22,9 @@ interface EdgeBendOptions {
 }
 
 const EDGE_BEND_DISTANCE_STEP = 25;
-const EDGE_BEND_DISTANCE_LARGE_STEP = 100;
-const EDGE_BEND_DISTANCE_MIN = -1200;
-const EDGE_BEND_DISTANCE_MAX = 1200;
+const EDGE_BEND_DISTANCE_LARGE_STEP = 200;
+const EDGE_BEND_DISTANCE_MIN = -2000;
+const EDGE_BEND_DISTANCE_MAX = 2000;
 const EDGE_BEND_WEIGHT_STEP = 0.05;
 const EDGE_BEND_WEIGHT_LARGE_STEP = 0.2;
 const EDGE_BEND_WEIGHT_MIN = 0.02;
@@ -37,7 +38,10 @@ export interface EdgeEditContext {
   edgeId: EdgeId;
   design: { id: DesignId; params: Record<string, unknown> };
   editableStyleParams: Record<string, unknown>;
+  /** True when the edge carries a visual-style override (colour/width/opacity/arrow). */
   hasStyleOverride: boolean;
+  /** Effective curve/layout params for this edge; empty = default automatic bezier. */
+  curveParams: Record<string, unknown>;
   typeId: EdgeTypeId;
   edgeTypes: EdgeType[];
   sourceNode: { id: NodeId; title: string };
@@ -94,17 +98,24 @@ export class SceneEdgeOps {
     }
 
     const design = cyEdge.data('design') || { id: 'default', params: {} };
+    const curveData = cyEdge.data('curve') as Record<string, unknown> | undefined;
     const typeId = cyEdge.data('typeId') || getDefaultEdgeTypeId();
     const edgeType = graphStore.edgeTypes.find(type => type.id === typeId);
     const themeId = this.#getThemeId();
     const thematicStyle = edgeType
       ? StyleGenerator.generateEdgeStyleForType(edgeType, themeId)
       : StyleGenerator.generateEdgeStyle(themeId).style;
+    const designVisual = pickVisualParams(design.params);
     const editableStyleParams = {
-      ...thematicStyle,
-      ...(design.params ?? {})
+      ...pickVisualParams(thematicStyle),
+      ...designVisual
     };
-    const hasStyleOverride = StyleGenerator.hasEdgeStyleOverride(design);
+    // Curve is individual: prefer the dedicated `curve` field, fall back to any
+    // legacy curve keys embedded in design.params (old workspaces), else empty.
+    const curveParams = (curveData && Object.keys(curveData).length > 0)
+      ? { ...curveData }
+      : pickCurveParams(design.params);
+    const hasStyleOverride = design.id === 'custom' || Object.keys(designVisual).length > 0;
 
     const sourceNode = cyEdge.source();
     const targetNode = cyEdge.target();
@@ -131,6 +142,7 @@ export class SceneEdgeOps {
       design,
       editableStyleParams,
       hasStyleOverride,
+      curveParams,
       typeId,
       edgeTypes: graphStore.edgeTypes,
       sourceNode: sourceInfo,
@@ -141,11 +153,12 @@ export class SceneEdgeOps {
   }
 
   /**
-   * Update edge's scene-specific style (design params)
+   * Update edge's scene-specific VISUAL style override (colour/width/opacity/arrow).
+   * Curve/layout is handled independently by `updateEdgeCurve`. Pass null to clear.
    */
   async updateEdgeStyle(
     edgeId: EdgeId,
-    params: Record<string, unknown> | null
+    visualParams: Record<string, unknown> | null
   ): Promise<void> {
     if (!isEditMode()) {
       console.warn('Cannot update edge style in View mode');
@@ -158,69 +171,85 @@ export class SceneEdgeOps {
       return;
     }
 
-    // === DIAGNOSTIC: Before state ===
-    if (isDebug('d_edgeStyle')) {
-      const bypassesBefore = Object.keys((cyEdge as any)[0]?._private?.style || {}).filter(
-        k => (cyEdge as any)[0]._private.style[k]?.bypass
-      );
-      const computedBefore = {
-        'curve-style': cyEdge.style('curve-style'),
-        'line-color': cyEdge.style('line-color'),
-        'width': cyEdge.style('width'),
-        'opacity': cyEdge.style('opacity')
-      };
-      console.log(`[DIAG updateEdgeStyle] ${edgeId} BEFORE: bypasses=[${bypassesBefore}] computed=`, computedBefore);
-      console.log(`[DIAG updateEdgeStyle] ${edgeId} params=`, params);
+    if (isDebug('d_edgeStyle')) console.log(`[d_edgeStyle] updateEdgeStyle ${edgeId} visualParams=`, visualParams);
+
+    if (visualParams === null) {
+      cyEdge.data('design', { id: 'default' as DesignId, params: {} });
+    } else {
+      // Guard: only visual keys belong in design; drop any stray curve keys.
+      cyEdge.data('design', { id: 'custom' as DesignId, params: pickVisualParams(visualParams) });
     }
 
-    if (params === null) {
-      cyEdge.data('design', { id: 'default' as DesignId, params: {} });
-      const stylesheet = (this.#cy.style() as any).json();
-      const updatedStylesheet = StyleGenerator.removeEdgeFromStylesheet(stylesheet, edgeId);
-      this.#cy.style().fromJson(updatedStylesheet).update();
-      if (isDebug('d_scene')) console.log(`Scene: Cleared edge ${edgeId} style override`);
+    this.#applyEdgeOverrideRule(edgeId);
+    if (isDebug('d_edgeStyle')) console.log(`[d_edgeStyle] updateEdgeStyle ${edgeId} → design=`, cyEdge.data('design'));
+    if (isDebug('d_scene')) console.log(`Scene: Updated edge ${edgeId} visual style`);
+  }
+
+  /**
+   * Update edge's scene-specific CURVE/layout override. Pass null (or an empty
+   * bag) to reset to the default automatic bezier.
+   */
+  async updateEdgeCurve(
+    edgeId: EdgeId,
+    curveParams: Record<string, unknown> | null
+  ): Promise<void> {
+    if (!isEditMode()) {
+      console.warn('Cannot update edge curve in View mode');
       return;
     }
 
-    const design = { id: 'custom' as DesignId, params };
-    cyEdge.data('design', design);
+    const cyEdge = this.#cy.getElementById(edgeId);
+    if (cyEdge.length === 0) {
+      console.warn(`Edge ${edgeId} not in scene`);
+      return;
+    }
 
-    const themeId = this.#getThemeId();
-    const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, design, themeId);
-    if (isDebug('d_edgeStyle')) console.log(`[DIAG updateEdgeStyle] ${edgeId} generatedStyle=`, edgeStyle);
+    if (isDebug('d_edgeStyle')) console.log(`[d_edgeStyle] updateEdgeCurve ${edgeId} curveParams=`, curveParams);
 
+    const curve = curveParams ? pickCurveParams(curveParams) : {};
+    if (Object.keys(curve).length === 0) {
+      cyEdge.removeData('curve');
+    } else {
+      cyEdge.data('curve', curve);
+    }
+
+    // Strip any legacy curve keys lingering in design.params so they cannot
+    // fight the dedicated field (relevant for old workspaces being edited).
+    const design = cyEdge.data('design');
+    if (design?.params && Object.keys(pickCurveParams(design.params)).length > 0) {
+      cyEdge.data('design', { id: design.id, params: pickVisualParams(design.params) });
+    }
+
+    this.#applyEdgeOverrideRule(edgeId);
+    if (isDebug('d_edgeStyle')) console.log(`[d_edgeStyle] updateEdgeCurve ${edgeId} → curve=`, cyEdge.data('curve'), 'design=', cyEdge.data('design'));
+    if (isDebug('d_scene')) console.log(`Scene: Updated edge ${edgeId} curve`);
+  }
+
+  /** Rebuild (or drop) the per-edge stylesheet rule from the edge's current design + curve. */
+  #applyEdgeOverrideRule(edgeId: EdgeId): void {
+    const cyEdge = this.#cy.getElementById(edgeId);
+    if (cyEdge.length === 0) return;
+
+    const sceneEdge = {
+      design: cyEdge.data('design'),
+      curve: cyEdge.data('curve') as Record<string, unknown> | undefined
+    };
+    const hasOverride = StyleGenerator.hasEdgeStyleOverride(sceneEdge);
     const stylesheet = (this.#cy.style() as any).json();
-    const selectorTarget = `edge[id = "${edgeId}"]`;
-
-    const updatedStylesheet = StyleGenerator.updateEdgeInStylesheet(
+    const updatedStylesheet = StyleGenerator.applyEdgeOverrideToStylesheet(
       stylesheet,
       edgeId,
-      edgeStyle
+      sceneEdge,
+      this.#getThemeId()
     );
-    if (isDebug('d_edgeStyle')) {
-      const hadRule = stylesheet.some((r: any) => r.selector === selectorTarget);
-      const hasRule = updatedStylesheet.some((r: any) => r.selector === selectorTarget);
-      console.log(`[DIAG updateEdgeStyle] ${edgeId} hadRule=${hadRule} hasRule=${hasRule} totalRules=${updatedStylesheet.length}`);
-    }
-
     this.#cy.style().fromJson(updatedStylesheet).update();
 
-    // === DIAGNOSTIC: After state ===
     if (isDebug('d_edgeStyle')) {
-      const bypassesAfter = Object.keys((cyEdge as any)[0]?._private?.style || {}).filter(
-        k => (cyEdge as any)[0]._private.style[k]?.bypass
+      console.log(
+        `[d_edgeStyle] applyEdgeOverrideRule ${edgeId}: ${hasOverride ? 'rule written' : 'rule removed'} ` +
+        `computed curve-style=${cyEdge.style('curve-style')} line-color=${cyEdge.style('line-color')}`
       );
-      const computedAfter = {
-        'curve-style': cyEdge.style('curve-style'),
-        'line-color': cyEdge.style('line-color'),
-        'width': cyEdge.style('width'),
-        'opacity': cyEdge.style('opacity')
-      };
-      console.log(`[DIAG updateEdgeStyle] ${edgeId} AFTER: bypasses=[${bypassesAfter}] computed=`, computedAfter);
-      console.log(`[DIAG updateEdgeStyle] ${edgeId} params['curve-style']=${params['curve-style']} computed=${cyEdge.style('curve-style')} MATCH=${String(params['curve-style']) === cyEdge.style('curve-style')}`);
     }
-
-    if (isDebug('d_scene')) console.log(`Scene: Updated edge ${edgeId} style (custom params)`);
   }
 
   async adjustEdgeBend(
@@ -229,27 +258,28 @@ export class SceneEdgeOps {
     options: EdgeBendOptions = {}
   ): Promise<boolean> {
     if (command === 'resetOverride') {
-      return this.resetEdgeStyleOverride(edgeId);
+      return this.resetEdgeCurveOverride(edgeId);
     }
 
-    const params = this.#buildBentEdgeParams(edgeId, command, options.largeStep === true);
-    if (!params) return false;
+    const curveParams = this.#buildBentCurveParams(edgeId, command, options.largeStep === true);
+    if (!curveParams) return false;
 
-    await this.updateEdgeStyle(edgeId, params);
+    await this.updateEdgeCurve(edgeId, curveParams);
     return true;
   }
 
-  async resetEdgeStyleOverride(edgeId: EdgeId): Promise<boolean> {
+  /** Reset an edge's curve/layout override back to the default automatic bezier. */
+  async resetEdgeCurveOverride(edgeId: EdgeId): Promise<boolean> {
     if (!isEditMode()) return false;
 
     const cyEdge = this.#cy.getElementById(edgeId);
     if (cyEdge.length === 0) return false;
 
-    await this.updateEdgeStyle(edgeId, null);
+    await this.updateEdgeCurve(edgeId, null);
     return true;
   }
 
-  #buildBentEdgeParams(
+  #buildBentCurveParams(
     edgeId: EdgeId,
     command: Exclude<EdgeBendCommand, 'resetOverride'>,
     largeStep: boolean
@@ -259,11 +289,11 @@ export class SceneEdgeOps {
     const context = this.getEdgeEditContext(edgeId);
     if (!context) return null;
 
-    const params = { ...context.editableStyleParams };
+    const curve = { ...context.curveParams };
     const distanceStep = largeStep ? EDGE_BEND_DISTANCE_LARGE_STEP : EDGE_BEND_DISTANCE_STEP;
     const weightStep = largeStep ? EDGE_BEND_WEIGHT_LARGE_STEP : EDGE_BEND_WEIGHT_STEP;
-    const curveStyle = typeof params['curve-style'] === 'string'
-      ? params['curve-style']
+    const curveStyle = typeof curve['curve-style'] === 'string'
+      ? curve['curve-style']
       : getSetting('edge.defaultCurveStyle');
     if (curveStyle !== 'bezier' && curveStyle !== 'unbundled-bezier') return null;
 
@@ -271,8 +301,8 @@ export class SceneEdgeOps {
       ? getSetting('edge.bezierControlDistances')
       : [0];
     const weightFallback = [EDGE_BEND_DEFAULT_WEIGHT];
-    const distances = this.#readNumericArrayParam(params['control-point-distances'], distanceFallback);
-    const weights = this.#readNumericArrayParam(params['control-point-weights'], weightFallback);
+    const distances = this.#readNumericArrayParam(curve['control-point-distances'], distanceFallback);
+    const weights = this.#readNumericArrayParam(curve['control-point-weights'], weightFallback);
     const nextDistances = distances.length > 0 ? [...distances] : [0];
     const nextWeights = weights.length > 0 ? [...weights] : [EDGE_BEND_DEFAULT_WEIGHT];
     const pointCount = Math.max(nextDistances.length, nextWeights.length, 1);
@@ -294,11 +324,11 @@ export class SceneEdgeOps {
         break;
     }
 
-    params['curve-style'] = 'unbundled-bezier';
-    params['control-point-distances'] = nextDistances;
-    params['control-point-weights'] = nextWeights;
+    curve['curve-style'] = 'unbundled-bezier';
+    curve['control-point-distances'] = nextDistances;
+    curve['control-point-weights'] = nextWeights;
 
-    return params;
+    return curve;
   }
 
   #readNumericArrayParam(value: unknown, fallback: number[]): number[] {

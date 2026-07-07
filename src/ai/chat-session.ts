@@ -173,6 +173,17 @@ export class ChatSession {
   }
 
   /**
+   * Re-read the current node's messages from storage into the in-memory list,
+   * without re-rendering. Used after the note editor writes directly to the
+   * store so getMessages() stays authoritative for context-menu lookups.
+   */
+  async refreshMessages(): Promise<void> {
+    if (!this.#currentNodeId) return;
+    const conversation = await chatStore.getConversation(this.#currentNodeId);
+    this.#messages = conversation?.messages ?? [];
+  }
+
+  /**
    * Get current node ID
    */
   getCurrentNodeId(): NodeId | null {

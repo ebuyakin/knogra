@@ -48,6 +48,8 @@ interface DebugFlags {
   d_background: boolean;
   /** Chat session (chat-session.ts) */
   d_chat: boolean;
+  /** Image retrieval (ai/image-search/) */
+  d_image: boolean;
   /** Keyboard arrow-key navigation (keyboard-handler.ts) */
   d_nav: boolean;
   /** Fold/unfold: state application, transition reclassification */
@@ -73,6 +75,7 @@ export const DEBUG: DebugFlags = {
   d_scene: false,
   d_background: false,
   d_chat: false,
+  d_image: false,
   d_nav: false,
   d_fold: false,         // fold/unfold state changes and transition reclassification
   d_shelf: false,
