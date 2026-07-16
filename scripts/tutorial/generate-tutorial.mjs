@@ -36,6 +36,70 @@ const INTENTIONAL_OVERRIDES = {
 };
 
 // =============================================================================
+// Scene viewport normalization (v1 → v1.5 focal-point framing)
+//
+// v1 scenes stored only { zoom, pan } — a *pixel* pan captured on the authoring
+// screen. v1.5 restores framing from `viewport.focalPoint` (the graph-space
+// point placed at the container center) and re-derives pan for the live window,
+// so scenes stay centered on any screen. Legacy scenes lack `focalPoint`, so
+// the app falls back to assuming the stored pan matches the current container
+// size — and they land off-center on a different screen.
+//
+// This pass gives every legacy scene a `focalPoint` = the center of its node
+// bounding box (content-centered framing) and rewrites `pan` to match. The
+// author's `zoom` is preserved. Scenes that already carry a valid focalPoint
+// (v1.5-native) are left untouched.
+// =============================================================================
+
+// The app ignores stored `pan` on restore (it recomputes pan from focalPoint
+// against the live container). We still write a numeric pan for legacy readers
+// and workspace validation; this reference size is purely cosmetic.
+const REFERENCE_CONTAINER = { w: 1440, h: 900 };
+
+function computeSceneFocalPoint(scene) {
+  const nodes = scene.nodes ? Object.values(scene.nodes) : [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const node of nodes) {
+    const pos = node && node.position;
+    if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
+    minX = Math.min(minX, pos.x); maxX = Math.max(maxX, pos.x);
+    minY = Math.min(minY, pos.y); maxY = Math.max(maxY, pos.y);
+  }
+  if (!Number.isFinite(minX)) return null;
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+}
+
+function hasValidFocalPoint(viewport) {
+  const fp = viewport && viewport.focalPoint;
+  return !!fp && typeof fp.x === 'number' && typeof fp.y === 'number';
+}
+
+function normalizeSceneViewports(graphJson) {
+  const scenes = graphJson.scenes ?? [];
+  let added = 0, skipped = 0, unframed = 0;
+
+  for (const scene of scenes) {
+    const vp = scene.viewport;
+    // No usable zoom → the app fits-to-content on open (already centered). Leave.
+    if (!vp || typeof vp.zoom !== 'number' || vp.zoom <= 0) { unframed++; continue; }
+    // Native v1.5 framing — don't disturb it.
+    if (hasValidFocalPoint(vp)) { skipped++; continue; }
+
+    const focalPoint = computeSceneFocalPoint(scene);
+    if (!focalPoint) { unframed++; continue; }
+
+    vp.focalPoint = focalPoint;
+    vp.pan = {
+      x: REFERENCE_CONTAINER.w / 2 - focalPoint.x * vp.zoom,
+      y: REFERENCE_CONTAINER.h / 2 - focalPoint.y * vp.zoom
+    };
+    added++;
+  }
+
+  return { total: scenes.length, added, skipped, unframed };
+}
+
+// =============================================================================
 // Parse tutorial-content.md
 // =============================================================================
 
@@ -411,6 +475,14 @@ async function main() {
   const graphJson = JSON.parse(await graphFile.async('string'));
 
   console.log(`  Found ${graphJson.nodes.length} nodes in graph`);
+
+  // Normalize scene framing to the v1.5 focal-point model so the tutorial
+  // centers on any screen like a natively-created graph. Modifies graphJson in
+  // place, then writes graph.json back into the zip.
+  const vpStats = normalizeSceneViewports(graphJson);
+  zip.file('graph.json', JSON.stringify(graphJson, null, 2));
+  console.log(`  🎯 Viewports: ${vpStats.added} focal-point(s) added, ` +
+    `${vpStats.skipped} already framed, ${vpStats.unframed} left to fit-on-open`);
 
   // Parse markdown content
   const sections = parseContent(mdText);

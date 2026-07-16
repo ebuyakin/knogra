@@ -35,8 +35,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'G', description: 'Go to scene (selected node)' },
       { key: 'Shift+G', description: 'Go to scene (fade, no animation)' },
       { key: 'I', description: 'Show link to anchor for selected node' },
-      { key: '[', description: 'Navigate back in history' },
-      { key: ']', description: 'Navigate forward in history' },
+      { key: '[ / ]', description: 'Navigate back / forward in history' },
       { key: 'Arrows', description: 'Navigate between nodes' },
       { key: 'Escape', description: 'Deselect all' },
       { key: 'F', description: 'Fit graph to view' },
@@ -58,13 +57,13 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
   {
     title: 'Scene: Editing',
     shortcuts: [
-      { key: 'C', description: 'Expand node (children + parents)' },
-      { key: 'J', description: 'Expand children only' },
-      { key: 'P', description: 'Expand parents only' },
+      { key: 'C / J / P', description: 'Include neighbours (all, children, parents)' },
       { key: 'Shift+C', description: 'Exclude neighbours (private branches) from scene' },
       { key: 'Shift+J', description: 'Exclude descendants from scene' },
       { key: 'X', description: 'Exclude selected node or edge from scene' },
       { key: 'Z', description: 'Toggle fold / unfold' },
+      { key: 'O / Shift+O', description: 'Rotate scene clockwise / counter-clockwise' },
+      { key: 'W / Shift+W', description: 'Spread / tighten scene spacing around central node' },
       { key: 'M', description: 'Open node manager' },
     ]
   },
@@ -82,7 +81,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     shortcuts: [
       { key: 'J / K', description: 'Bend selected edge clockwise / counterclockwise' },
       { key: 'Shift J / K', description: 'Bend selected edge with large steps' },
-      { key: 'H / L', description: 'Move bending point toward edge source / target' },
+      { key: 'H / L', description: 'Move bending point toward edge target / source' },
       { key: 'Shift H / L', description: 'Move bending point with large steps' },
       { key: 'R', description: 'Restore edge standard style' },
     ]

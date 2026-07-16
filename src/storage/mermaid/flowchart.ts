@@ -19,6 +19,8 @@ export interface ParsedMermaidGraph {
   equationsByMermaidId: Map<string, string>;
   tagsByMermaidId: Map<string, string[]>;
   notesByMermaidId: Map<string, string>;
+  tutorialByMermaidId: Map<string, string>;
+  commentsByMermaidId: Map<string, string>;
 }
 
 interface NodeSpec {
@@ -69,7 +71,9 @@ export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
   const lines = normalizeMermaidLines(body);
   const equationsByMermaidId = parseKnograEquationSection(source);
   const tagsByMermaidId = parseKnograTagsSection(source);
-  const notesByMermaidId = parseKnograNotesSection(source);
+  const notesByMermaidId = parseKnograProseSection(source, KNOGRA_NOTES_HEADING);
+  const tutorialByMermaidId = parseKnograProseSection(source, KNOGRA_TUTORIAL_HEADING);
+  const commentsByMermaidId = parseKnograProseSection(source, KNOGRA_COMMENTS_HEADING);
 
   const headerIndex = lines.findIndex(line => /^(flowchart|graph)\s+/i.test(line));
   if (headerIndex < 0) {
@@ -122,7 +126,7 @@ export function parseMermaidFlowchart(source: string): ParsedMermaidGraph {
     throw new Error('No nodes found in Mermaid flowchart.');
   }
 
-  return { nodes: [...nodes.values()], edges, equationsByMermaidId, tagsByMermaidId, notesByMermaidId };
+  return { nodes: [...nodes.values()], edges, equationsByMermaidId, tagsByMermaidId, notesByMermaidId, tutorialByMermaidId, commentsByMermaidId };
 }
 
 function extractMermaidBody(source: string): string {
@@ -133,7 +137,9 @@ function extractMermaidBody(source: string): string {
 const KNOGRA_EQUATION_HEADING = /^#{1,6}\s+Knogra equations\s*$/i;
 const KNOGRA_TAGS_HEADING = /^#{1,6}\s+Knogra tags\s*$/i;
 const KNOGRA_NOTES_HEADING = /^#{1,6}\s+Knogra notes\s*$/i;
-const KNOGRA_METADATA_HEADING = /^#{1,6}\s+Knogra (equations|tags|notes)\s*$/i;
+const KNOGRA_TUTORIAL_HEADING = /^#{1,6}\s+Knogra tutorial\s*$/i;
+const KNOGRA_COMMENTS_HEADING = /^#{1,6}\s+Knogra comments\s*$/i;
+const KNOGRA_METADATA_HEADING = /^#{1,6}\s+Knogra (equations|tags|notes|tutorial|comments)\s*$/i;
 const KNOGRA_NOTE_END = '</note>';
 
 function parseKnograEquationSection(source: string): Map<string, string> {
@@ -174,18 +180,19 @@ function parseKnograTagsSection(source: string): Map<string, string[]> {
 }
 
 /**
- * Parse the `Knogra notes` section into per-node multiline note text.
+ * Parse a Knogra prose section (`Knogra notes` or `Knogra tutorial`) into
+ * per-node multiline text.
  *
- * Each note starts with `<mermaidId>:` (optionally with inline text on the
+ * Each entry starts with `<mermaidId>:` (optionally with inline text on the
  * same line) and runs until a `</note>` marker, which may sit inline at the
  * end of a content line or alone on its own line. Bodies are preserved
  * verbatim (indentation, blank lines, markdown, colons) with only outer blank
- * lines trimmed. A note left open at section end is captured leniently. Last
- * note wins on duplicate ids.
+ * lines trimmed. An entry left open at section end is captured leniently. Last
+ * entry wins on duplicate ids.
  */
-function parseKnograNotesSection(source: string): Map<string, string> {
+function parseKnograProseSection(source: string, heading: RegExp): Map<string, string> {
   const notes = new Map<string, string>();
-  const sectionLines = extractKnograNotesSection(source);
+  const sectionLines = extractKnograProseSection(source, heading);
   if (sectionLines.length === 0) return notes;
 
   let currentId: string | null = null;
@@ -231,14 +238,14 @@ function parseKnograNotesSection(source: string): Map<string, string> {
 }
 
 /**
- * Extract the raw lines of the `Knogra notes` section. Unlike equation/tag
- * sections, this runs until the next Knogra metadata heading (or EOF) rather
- * than the next arbitrary heading, so prose notes may contain `#` markdown
- * headings without truncating the section.
+ * Extract the raw lines of a Knogra prose section (notes or tutorial). Unlike
+ * equation/tag sections, this runs until the next Knogra metadata heading (or
+ * EOF) rather than the next arbitrary heading, so prose may contain `#`
+ * markdown headings without truncating the section.
  */
-function extractKnograNotesSection(source: string): string[] {
+function extractKnograProseSection(source: string, heading: RegExp): string[] {
   const lines = source.split(/\r?\n/);
-  const startIndex = lines.findIndex(line => KNOGRA_NOTES_HEADING.test(line.trim()));
+  const startIndex = lines.findIndex(line => heading.test(line.trim()));
   if (startIndex < 0) return [];
 
   const sectionLines: string[] = [];

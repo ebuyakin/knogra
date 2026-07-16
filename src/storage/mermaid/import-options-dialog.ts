@@ -72,11 +72,6 @@ export function showMermaidLayoutOptionsDialog(layout: LayoutChoice): Promise<vo
     heading.style.cssText = 'margin:0;font-size:16px;font-weight:600;';
     dialog.appendChild(heading);
 
-    const intro = document.createElement('p');
-    intro.style.cssText = 'margin:0;color:#8b949e;line-height:1.5;';
-    intro.textContent = 'These settings are remembered across imports. Layout parameters apply only to the chosen layout; the tagging option applies to every layout. They are stored separately from your workspace and are not included in exported files.';
-    dialog.appendChild(intro);
-
     const sectionsHost = document.createElement('div');
     sectionsHost.style.cssText = 'display:flex;flex-direction:column;gap:20px;';
     dialog.appendChild(sectionsHost);
@@ -101,12 +96,20 @@ export function showMermaidLayoutOptionsDialog(layout: LayoutChoice): Promise<vo
     });
     dialog.appendChild(taggingRow.element);
 
+    const thresholdRow = renderSecondLevelThresholdField(settings);
+    dialog.appendChild(thresholdRow.element);
+
+    const equationScaleRow = renderEquationScaleField(settings);
+    dialog.appendChild(equationScaleRow.element);
+
     const footer = document.createElement('div');
     footer.style.cssText = 'display:flex;justify-content:space-between;gap:8px;';
 
     const resetButton = document.createElement('button');
     resetButton.textContent = 'Reset to defaults';
-    resetButton.style.cssText = 'padding:6px 16px;border-radius:6px;border:1px solid #30363d;background:none;color:#c9d1d9;cursor:pointer;font-size:13px;';
+    // Negative left margin cancels the button's own border + horizontal padding so
+    // its label lines up with the field labels above (which have no such inset).
+    resetButton.style.cssText = 'margin-left:-3px;padding:6px 16px;border-radius:6px;border:1px solid #30363d;background:none;color:#c9d1d9;cursor:pointer;font-size:13px;';
 
     const rightButtons = document.createElement('div');
     rightButtons.style.cssText = 'display:flex;gap:8px;';
@@ -137,6 +140,8 @@ export function showMermaidLayoutOptionsDialog(layout: LayoutChoice): Promise<vo
       resetVisibleParams(layout, settings);
       renderSections();
       taggingRow.sync();
+      thresholdRow.sync();
+      equationScaleRow.sync();
     });
     cancelButton.addEventListener('click', close);
     saveButton.addEventListener('click', () => {
@@ -236,6 +241,8 @@ function resetVisibleParams(layout: LayoutChoice, settings: MermaidImportLayoutS
     settings.fanNested = { ...MERMAID_IMPORT_LAYOUT_DEFAULTS.fanNested };
   }
   settings.tagLeavesAndBranches = MERMAID_IMPORT_LAYOUT_DEFAULTS.tagLeavesAndBranches;
+  settings.secondLevelThreshold = MERMAID_IMPORT_LAYOUT_DEFAULTS.secondLevelThreshold;
+  settings.equationScale = MERMAID_IMPORT_LAYOUT_DEFAULTS.equationScale;
 }
 
 /**
@@ -261,14 +268,10 @@ function renderTaggingToggle(
 
   const label = document.createElement('span');
   label.textContent = 'Tag branches and leaves';
-  label.style.cssText = 'color:#e6edf3;';
+  label.style.cssText = 'color:#e6edf3;cursor:help;';
 
-  const hint = document.createElement('span');
-  hint.textContent = 'Adds a `branch` tag to nodes with multiple edges and a `leaf` tag to nodes with a single edge. Computed from the whole graph, independent of layout and scene composition.';
-  hint.style.cssText = 'color:#8b949e;font-size:12px;line-height:1.4;';
 
   text.appendChild(label);
-  text.appendChild(hint);
 
   row.appendChild(input);
   row.appendChild(text);
@@ -278,6 +281,95 @@ function renderTaggingToggle(
   return {
     element: row,
     sync: () => { input.checked = get(); },
+  };
+}
+
+/**
+ * Render the layout-independent "Two-level sub-scene node limit" field. Applies
+ * only to generated sub-scenes at 2 levels; `0` disables the budget. Returns the
+ * element plus a `sync` callback that re-reads the current value (used after a
+ * Reset so the input reflects the restored default).
+ */
+function renderSecondLevelThresholdField(
+  settings: MermaidImportLayoutSettings,
+): { element: HTMLElement; sync: () => void } {
+  const row = document.createElement('label');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 110px;align-items:center;gap:10px 16px;padding-top:12px;border-top:1px solid #21262d;';
+
+  const text = document.createElement('div');
+  text.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-width:0;';
+
+  const label = document.createElement('span');
+  label.textContent = 'Two-level sub-scene node limit';
+  label.style.cssText = 'color:#e6edf3;';
+
+  text.appendChild(label);
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.max = '100';
+  input.step = '1';
+  input.value = String(settings.secondLevelThreshold);
+  input.style.cssText = 'width:110px;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;';
+
+  input.addEventListener('change', () => {
+    const parsed = Number.parseInt(input.value, 10);
+    const value = Number.isFinite(parsed) && parsed > 0 ? Math.min(100, parsed) : 0;
+    settings.secondLevelThreshold = value;
+    input.value = String(value);
+  });
+
+  row.appendChild(text);
+  row.appendChild(input);
+
+  return {
+    element: row,
+    sync: () => { input.value = String(settings.secondLevelThreshold); },
+  };
+}
+
+/**
+ * Render the layout-independent "Equation size" field. Multiplies every imported
+ * equation node's size at import time (`params.equationScale`); `1` leaves the
+ * design default untouched. Returns the element plus a `sync` callback.
+ */
+function renderEquationScaleField(
+  settings: MermaidImportLayoutSettings,
+): { element: HTMLElement; sync: () => void } {
+  const row = document.createElement('label');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 110px;align-items:center;gap:10px 16px;padding-top:12px;border-top:1px solid #21262d;';
+
+  const text = document.createElement('div');
+  text.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-width:0;';
+
+  const label = document.createElement('span');
+  label.textContent = 'Equation size';
+  label.style.cssText = 'color:#e6edf3;';
+
+  text.appendChild(label);
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0.1';
+  input.max = '5';
+  input.step = '0.1';
+  input.value = String(settings.equationScale);
+  input.style.cssText = 'width:110px;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;';
+
+  input.addEventListener('change', () => {
+    const parsed = Number.parseFloat(input.value);
+    const value = Number.isFinite(parsed) && parsed > 0 ? Math.min(5, parsed) : 1;
+    settings.equationScale = value;
+    input.value = String(value);
+  });
+
+  row.appendChild(text);
+  row.appendChild(input);
+
+  return {
+    element: row,
+    sync: () => { input.value = String(settings.equationScale); },
   };
 }
 
@@ -305,12 +397,7 @@ function renderField(field: NumberField): HTMLElement {
   label.textContent = field.label;
   label.style.cssText = 'color:#e6edf3;';
 
-  const hint = document.createElement('span');
-  hint.textContent = field.hint;
-  hint.style.cssText = 'color:#8b949e;font-size:12px;line-height:1.4;';
-
   text.appendChild(label);
-  text.appendChild(hint);
 
   const input = document.createElement('input');
   input.type = 'number';

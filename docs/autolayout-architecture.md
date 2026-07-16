@@ -7,12 +7,14 @@
 
 ## 1. Overview
 
-Auto-layout re-arranges a scene's nodes into a regular shape rooted at the scene's immutable central node. It exposes **one public class**, `AutoLayout`, with two capabilities:
+Auto-layout re-arranges a scene's nodes into a regular shape rooted at the scene's immutable central node. It exposes **one public class**, `AutoLayout`, with four capabilities:
 
 - **`apply(central)`** — re-arrange the nodes already present in the scene (pure motion; no membership change).
 - **`growAndArrange(central, degree)`** — pull in the central node's degree-≤N neighbourhood, then arrange the enlarged scene ([autolayout-grow-arrange.md](autolayout-grow-arrange.md)).
+- **`rotate(central, degrees)`** — rigidly rotate the visible scene about the central node by a fixed step (§6). Not a layout algorithm: a direct geometric transform that bypasses the registry.
+- **`scaleScene(central, factor)`** — change the scene's density about the central node by a fixed multiplicative step (§7). Also a direct geometric transform (a similarity, not a rotation) that bypasses the registry.
 
-Both follow the same pipeline: gather live node footprints and edges → **compute relative positions via a layout algorithm** → anchor on the central node → animate to the new positions while re-fitting the viewport. Only the middle step — the geometry — is pluggable; everything else (Cytoscape reads/writes, animation, viewport fit, edge-curve reset, persistence) is shared and layout-agnostic.
+The first two follow the same pipeline: gather live node footprints and edges → **compute relative positions via a layout algorithm** → anchor on the central node → animate to the new positions while re-fitting the viewport. Only the middle step — the geometry — is pluggable; everything else (Cytoscape reads/writes, animation, viewport fit, edge-curve reset, persistence) is shared and layout-agnostic. `rotate` and `scaleScene` share only the animation and persistence tail (§5); being rigid/similar transforms they preserve manual edge curves and do not re-fit (§6, §7).
 
 ---
 
@@ -51,10 +53,10 @@ Every algorithm is a pure function of one uniform shape:
 type SceneLayoutFn = (input: LayoutInput) => Map<NodeId, Position>;
 
 interface LayoutInput {
-  nodes: LayoutInputNode[];   // { id, footprint: { width, height } } — real rendered sizes
+  nodes: LayoutInputNode[];   // { id, footprint: { width, height }, currentPos? } — real rendered sizes; currentPos feeds angular ring ordering
   edges: LayoutInputEdge[];   // { sourceId, targetId, order }
   centralId: NodeId;          // the layout root, placed at the origin (0,0)
-  params: LayoutParams;       // ringSpacing, siblingGap, … — a superset; each algorithm reads what it needs
+  params: LayoutParams;       // ringSpacing, siblingGap, ringOrder, … — a superset; each algorithm reads what it needs
 }
 
 interface SceneLayout {
@@ -119,6 +121,15 @@ BFS spanning tree rooted at `centralId` (`radial-shared.ts`). Each non-central n
 
 Each node's **leaf weight** = number of leaves in its subtree. The root's children split the full circle in proportion to leaf weight; recursively, each node splits *its* wedge among its children the same way. A node is ultimately placed at the **centre of its wedge**. (Angular width is decided by subtree size, not by physical size — this is the lever a future *equal-sectors* variant would change.)
 
+### 4.2.1 Sibling order — edge order vs. angular preservation
+
+§4.2 fixes each child's *wedge width*; a separate rule fixes the *sequence* in which siblings fill a parent's wedge (clockwise from the wedge start). Two modes, chosen by `params.ringOrder` (setting `autolayout.ringOrder`, default `edge`):
+
+- **`edge`** — siblings follow edge insertion order (`LayoutInputEdge.order`, the Cytoscape edge index). Deterministic but semantically arbitrary: it reflects only when each edge happened to be created.
+- **`angular`** — siblings are sorted by their **current on-screen angle** around the central node, measured clockwise from due north (the angle `assignAngles` sweeps from). The layout then perfects radius and spacing while preserving the circular sequence the author arranged by hand. Uses `currentPos`; nodes lacking it sort last (stable).
+
+This lets the author encode a logical ring order **spatially**: drag the ring roughly into the desired clockwise order, re-run — it snaps to an even ring keeping that order. On a fresh scene the current angles are themselves arbitrary, so the first run is arbitrary; it stabilises once the author drags and re-runs. Implemented as `orderChildrenByAngle` (`radial-shared.ts`), applied before `assignAngles`. Sub-rings sort within their parent's wedge by the same centre-angle; the only degeneracy is a parent wedge straddling the north seam (rare).
+
 ### 4.3 Ring radius — circumference (sum), not worst case
 
 Each ring (all nodes at one depth) gets a single **minimum radius**: the radius whose circumference holds the total footprint of the ring's nodes.
@@ -130,6 +141,8 @@ $$\text{minFit}_d = \frac{\sum_{n \text{ at depth } d}\big(2\cdot\text{footprint
 - **Overlap tolerance (intentional):** because nodes sit at wedge centres and wedges are leaf-weight-proportional (not footprint-proportional), a node in an unusually thin wedge may overlap a neighbour slightly. This is the accepted trade: one or two local overlaps beat an entire ring rendered too small to read.
 
 `siblingGap` is the additive per-node padding inside the sum. It is a *minimum* gap contribution, not an exact inter-node spacing.
+
+`footprintScale` (setting `autolayout.footprintScale`, default 1) multiplies the reserved footprint (`2·footprintRadius`) inside the sum. The half-diagonal `footprintRadius` over-reserves space — nodes are axis-aligned rectangles, not the circumscribed disks it measures — so values `<1` pack rings and siblings tighter and `>1` looser. It mirrors the Mermaid importer's *Density* knob (`storage/mermaid/layout/`). A pure-multiplier lever was chosen over a geometrically exact tangential footprint to give the author a single, predictable tightness control.
 
 ### 4.4 Ring placement — spread inner rings inside the outer radius
 
@@ -154,7 +167,7 @@ Each node is placed at its wedge-centre angle and its ring radius. Positions are
 
 ## 5. Shared, layout-agnostic stages
 
-These run in `AutoLayout` regardless of algorithm:
+These run in `AutoLayout` for the re-arrangement capabilities (`apply`, `growAndArrange`), regardless of algorithm. `rotate` is rigid and shares only **Animation** and **Persistence** (§6):
 
 - **Edge-curve reset** — every repositioned/added edge has its hand-tuned curve reset to the default automatic bezier; visual style overrides are preserved.
 - **Animation** — `AutoLayoutAnimator` tweens node positions and re-frames the viewport concurrently (`grow-arrange` additionally grows entrants in).
@@ -163,7 +176,47 @@ These run in `AutoLayout` regardless of algorithm:
 
 ---
 
-## 6. Future directions
+## 6. Scene rotation (`rotate`)
+
+`rotate(central, degrees)` rigidly rotates every **visible** scene node about the central node's *current* position by a fixed angular step (setting `autolayout.rotateStep`, default 15°; positive = clockwise on screen). Invoke via **Scene design ▸ Rotate ▸ Clockwise / Counter-clockwise** or the `O` / `Shift+O` shortcuts (±step). Edit mode only; folded/hidden nodes keep their offsets, matching `apply`.
+
+It is **not** a layout algorithm — no spanning forest, no registry dispatch. It is a direct affine transform about the pivot `p` (the central node's position), for step `θ` in radians:
+
+$$\begin{aligned} x' &= p_x + (x-p_x)\cos\theta - (y-p_y)\sin\theta \\ y' &= p_y + (x-p_x)\sin\theta + (y-p_y)\cos\theta \end{aligned}$$
+
+(screen y-down, so a positive `θ` reads clockwise). The central node maps to itself.
+
+**Two deliberate departures from §5:**
+
+- **No edge-curve reset.** Manual bezier edges store `control-point-distances`/`-weights` *relative* to the source→target line. A rigid rotation turns every such line by the same `θ`, so each curve rotates with its endpoints and stays correct — unlike a non-rigid re-arrangement, which invalidates the offsets. Hand-tuned bends are preserved.
+- **No viewport re-fit.** Rotation preserves each node's distance from the pivot, so the scene's bounding circle about the pivot is unchanged — if it fit before, it fits after. The central node stays fixed on screen and the rest orbits it in place; re-fitting would only inject an unwanted zoom on every nudge.
+
+It reuses **Animation** (`AutoLayoutAnimator`, positions only — no viewport target) and **Persistence** (suspend during the glide, one `forceSave` of the final orientation).
+
+## 7. Scene spacing (`scaleScene`)
+
+`scaleScene(central, factor)` changes how crowded the scene looks **without touching per-node `scale`** — that property stays reserved for intentional emphasis. Invoke via **Scene design ▸ Spacing ▸ Spread / Tighten** or the `W` / `Shift+W` shortcuts (`factor` = `autolayout.densityStep`, default 1.15, and its inverse). Edit mode only; folded/hidden nodes keep their offsets, matching `rotate`.
+
+Like `rotate` it is **not** a layout algorithm — no spanning forest, no registry dispatch. It is a **similarity transform about the pivot** `p` (the central node's position), combined with an inverse viewport zoom about the *same on-screen point*:
+
+- **Positions** (graph space): every visible node `x → p + (x − p)·\text{factor}`. The central node maps to itself.
+- **Viewport**: `zoom → zoom / factor`, with pan adjusted to keep the pivot's screen position fixed:
+
+$$\text{pan}' = \text{pan} + p \cdot (\text{zoom} - \text{zoom}/\text{factor})$$
+
+Because Cytoscape renders `screen = graph·zoom + pan`, this combination leaves **every** node's on-screen *centre* invariant — only the node glyphs shrink (spread) or grow (tighten), since their graph size is untouched. The scene de-crowds or packs *in place*, anchored on the central node wherever it sits (it need not be the geometric centre — that offset is often intentional).
+
+**Three deliberate departures from §5:**
+
+- **No edge-curve reset.** Edges are left untouched; Cytoscape re-renders each from its moved endpoints. Manual bezier bends (`control-point-distances`/`-weights`) simply become proportionally shallower (spread) or deeper (tighten) and stay hand-adjustable — the agreed behaviour.
+- **No viewport re-fit** and **no `FIT_MAX_ZOOM` cap.** The zoom is stepped by exactly `1/factor` about the pivot (not `computeFitViewport`), which is what pins the scene in place.
+- **Exact reversibility.** Because the pivot is the fixed central node and the zoom is not clamped (the Cytoscape instance sets no `minZoom`/`maxZoom`), applying `1/factor` restores the prior positions *and* framing exactly (to floating-point epsilon). The opposite command is a true undo.
+
+It reuses **Animation** (`AutoLayoutAnimator` with a supplied `ViewportTarget` — the one place a non-`computeFitViewport` viewport is fed in) and **Persistence** (suspend during the glide, one `forceSave` of the final positions and viewport).
+
+**Known limitations (shared with `rotate`):** scene background images are not scaled, so spreading detaches nodes from memory-palace placements; and a subtree folded before a spread unfolds at its (moved) root's un-spread offset.
+
+## 8. Future directions
 
 - **More algorithms:** equal-sector radial, grid, layered/flow, force-directed — each a `SceneLayout` behind the registry.
 - **Sub-strategy composition:** if radial variants proliferate, factor angle-allocation / ring-radius / placement into named, swappable policies. Not before real demand.

@@ -2,6 +2,29 @@
  * Chat Panel Styles
  */
 
+/* Quiz "lights off" veil — hides the timeline content while a quiz is active,
+   keeping the panel shape and the input controls in place. */
+.chat-lights-off-veil {
+  display: none;
+}
+
+#chat.lights-off > .chat-messages {
+  display: none;
+}
+
+#chat.lights-off > .chat-lights-off-veil {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  color: #6e7681;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  background: #0d1117;
+}
+
 /* Quick Actions Bar */
 .quick-actions {
   display: grid;

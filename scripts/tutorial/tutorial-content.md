@@ -23,7 +23,7 @@ This graph is both a **tutorial** and a **showcase**. It teaches you how to use 
 
 ---
 
-**Getting around.** Click any node to select it, then press **G** to travel to its scene — a focused view with that node at the center, surrounded by related concepts. The transition is animated: shared nodes slide to new positions, new ones appear, irrelevant ones fade out. This keeps you oriented as you move through the graph. Explore in any order — there is no "correct" path. Follow your curiosity. If you get lost, click the **Home** button (top-left) to return here.
+**Getting around.** To travel into a node's scene, **double-click it** — or select it and press **G**, or right-click it and choose **Go to scene**. A scene is a focused view with that node at the center, surrounded by related concepts. The transition is animated: shared nodes slide to new positions, new ones appear, irrelevant ones fade out. This keeps you oriented as you move through the graph. Explore in any order — there is no "correct" path. Follow your curiosity. If you get lost, click the **Home** button (top-left) to return here.
 
 ---
 
@@ -770,11 +770,31 @@ Knogra is an actively developed open-source project. Here's where we're heading 
 
 ---
 
-**Quizzes and knowledge testing.** One of the most powerful things about spatial learning is that it's testable. Imagine a mode where node contents are hidden and you try to recall what each node contains based on its position in the scene — spatial recall testing. Or a mode where edges are hidden and you reconstruct the connections from memory. Or AI-generated quiz questions based on your graph content. Multiple approaches to active recall, all leveraging the spatial structure you've already built.
+**Various transition styles.** Every navigation in Knogra is an animated morph — but today it's a single, unified choreography. We want a whole vocabulary of transition *styles*: different motions and sequences of scene morphing, each chosen to match the kind of move you're making and to reinforce spatial memory. Diving into a child concept might zoom inward; stepping to a sibling might slide sideways; returning to a parent might pull back and out. When different relationships *move* differently, the motion itself teaches you the shape of your graph — and varied, meaningful movement leaves richer, more durable memory traces than the same animation every time.
 
 ---
 
-**AI-generated visuals.** Nodes currently contain text and equations. We want to extend this with AI-generated images — diagrams, illustrations, visual metaphors — created automatically to match each concept. A node about "mitochondria" could show a generated diagram, a node about "supply and demand" could show a generated curve. Visual richness without the effort of finding or creating images yourself.
+**Advanced automatic layouts.** Auto-layout today arranges a scene radially. We want a growing library of layout algorithms — trees, circles, stars, flowcharts, mind-maps, and more — so each scene can snap into the spatial idiom that best fits its content. One command, many shapes, all pluggable.
+
+---
+
+**Flashlight / loupe view.** A new way to travel the graph where the *whole* graph stays on screen at once and you move a spotlight across it. Instead of swapping scenes, you shift focus: the region under the light comes forward — brighter, larger, sharper — while everything else recedes into shadow and shrinks. You keep the global structure permanently in view while still getting a focused, in-context reading of one area at a time, like sweeping a magnifier across a map.
+
+---
+
+**Multiple scenes per node.** Right now each node has a single scene — always a temporary limitation. Next, a node will be able to own several scenes, each a different framing of the same concept. Combined with paths, this lets you build tailored presentations: choose exactly which scene of each node a given walkthrough should use, so one graph can tell different stories to different audiences.
+
+---
+
+**Collaborative editing.** We want multiple people editing the same graph together — with authorship attribution and version history, so you can see who added what and roll changes back. The technical approach is still open, but shared, co-authored knowledge graphs are firmly on our horizon.
+
+---
+
+**AI-generated visuals.** Knogra already supports images today — you can upload your own into notes or set them as a scene's canvas background, and you can even search the web for an image to drop straight into a note. The next step is letting the AI *generate* visuals for you — diagrams, illustrations, visual metaphors — created automatically to match each concept. A node about "mitochondria" could show a generated diagram, a node about "supply and demand" could show a generated curve. Visual richness without the effort of finding, uploading, or drawing images yourself.
+
+---
+
+**Embedded videos.** Nodes and notes already carry text, equations, and images. Video is next — embed a clip directly in a node or note, so a concept can bring its own short explanation, demonstration, or lecture segment right where it lives in your graph.
 
 ---
 
@@ -872,3 +892,177 @@ You can unzip a .knogra file with any standard tool and inspect or edit the JSON
 ---
 
 **Your data stays yours.** All workspace data lives in your browser's local storage and in .knogra files on your machine. Nothing is uploaded to any server unless you explicitly choose to share. You own your knowledge graph completely.
+
+# Quizzes
+
+**Quizzes** turn your graph into a memory test. Because you've arranged your knowledge spatially, you can test recall the same way — by position. This makes Knogra useful not just for building knowledge, but for *checking* it.
+
+---
+
+**How a quiz works.** A quiz hides the labels of some nodes in your scenes. You then navigate the graph and try to recall what each hidden node is, based on its position and its connections to the nodes you can still see. It's spatial recall testing — exactly the kind of active retrieval that strengthens memory.
+
+---
+
+**Starting a quiz.** Right-click on the empty canvas → **Quiz...** to open the Quiz panel. Set how much to hide (the **Hide __%** field), decide whether central nodes can be hidden too (**Allow hiding central nodes**), and press **Start**. Knogra masks a random sample of eligible nodes across your scenes.
+
+---
+
+**Playing.** Travel through your graph as usual. When you reach a hidden node and think you know it, select it and use the panel's buttons:
+- **Reveal** — show the node's real label
+- **Correct** / **Wrong** — self-grade your recall after revealing
+
+The panel keeps a running tally of **Correct**, **Wrong**, and **Revealed**, and how many nodes are left. Press **End quiz** when you're done.
+
+---
+
+**No peeking.** During a quiz the chat panel is blacked out ("Hidden during quiz") so a hidden node's notes can't give away the answer. Your honest recall is the point.
+
+---
+
+**Why it works.** Active recall — trying to retrieve an answer before checking it — is one of the most reliable ways to build durable memory. Combined with the spatial layout you've already created, a quiz asks your brain to walk its own map. That's the memory-palace effect, made testable.
+
+# Edge types
+
+Every edge in Knogra has an **edge type** — a category like "related", "part of", "leads to", or anything you define. Types are the key to styling connections *by meaning* instead of one at a time.
+
+---
+
+**Why types matter.** In a large graph you might have dozens of edges. Styling each individually is tedious and inconsistent. With edge types, you set the look once per type, and every edge of that type follows. Change the type's style later and all its edges update together. This is a productivity feature — control at the category level, not the individual level.
+
+---
+
+**Assigning a type to an edge.** Right-click an edge → **Edit edge**. In the editor, pick the **edge type** from the selector. You can also add a per-edge visual override on top of the type when you want one edge to stand out — without changing the type itself.
+
+---
+
+**Managing types.** Right-click the empty canvas → **Scene design → Manage edge types**. The Edge Type Manager lets you create types, rename them, pick one of three thematic style slots for each, add an optional manual style override, and see how many edges use each type.
+
+---
+
+**Controlling visibility per scene.** Right-click the canvas → **Scene design → Edges visibility**. For each type present in the scene you get a three-way control — **Show**, **Dim**, or **Hide** — applied to the current scene only. This is how you emphasize one kind of relationship while quieting others, without touching the underlying data.
+
+---
+
+**Remembered type.** When you create a new edge, Knogra reuses the last edge type you assigned. So once you're working with a particular type, new connections inherit it automatically — until you pick a different one.
+
+# Mermaid import
+
+**Mermaid** is a popular, plain-text format for describing diagrams — widely used in documentation, GitHub, and many editors. Knogra reads and writes it, so you can move graphs between Knogra and the tools you already use.
+
+---
+
+**Why it's handy.** If you already sketch flowcharts in Mermaid, you can turn them into a full Knogra graph in seconds — no dragging nodes one by one. And you can export any Knogra graph back to Mermaid to drop into a document, a wiki, or a code repository. It's the fastest bridge in and out of the app.
+
+---
+
+**Importing.** Right-click the empty canvas → **Workspace → Mermaid import**. Pick a file with a `flowchart`/`graph` diagram. Knogra shows an **Import Mermaid Flowchart** dialog, then a selection dialog where you choose the **anchor** node, the **layout** (radial, top-down, left-right, or fan), the **depth** of each scene, and how Mermaid edge **labels** map to Knogra **edge types**. Knogra can also read optional metadata sections in the same file — tags, equations, and notes — so a single Mermaid file can carry a rich graph, not just boxes and arrows.
+
+---
+
+**Exporting.** Right-click the canvas → **Workspace → Mermaid export** to download your graph as a Mermaid flowchart, with edge types preserved as labels.
+
+---
+
+**Good to know.** Mermaid is a *graph-only* interchange path — it carries nodes, edges, and (via Knogra's metadata sections) tags, equations, and notes. Themes, backgrounds, saved paths, and precise layouts aren't part of Mermaid; for a complete backup that preserves everything, use **Ctrl+S** to export a .knogra file instead.
+
+# Images
+
+Notes can hold **images**, not just text. This turns the chat panel from a plain notebook into a visual learning space — attach a diagram, a screenshot, a photo, or an illustration right next to your thoughts on a node.
+
+---
+
+**Adding an image.** Open the note editor (right-click in the chat panel → **Add note**). Below the text area is an attachment zone with two options:
+- **Upload** — add an image file from your computer.
+- **Search online** — find an image on the web without leaving Knogra.
+
+---
+
+**Searching online.** Click **Search online** and Knogra runs a web image search (using your note text as the query by default). Results appear as a strip of thumbnails — click one to attach it. Use **Show more** to load additional results, or **Cancel** to back out. It's a fast way to illustrate a concept with the right picture.
+
+---
+
+**Where the image lives.** Depending on your settings, a picked image is either downloaded and stored inside your workspace (so it stays with your .knogra file, even offline) or kept as a link to its source. You can tune image search — including how many results to fetch — in **Settings**.
+
+---
+
+**Why it matters.** A well-chosen image is often worth a paragraph of text. Diagrams clarify structure, photos anchor memory, and visual metaphors make abstract ideas concrete — reinforcing the same spatial, dual-coded learning the rest of Knogra is built around.
+
+# Auto-layout
+
+Arranging nodes by hand is satisfying, but sometimes you just want a clean layout fast. **Auto-layout** arranges a scene for you in one command — a big productivity boost when building or reorganizing.
+
+---
+
+**Running it.** Right-click the empty canvas → **Scene design → Auto-layout**, then choose how far to reach:
+- **No expansion** — arrange the nodes already in the scene.
+- **1 degree / 2 degrees / 3 degrees** — first pull in neighbouring nodes up to that many steps out from the central node, then arrange the whole result. (This is "grow and arrange" — a quick way to flesh out a sparse scene from your graph.)
+
+Knogra places nodes in a tidy radial arrangement around the central node and animates them into position, so you keep your bearings.
+
+---
+
+**Rotating a scene.** Also under **Scene design → Rotate**, choose **Clockwise** or **Counter-clockwise** (or press **O** / **Shift+O**) to spin the whole visible scene around its central node. Handy for orienting a layout without re-dragging every node; hand-tuned edge curves rotate along with their nodes.
+
+---
+
+**Tuning it.** In **Settings → Auto-layout** you can adjust ring spacing, the gap between siblings, the ordering of nodes around each ring, the rotation step, and whether the arrangement animates. Start with the defaults; nudge them if a particular scene wants more breathing room.
+
+---
+
+**When to use it.** Auto-layout doesn't replace deliberate hand-arrangement — spatial positioning is part of how you remember. But it's ideal for a first pass, for cleaning up after adding many nodes, or for scenes where a neat radial shape is all you need.
+
+# Tag-based styling
+
+When several nodes share a role — a category, a status, a topic — you often want them to *look* alike. **Tag-based styling** applies one node's look to every node carrying the tags you choose, in one step. Like edge types, it's about controlling style at the group level instead of node by node.
+
+---
+
+**Tag your nodes first.** Give nodes tags in the node editor (**E** → Tags). Tags are how you group nodes for styling — you might tag nodes as `key idea`, `example`, `definition`, and so on.
+
+---
+
+**Copy a look, apply it by tag.**
+1. Style one node the way you want the group to look.
+2. Right-click it → **Copy style** (this captures its design and scale, plus its tags).
+3. Right-click a node → **Paste style…** to open the **Paste style to tagged nodes** dialog.
+
+---
+
+**In the dialog** you control exactly what happens:
+- **Apply to scenes** — the current scene only, or all scenes.
+- **Properties** — apply the **Design**, the **Scale**, or both.
+- **Tags** — check the tags to target. Every node carrying those tags gets the style.
+
+A live count shows how many nodes across how many scenes will be restyled before you commit. Press **Apply**.
+
+---
+
+**Quick multi-select alternative.** If you'd rather target specific nodes, select several on the canvas, then right-click → **Paste style to N nodes** to apply a copied style directly to that selection — no tags required.
+
+---
+
+**Why it matters.** Consistent visual language helps readers (and you) parse a graph at a glance: same look implies same kind of thing. Tag-based styling makes that consistency cheap to create and easy to change.
+
+# Node design
+
+**Node design** is the visual template that controls how a node looks — its shape, colors, gradients, size, aspect ratio, font, and more. Every node has one, and you can change it at any time. This is one of Knogra's most flexible features, and easy to overlook: a node's *content* and its *appearance* are completely independent.
+
+---
+
+**A library of designs.** Knogra ships with 20+ ready-made node designs — from simple labeled boxes and circles to richer styled cards and a dedicated design for LaTeX equations. Pick one as a starting point, then customize it. The design sets the node's overall character; you fine-tune the details.
+
+---
+
+**Change it any time.** Open the node editor — double-click a node, press **E**, or right-click → **Edit node**. There you can switch the **design type** and adjust its parameters: **scale** (size), **colors**, **opacity**, **aspect ratio**, font size, gradients, and design-specific options. Press **Ctrl+Enter** to save. Nothing about the node's identity or connections changes — only its look.
+
+---
+
+**Appearance is per scene.** A node's design is stored per scene, so the *same* node can look different in different scenes — a bold hero card in one, a small quiet dot in another. This lets you restyle a concept to suit each context without duplicating it. Position, scale, and design are all scene-local.
+
+---
+
+**Designs, themes, and tags work together.** A **theme** sets the baseline look for a whole scene; a node's **design** overrides it where you want contrast or emphasis; and **tag-based styling** copies one node's design onto every node sharing a tag. Together they give you control at three levels — scene-wide, per-node, and per-group — so you can make a graph visually consistent *and* expressive with very little effort.
+
+---
+
+**Why it matters.** Visual styling isn't decoration — it's meaning. Similar-looking nodes read as related; a distinct design flags importance; size implies weight. Because you can restyle any node at any time, your graph's appearance can evolve alongside your understanding, guiding attention exactly where it belongs.

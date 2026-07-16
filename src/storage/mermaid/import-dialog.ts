@@ -16,6 +16,7 @@ export interface MermaidImportSelection {
   importEquations: boolean;
   importTags: boolean;
   importNotes: boolean;
+  importComments: boolean;
   sceneGeneration: 'anchor' | 'hubs' | 'all';
   subSceneDepth: number;
   edgeLabelMappings: MermaidEdgeLabelMapping[];
@@ -34,6 +35,7 @@ export function showMermaidImportSelectionDialog(
   const equationMetadataStatus = getEquationMetadataStatus(parsed);
   const tagMetadataStatus = getTagMetadataStatus(parsed);
   const noteMetadataStatus = getNotesMetadataStatus(parsed);
+  const commentMetadataStatus = getCommentsMetadataStatus(parsed);
   const hubNodeCount = countHubNodes(parsed);
   const totalNodeCount = parsed.nodes.length;
 
@@ -46,13 +48,13 @@ export function showMermaidImportSelectionDialog(
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:center;justify-content:center;';
 
     const dialog = document.createElement('div');
-    dialog.style.cssText = 'position:absolute;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:min(980px,92vw);max-height:88vh;overflow-y:auto;color:#e6edf3;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;flex-direction:column;gap:16px;';
+    dialog.style.cssText = 'position:absolute;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:min(980px,92vw);max-height:90vh;overflow-y:auto;color:#e6edf3;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;flex-direction:column;gap:16px;';
 
     const cyContainer = document.getElementById('cy');
     const rect = cyContainer?.getBoundingClientRect();
     if (rect) {
       dialog.style.left = `${rect.left + rect.width / 2}px`;
-      dialog.style.top = `${rect.top + rect.height / 2}px`;
+      dialog.style.top = `${window.innerHeight / 2}px`;
       dialog.style.transform = 'translate(-50%, -50%)';
     } else {
       dialog.style.left = '50%';
@@ -79,7 +81,7 @@ export function showMermaidImportSelectionDialog(
     anchorPanel.appendChild(anchorLabel);
 
     const list = document.createElement('div');
-    list.style.cssText = 'border:1px solid #30363d;border-radius:6px;padding:8px;overflow:auto;max-height:30vh;background:#0d1117;';
+    list.style.cssText = 'border:1px solid #30363d;border-radius:6px;padding:8px;overflow:auto;flex:1;min-height:200px;max-height:360px;background:#0d1117;';
 
     nodes.forEach((node, index) => {
       const row = document.createElement('label');
@@ -152,7 +154,7 @@ export function showMermaidImportSelectionDialog(
     depthPanel.appendChild(depthHint);
 
     const layoutLabel = document.createElement('label');
-    layoutLabel.textContent = 'Choose the starting scene layout';
+    layoutLabel.textContent = 'Choose the scene layout';
     layoutLabel.style.cssText = 'font-weight:600;color:#c9d1d9;display:flex;flex-direction:column;gap:8px;margin-top:8px;';
 
     const layoutSelect = document.createElement('select');
@@ -196,71 +198,35 @@ export function showMermaidImportSelectionDialog(
     depthPanel.appendChild(layoutLabel);
     depthPanel.appendChild(layoutHint);
 
-    const canImportEquations = equationMetadataStatus.total > 0;
+    const importGroup = document.createElement('div');
+    importGroup.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:4px;';
 
-    const equationLabel = document.createElement('label');
-    equationLabel.style.cssText = `display:flex;align-items:flex-start;gap:8px;color:${canImportEquations ? '#c9d1d9' : '#8b949e'};cursor:${canImportEquations ? 'pointer' : 'not-allowed'};font-size:13px;margin-top:4px;`;
+    const importGroupTitle = document.createElement('div');
+    importGroupTitle.textContent = 'Import';
+    importGroupTitle.style.cssText = 'font-weight:600;color:#c9d1d9;';
 
-    const equationInput = document.createElement('input');
-    equationInput.type = 'checkbox';
-    equationInput.disabled = !canImportEquations;
-    equationInput.style.accentColor = '#58a6ff';
-    equationInput.style.marginTop = '2px';
-    equationInput.style.opacity = canImportEquations ? '1' : '0.5';
+    const importGrid = document.createElement('div');
+    importGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;';
 
-    const equationText = document.createElement('span');
-    equationText.textContent = canImportEquations
-      ? `Import equations (${equationMetadataStatus.matched} matched${equationMetadataStatus.unmatched > 0 ? `, ${equationMetadataStatus.unmatched} unmatched` : ''})`
-      : 'Import equations (none found)';
+    const eqCb = createMetaImportCheckbox('Equations', equationMetadataStatus);
+    const tagCb = createMetaImportCheckbox('Tags', tagMetadataStatus);
+    const noteCb = createMetaImportCheckbox('Notes / tutorial', noteMetadataStatus);
+    const commentCb = createMetaImportCheckbox('Comments', commentMetadataStatus);
 
-    equationLabel.appendChild(equationInput);
-    equationLabel.appendChild(equationText);
-    depthPanel.appendChild(equationLabel);
+    importGrid.append(eqCb.label, tagCb.label, noteCb.label, commentCb.label);
+    importGroup.append(importGroupTitle, importGrid);
+    depthPanel.appendChild(importGroup);
 
-    const canImportTags = tagMetadataStatus.total > 0;
+    const equationInput = eqCb.input;
+    const tagInput = tagCb.input;
+    const noteInput = noteCb.input;
+    const commentInput = commentCb.input;
 
-    const tagLabel = document.createElement('label');
-    tagLabel.style.cssText = `display:flex;align-items:flex-start;gap:8px;color:${canImportTags ? '#c9d1d9' : '#8b949e'};cursor:${canImportTags ? 'pointer' : 'not-allowed'};font-size:13px;margin-top:4px;`;
-
-    const tagInput = document.createElement('input');
-    tagInput.type = 'checkbox';
-    tagInput.disabled = !canImportTags;
-    tagInput.style.accentColor = '#58a6ff';
-    tagInput.style.marginTop = '2px';
-    tagInput.style.opacity = canImportTags ? '1' : '0.5';
-
-    const tagText = document.createElement('span');
-    tagText.textContent = canImportTags
-      ? `Import tags (${tagMetadataStatus.matched} matched${tagMetadataStatus.unmatched > 0 ? `, ${tagMetadataStatus.unmatched} unmatched` : ''})`
-      : 'Import tags (none found)';
-
-    tagLabel.appendChild(tagInput);
-    tagLabel.appendChild(tagText);
-    depthPanel.appendChild(tagLabel);
-
-    const canImportNotes = noteMetadataStatus.total > 0;
-
-    const noteLabel = document.createElement('label');
-    noteLabel.style.cssText = `display:flex;align-items:flex-start;gap:8px;color:${canImportNotes ? '#c9d1d9' : '#8b949e'};cursor:${canImportNotes ? 'pointer' : 'not-allowed'};font-size:13px;margin-top:4px;`;
-
-    const noteInput = document.createElement('input');
-    noteInput.type = 'checkbox';
-    noteInput.disabled = !canImportNotes;
-    noteInput.style.accentColor = '#58a6ff';
-    noteInput.style.marginTop = '2px';
-    noteInput.style.opacity = canImportNotes ? '1' : '0.5';
-
-    const noteText = document.createElement('span');
-    noteText.textContent = canImportNotes
-      ? `Import notes (${noteMetadataStatus.matched} matched${noteMetadataStatus.unmatched > 0 ? `, ${noteMetadataStatus.unmatched} unmatched` : ''})`
-      : 'Import notes (none found)';
-
-    noteLabel.appendChild(noteInput);
-    noteLabel.appendChild(noteText);
-    depthPanel.appendChild(noteLabel);
+    const sceneGenRow = document.createElement('div');
+    sceneGenRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;';
 
     const sceneGenLabel = document.createElement('label');
-    sceneGenLabel.style.cssText = 'display:flex;flex-direction:column;gap:6px;color:#c9d1d9;font-size:13px;margin-top:12px;';
+    sceneGenLabel.style.cssText = 'display:flex;flex-direction:column;gap:6px;color:#c9d1d9;font-weight:600;min-width:0;';
     const sceneGenTitle = document.createElement('span');
     sceneGenTitle.textContent = 'Generate scenes for';
     const sceneGenSelect = document.createElement('select');
@@ -272,10 +238,9 @@ export function showMermaidImportSelectionDialog(
     `;
     sceneGenLabel.appendChild(sceneGenTitle);
     sceneGenLabel.appendChild(sceneGenSelect);
-    depthPanel.appendChild(sceneGenLabel);
 
     const subDepthLabel = document.createElement('label');
-    subDepthLabel.style.cssText = 'display:flex;flex-direction:column;gap:6px;color:#c9d1d9;font-size:13px;margin-top:8px;';
+    subDepthLabel.style.cssText = 'display:flex;flex-direction:column;gap:6px;color:#c9d1d9;font-weight:600;min-width:0;';
     const subDepthTitle = document.createElement('span');
     subDepthTitle.textContent = 'Levels per generated scene';
     const subDepthSelect = document.createElement('select');
@@ -286,7 +251,13 @@ export function showMermaidImportSelectionDialog(
     `;
     subDepthLabel.appendChild(subDepthTitle);
     subDepthLabel.appendChild(subDepthSelect);
-    depthPanel.appendChild(subDepthLabel);
+
+    sceneGenRow.appendChild(sceneGenLabel);
+    sceneGenRow.appendChild(subDepthLabel);
+    depthPanel.appendChild(sceneGenRow);
+
+    sceneGenSelect.value = 'hubs';
+    subDepthSelect.value = '2';
 
     const syncSceneGenControls = (): void => {
       const disabled = sceneGenSelect.value === 'anchor';
@@ -309,36 +280,36 @@ export function showMermaidImportSelectionDialog(
     edgeTypePanel.appendChild(edgeTypeTitle);
 
     const edgeTypeGrid = document.createElement('div');
-    edgeTypeGrid.style.cssText = 'border:1px solid #30363d;border-radius:6px;background:#0d1117;overflow:auto;max-height:28vh;';
+    edgeTypeGrid.style.cssText = 'border:1px solid #30363d;border-radius:6px;background:#0d1117;overflow:auto;max-height:160px;';
     edgeTypeGrid.innerHTML = `
       <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:820px;">
         <thead style="position:sticky;top:0;background:#161b22;z-index:1;">
           <tr>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;">Mermaid label</th>
-            <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:70px;">Count</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:230px;">Knogra edge type name</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:120px;">Thematic style</th>
-            <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:76px;" title="Include this label's children (source→target) in generated scenes">Children</th>
-            <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:76px;" title="Include this label's parents (target→source) in generated scenes">Parents</th>
-            <th style="text-align:center;padding:8px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:90px;" title="Draw this label between nodes already in a scene (non-structural cross-links)">Cross-links</th>
+            <th style="text-align:left;padding:5px 10px;border-bottom:1px solid #30363d;color:#8b949e;">Mermaid label</th>
+            <th style="text-align:center;padding:5px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:70px;">Count</th>
+            <th style="text-align:left;padding:5px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:230px;">Knogra edge type name</th>
+            <th style="text-align:left;padding:5px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:120px;">Thematic style</th>
+            <th style="text-align:center;padding:5px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:76px;" title="Include this label's children (source→target) in generated scenes">Children</th>
+            <th style="text-align:center;padding:5px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:76px;" title="Include this label's parents (target→source) in generated scenes">Parents</th>
+            <th style="text-align:center;padding:5px 10px;border-bottom:1px solid #30363d;color:#8b949e;width:90px;" title="Draw this label between nodes already in a scene (non-structural cross-links)">Cross-links</th>
           </tr>
         </thead>
         <tbody>
           ${edgeLabelRows.map(row => `
             <tr data-label-key="${escapeAttr(row.key)}">
-              <td style="padding:8px 10px;border-bottom:1px solid #21262d;color:#e6edf3;word-break:break-word;">${escapeHtml(row.displayLabel)}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid #21262d;text-align:center;color:#8b949e;">${row.count}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid #21262d;">
-                <input class="mi-edge-type-name" value="${escapeAttr(row.defaultTypeName)}" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:4px;border:1px solid #30363d;background:#161b22;color:#e6edf3;font-size:12px;" />
+              <td style="padding:4px 10px;border-bottom:1px solid #21262d;color:#e6edf3;word-break:break-word;">${escapeHtml(row.displayLabel)}</td>
+              <td style="padding:4px 10px;border-bottom:1px solid #21262d;text-align:center;color:#8b949e;">${row.count}</td>
+              <td style="padding:4px 10px;border-bottom:1px solid #21262d;">
+                <input class="mi-edge-type-name" value="${escapeAttr(row.defaultTypeName)}" style="width:100%;box-sizing:border-box;padding:4px 8px;border-radius:4px;border:1px solid #30363d;background:#161b22;color:#e6edf3;font-size:12px;" />
               </td>
-              <td style="padding:8px 10px;border-bottom:1px solid #21262d;">
-                <select class="mi-edge-style" style="width:100%;box-sizing:border-box;padding:6px 8px;border-radius:4px;border:1px solid #30363d;background:#161b22;color:#e6edf3;font-size:12px;">
+              <td style="padding:4px 10px;border-bottom:1px solid #21262d;">
+                <select class="mi-edge-style" style="width:100%;box-sizing:border-box;padding:4px 8px;border-radius:4px;border:1px solid #30363d;background:#161b22;color:#e6edf3;font-size:12px;">
                   ${getEdgeStyleSlotIds().map(slotId => `<option value="${slotId}" ${slotId === row.defaultStyleSlotId ? 'selected' : ''}>${formatStyleSlot(slotId)}</option>`).join('')}
                 </select>
               </td>
-              <td style="padding:8px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-children" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
-              <td style="padding:8px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-parents" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
-              <td style="padding:8px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-cross" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
+              <td style="padding:4px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-children" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
+              <td style="padding:4px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-parents" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
+              <td style="padding:4px 10px;border-bottom:1px solid #21262d;text-align:center;"><input type="checkbox" class="mi-edge-cross" checked style="accent-color:#58a6ff;cursor:pointer;" /></td>
             </tr>
           `).join('')}
         </tbody>
@@ -364,6 +335,18 @@ export function showMermaidImportSelectionDialog(
 
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+
+    // Size the edge-type grid to exactly four full data rows (plus the sticky
+    // header) so a partial row never gets clipped mid-height. Measured from the
+    // live DOM to stay exact across fonts/themes; only clamps when there are
+    // more than four rows to scroll through.
+    const firstEdgeRow = edgeTypeGrid.querySelector('tbody tr') as HTMLElement | null;
+    const edgeGridHead = edgeTypeGrid.querySelector('thead') as HTMLElement | null;
+    if (firstEdgeRow) {
+      const rowHeight = firstEdgeRow.getBoundingClientRect().height;
+      const headHeight = edgeGridHead?.getBoundingClientRect().height ?? 0;
+      edgeTypeGrid.style.maxHeight = `${Math.ceil(headHeight + rowHeight * 4)}px`;
+    }
 
     const close = (value: MermaidImportSelection | null): void => {
       overlay.remove();
@@ -483,6 +466,7 @@ export function showMermaidImportSelectionDialog(
         importEquations: equationInput.checked && !equationInput.disabled,
         importTags: tagInput.checked && !tagInput.disabled,
         importNotes: noteInput.checked && !noteInput.disabled,
+        importComments: commentInput.checked && !commentInput.disabled,
         sceneGeneration: sceneGenSelect.value as MermaidImportSelection['sceneGeneration'],
         subSceneDepth: subDepthSelect.value === '2' ? 2 : 1,
         edgeLabelMappings: getEdgeLabelMappings(),
@@ -530,16 +514,63 @@ function getTagMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matc
   return { total, matched, unmatched: total - matched };
 }
 
-function getNotesMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matched: number; unmatched: number } {
+function getCommentsMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matched: number; unmatched: number } {
   const nodeIds = new Set(parsed.nodes.map(node => node.mermaidId));
-  const total = parsed.notesByMermaidId.size;
+  const total = parsed.commentsByMermaidId.size;
   let matched = 0;
 
-  for (const mermaidId of parsed.notesByMermaidId.keys()) {
+  for (const mermaidId of parsed.commentsByMermaidId.keys()) {
     if (nodeIds.has(mermaidId)) matched += 1;
   }
 
   return { total, matched, unmatched: total - matched };
+}
+
+/**
+ * Build one compact metadata-import checkbox for the grouped "Import" row.
+ * Short visible label with the matched count; a tooltip carries the
+ * matched/unmatched breakdown so the label stays narrow in the 2-column grid.
+ */
+function createMetaImportCheckbox(
+  name: string,
+  status: { total: number; matched: number; unmatched: number }
+): { label: HTMLLabelElement; input: HTMLInputElement } {
+  const canImport = status.total > 0;
+
+  const label = document.createElement('label');
+  label.style.cssText = `display:flex;align-items:center;gap:8px;color:${canImport ? '#c9d1d9' : '#8b949e'};cursor:${canImport ? 'pointer' : 'not-allowed'};font-size:13px;`;
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.disabled = !canImport;
+  input.checked = canImport;
+  input.style.accentColor = '#58a6ff';
+  input.style.opacity = canImport ? '1' : '0.5';
+
+  const text = document.createElement('span');
+  text.textContent = canImport ? `${name} (${status.matched})` : `${name} (none)`;
+  if (canImport && status.unmatched > 0) {
+    label.title = `${status.matched} matched, ${status.unmatched} unmatched`;
+  }
+
+  label.appendChild(input);
+  label.appendChild(text);
+  return { label, input };
+}
+
+function getNotesMetadataStatus(parsed: ParsedMermaidGraph): { total: number; matched: number; unmatched: number } {
+  const nodeIds = new Set(parsed.nodes.map(node => node.mermaidId));
+  const annotatedIds = new Set<string>([
+    ...parsed.notesByMermaidId.keys(),
+    ...parsed.tutorialByMermaidId.keys(),
+  ]);
+  let matched = 0;
+
+  for (const mermaidId of annotatedIds) {
+    if (nodeIds.has(mermaidId)) matched += 1;
+  }
+
+  return { total: annotatedIds.size, matched, unmatched: annotatedIds.size - matched };
 }
 
 function countHubNodes(parsed: ParsedMermaidGraph): number {

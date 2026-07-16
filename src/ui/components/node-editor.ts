@@ -133,7 +133,7 @@ export class NodeEditor {
     const dialog = this.#el('div', 'node-editor-dialog');
 
     const cx = context.containerRect.left + context.containerRect.width / 2;
-    const cy = context.containerRect.top + context.containerRect.height / 2;
+    const cy = window.innerHeight / 2;
     dialog.style.left = `${cx}px`;
     dialog.style.top = `${cy}px`;
     dialog.style.transform = 'translate(-50%, -50%)';
@@ -150,9 +150,11 @@ export class NodeEditor {
 
     const titleInput = this.#createTextarea('Title', currentData.title, 'Press Enter for explicit line breaks', 1);
     const tagsInput = this.#createTextInput('Tags', (currentData.tags || []).join(', '), 'e.g., physics, quantum, important');
+    const commentValue = (currentData.properties?.comment as string) || '';
+    const commentInput = this.#createTextarea('Comment', commentValue, 'Freeform notes about this node; included in AI context for the current scene', 3);
     const equationValue = (currentData.properties?.equation as string) || '';
-    const equationInput = this.#createTextarea('Equation (LaTeX)', equationValue, 'e.g., E = mc^2', 3);
-    top.append(titleInput.container, tagsInput.container, equationInput.container);
+    const equationInput = this.#createTextarea('Equation (LaTeX)', equationValue, 'e.g., E = mc^2', 2);
+    top.append(titleInput.container, tagsInput.container, commentInput.container, equationInput.container);
     dialog.appendChild(top);
 
     // ======================= MIDDLE (scrollable) =======================
@@ -161,6 +163,7 @@ export class NodeEditor {
     // Section 1: Properties (JSON) — foldable, starts collapsed
     const propsWithoutEq = { ...currentData.properties };
     delete propsWithoutEq?.equation;
+    delete propsWithoutEq?.comment;
     const propsJson = Object.keys(propsWithoutEq || {}).length > 0 ? JSON.stringify(propsWithoutEq, null, 2) : '';
     const propertiesInput = this.#createTextarea('', propsJson, '{\n  "key": "value"\n}', 4);
     middle.appendChild(this.#createFoldable('Properties (JSON)', propertiesInput.container, true));
@@ -291,6 +294,7 @@ export class NodeEditor {
         titleInput.input.value,
         tagsInput.input.value,
         equationInput.input.value,
+        commentInput.input.value,
         propertiesInput.input.value,
         designIdSelect.select.value,
         scaleSliderInput.valueAsNumber,
@@ -679,6 +683,7 @@ export class NodeEditor {
     title: string,
     tagsString: string,
     equation: string,
+    comment: string,
     propertiesJson: string,
     designId: string,
     scale: number,
@@ -703,6 +708,7 @@ export class NodeEditor {
       return;
     }
     if (equation.trim()) properties.equation = equation.trim();
+    if (comment.trim()) properties.comment = comment.trim();
 
     let designParams: Record<string, unknown> = {};
     try {

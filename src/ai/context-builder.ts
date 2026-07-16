@@ -122,8 +122,12 @@ function renderCentralNodeSection(node: Node): string {
       data.equation = String(node.properties.equation);
     }
 
+    if (node.properties.comment) {
+      data.comment = String(node.properties.comment);
+    }
+
     const otherProps = Object.entries(node.properties)
-      .filter(([key]) => key !== 'equation')
+      .filter(([key]) => key !== 'equation' && key !== 'comment')
       .map(([key, value]) => `${key}: ${value}`)
       .join('; ');
 
@@ -177,7 +181,7 @@ function renderVisibleSceneSection(
 
   if (visibleNodes.length > 0) {
     data.sceneConcepts = visibleNodes
-      .map(n => formatNodeForPrompt(n, { centralNodeId }))
+      .map(n => formatNodeForPrompt(n, { centralNodeId, includeComment: true }))
       .join('\n');
   }
 
@@ -306,7 +310,7 @@ function calculateSceneContextStrength(
 
 function formatNodeForPrompt(
   node: Node,
-  options: { centralNodeId?: NodeId; sceneNodeIds?: Set<NodeId> } = {}
+  options: { centralNodeId?: NodeId; sceneNodeIds?: Set<NodeId>; includeComment?: boolean } = {}
 ): string {
   const details: string[] = [];
 
@@ -324,7 +328,18 @@ function formatNodeForPrompt(
   }
 
   const suffix = details.length > 0 ? ` (${details.join('; ')})` : '';
-  return `- ${node.title}${suffix}`;
+  let line = `- ${node.title}${suffix}`;
+
+  // The central node presents its comment in the dedicated central-node section,
+  // so skip it here to avoid duplicating the text within the same prompt.
+  if (options.includeComment && node.id !== options.centralNodeId) {
+    const comment = node.properties?.comment;
+    if (typeof comment === 'string' && comment.trim()) {
+      line += ` — comment: ${comment.trim()}`;
+    }
+  }
+
+  return line;
 }
 
 function formatSceneRelationship(edge: Edge): string {

@@ -25,6 +25,16 @@ export interface MermaidImportLayoutSettings {
   /** Tag each node `branch` (degree ≥ 2) or `leaf` (degree 1) at import time.
    *  Layout-independent — computed from the raw graph's edge degree. */
   tagLeavesAndBranches: boolean;
+  /** Node-count budget for generated sub-scenes that use 2 levels. When the full
+   *  two-level neighbourhood of a generated scene exceeds this, the busiest direct
+   *  neighbours are collapsed to one level (whole-neighbour-granular) until it
+   *  fits. Layout-independent; applies only to generated sub-scenes at 2 levels,
+   *  never the anchor scene. `0` disables the budget. */
+  secondLevelThreshold: number;
+  /** Equation size multiplier applied to every imported equation node's design
+   *  at import time (`params.equationScale`). Layout-independent; `1` leaves the
+   *  design default untouched. */
+  equationScale: number;
 }
 
 export const MERMAID_IMPORT_LAYOUT_DEFAULTS: MermaidImportLayoutSettings = {
@@ -32,6 +42,8 @@ export const MERMAID_IMPORT_LAYOUT_DEFAULTS: MermaidImportLayoutSettings = {
   fanTop: { ...RADIAL_LAYOUT_DEFAULTS },
   fanNested: { ...FAN_LAYOUT_DEFAULTS },
   tagLeavesAndBranches: true,
+  secondLevelThreshold: 13,
+  equationScale: 1,
 };
 
 /**
@@ -50,6 +62,10 @@ export function getMermaidImportLayoutSettings(): MermaidImportLayoutSettings {
       fanNested: { ...MERMAID_IMPORT_LAYOUT_DEFAULTS.fanNested, ...parsed.fanNested },
       tagLeavesAndBranches:
         parsed.tagLeavesAndBranches ?? MERMAID_IMPORT_LAYOUT_DEFAULTS.tagLeavesAndBranches,
+      secondLevelThreshold:
+        parsed.secondLevelThreshold ?? MERMAID_IMPORT_LAYOUT_DEFAULTS.secondLevelThreshold,
+      equationScale:
+        parsed.equationScale ?? MERMAID_IMPORT_LAYOUT_DEFAULTS.equationScale,
     };
   } catch {
     return structuredClone(MERMAID_IMPORT_LAYOUT_DEFAULTS);

@@ -17,6 +17,7 @@ import {
   assignAngles,
   buildSpanningForest,
   computeLeafWeights,
+  orderChildrenByAngle,
   type TreeNode,
 } from './radial-shared';
 
@@ -34,6 +35,14 @@ function compute(input: LayoutInput): Map<NodeId, Position> {
   if (!nodeById.has(centralId)) return positions;
 
   const root = buildSpanningForest(nodes, edges, centralId, nodeById);
+  if (params.ringOrder === 'angular') {
+    const posById = new Map<NodeId, Position>();
+    for (const node of nodes) {
+      if (node.currentPos) posById.set(node.id, node.currentPos);
+    }
+    const center = nodeById.get(centralId)?.currentPos ?? { x: 0, y: 0 };
+    orderChildrenByAngle(root, posById, center);
+  }
   computeLeafWeights(root);
   // Root's children partition the full circle, starting at the top.
   assignAngles(root, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI);
@@ -66,12 +75,14 @@ function computeRingRadii(root: TreeNode, params: LayoutParams): number[] {
 
   const depthCount = nodesByDepth.length;
 
-  // Circumference-based minimum radius per ring (Σ footprint arc / 2π).
+  // Circumference-based minimum radius per ring (Σ footprint arc / 2π). The
+  // reserved footprint is scaled by footprintScale (<1 packs tighter).
+  const footprintScale = params.footprintScale ?? 1;
   const minFit: number[] = [0];
   for (let depth = 1; depth < depthCount; depth++) {
     let arcSum = 0;
     for (const node of nodesByDepth[depth]) {
-      arcSum += 2 * node.footprintRadius + params.siblingGap;
+      arcSum += 2 * footprintScale * node.footprintRadius + params.siblingGap;
     }
     minFit[depth] = arcSum / (2 * Math.PI);
   }

@@ -612,7 +612,7 @@ export class ContextMenu {
         }
       },
       {
-        label: 'Scene',
+        label: 'Scene design',
         children: [
           {
             label: 'Auto-layout',
@@ -643,6 +643,56 @@ export class ContextMenu {
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 3);
+                }
+              }
+            ]
+          },
+          {
+            label: 'Rotate',
+            children: [
+              {
+                label: 'Clockwise (O)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.rotate(
+                    this.#features.scene.getCentralNodeId(),
+                    getSetting('autolayout.rotateStep')
+                  );
+                }
+              },
+              {
+                label: 'Counter-clockwise (Shift+O)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.rotate(
+                    this.#features.scene.getCentralNodeId(),
+                    -getSetting('autolayout.rotateStep')
+                  );
+                }
+              }
+            ]
+          },
+          {
+            label: 'Spacing',
+            children: [
+              {
+                label: 'Spread (W)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.scaleScene(
+                    this.#features.scene.getCentralNodeId(),
+                    getSetting('autolayout.densityStep')
+                  );
+                }
+              },
+              {
+                label: 'Tighten (Shift+W)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.scaleScene(
+                    this.#features.scene.getCentralNodeId(),
+                    1 / getSetting('autolayout.densityStep')
+                  );
                 }
               }
             ]
@@ -853,6 +903,16 @@ export class ContextMenu {
     // Add to container
     this.#container.appendChild(menu);
     this.#menuElement = menu;
+
+    // The menu is a child of the Cytoscape container, so its pointer events
+    // bubble to cy's canvas handlers — cy would hit-test the node under the
+    // clicked menu row and tap-select it (stealing selection from the intended
+    // node). Item `click` still fires (actions run); we only stop the
+    // press/release events cy uses for tap/selection. Applies to node, edge,
+    // and canvas menus alike, and to submenu items (descendants of this root).
+    for (const eventName of ['mousedown', 'mouseup', 'pointerdown', 'pointerup']) {
+      menu.addEventListener(eventName, (e) => e.stopPropagation());
+    }
 
     // Adjust position if menu overflows container bounds
     const menuRect = menu.getBoundingClientRect();

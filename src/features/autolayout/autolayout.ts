@@ -53,7 +53,12 @@ export class AutoLayout {
 
     const nodes: LayoutInputNode[] = visibleNodes.map(node => {
       const box = node.boundingBox();
-      return { id: node.id() as NodeId, footprint: { width: box.w, height: box.h } };
+      const pos = node.position();
+      return {
+        id: node.id() as NodeId,
+        footprint: { width: box.w, height: box.h },
+        currentPos: { x: pos.x, y: pos.y },
+      };
     });
 
     const visibleIds = new Set(nodes.map(node => node.id));
@@ -73,6 +78,8 @@ export class AutoLayout {
       params: {
         ringSpacing: getSetting('autolayout.ringSpacing'),
         siblingGap: getSetting('autolayout.siblingGap'),
+        footprintScale: getSetting('autolayout.footprintScale'),
+        ringOrder: getSetting('autolayout.ringOrder'),
       },
     });
     if (relative.size === 0) return;
@@ -115,6 +122,137 @@ export class AutoLayout {
     }
 
     if (isDebug('d_scene')) console.log(`[AutoLayout] Re-arranged ${targets.size} nodes`);
+  }
+
+  /**
+   * Rigidly rotate the visible scene about the central node's current position.
+   *
+   * A pure affine transform (not a layout algorithm): every visible node orbits
+   * the pivot by `degrees` (positive = clockwise on screen), so relative geometry
+   * is preserved. Manual edge curves therefore rotate correctly on their own —
+   * no reset — and the bounding circle about the pivot is unchanged, so no
+   * viewport re-fit. Folded/hidden nodes keep their offsets. Edit mode only.
+   *
+   * @param centralNodeId The scene's central node (rotation pivot).
+   * @param degrees Rotation step in degrees; positive rotates clockwise.
+   */
+  async rotate(centralNodeId: NodeId | null, degrees: number): Promise<void> {
+    if (!isEditMode()) {
+      if (isDebug('d_scene')) console.log('[AutoLayout] Rotate skipped: View mode');
+      return;
+    }
+    if (!centralNodeId || degrees === 0) return;
+
+    const central = this.#cy.getElementById(centralNodeId);
+    if (central.length === 0 || !central.visible()) return;
+
+    const pivot = central.position();
+    const theta = (degrees * Math.PI) / 180;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+
+    const targets = new Map<NodeId, Position>();
+    this.#cy.nodes(':visible').forEach(node => {
+      const nodeId = node.id() as NodeId;
+      if (nodeId === centralNodeId) return;
+      const { x, y } = node.position();
+      const dx = x - pivot.x;
+      const dy = y - pivot.y;
+      targets.set(nodeId, {
+        x: pivot.x + dx * cos - dy * sin,
+        y: pivot.y + dx * sin + dy * cos,
+      });
+    });
+    if (targets.size === 0) return;
+
+    const suspension = graphSaver.suspend('autolayout');
+    try {
+      await this.#animator.apply(targets, {
+        animate: getSetting('autolayout.animate'),
+        duration: getSetting('autolayout.animationDuration'),
+      });
+    } finally {
+      graphSaver.resume(suspension);
+      await graphSaver.forceSave();
+    }
+
+    if (isDebug('d_scene')) console.log(`[AutoLayout] Rotated ${targets.size} nodes by ${degrees}°`);
+  }
+
+  /**
+   * Change the scene's density about the central node without touching per-node
+   * `scale`. Every visible node's position scales by `factor` about the central
+   * node's current position (`factor > 1` spreads, `< 1` tightens), while the
+   * viewport zooms by `1/factor` about the same on-screen point. The net effect:
+   * every node stays put on screen and only the node glyphs shrink/grow, so the
+   * scene is de-crowded/packed in place, anchored on the central node (which may
+   * sit off the geometric centre by design).
+   *
+   * A pure similarity transform (not a layout algorithm): no registry dispatch,
+   * no viewport re-fit, and edges are left untouched so their curves re-render
+   * to the new endpoints (hand-tuned bends stay adjustable). Because the pivot
+   * is the fixed central node and the zoom is not clamped, `1/factor` exactly
+   * reverses `factor` — the opposite command restores the prior positions and
+   * framing. Folded/hidden nodes keep their offsets, matching `rotate`. Edit
+   * mode only.
+   *
+   * @param centralNodeId The scene's central node (scaling pivot).
+   * @param factor Multiplicative density step; >1 spreads, <1 tightens.
+   */
+  async scaleScene(centralNodeId: NodeId | null, factor: number): Promise<void> {
+    if (!isEditMode()) {
+      if (isDebug('d_scene')) console.log('[AutoLayout] Scale skipped: View mode');
+      return;
+    }
+    if (!centralNodeId || factor <= 0 || factor === 1) return;
+
+    const central = this.#cy.getElementById(centralNodeId);
+    if (central.length === 0 || !central.visible()) return;
+
+    const pivot = central.position();
+
+    const targets = new Map<NodeId, Position>();
+    this.#cy.nodes(':visible').forEach(node => {
+      const nodeId = node.id() as NodeId;
+      if (nodeId === centralNodeId) return;
+      const { x, y } = node.position();
+      targets.set(nodeId, {
+        x: pivot.x + (x - pivot.x) * factor,
+        y: pivot.y + (y - pivot.y) * factor,
+      });
+    });
+    if (targets.size === 0) return;
+
+    // Zoom by the inverse about the central node's screen position: pin the
+    // pivot on screen so the scene de-crowds/packs in place. `pan' = pan +
+    // pivot·(z - z')` keeps `pivot·zoom + pan` invariant.
+    const zoom = this.#cy.zoom();
+    const pan = this.#cy.pan();
+    const newZoom = zoom / factor;
+    const viewport = {
+      zoom: newZoom,
+      pan: {
+        x: pan.x + pivot.x * (zoom - newZoom),
+        y: pan.y + pivot.y * (zoom - newZoom),
+      },
+    };
+
+    const suspension = graphSaver.suspend('autolayout');
+    try {
+      await this.#animator.apply(
+        targets,
+        {
+          animate: getSetting('autolayout.animate'),
+          duration: getSetting('autolayout.animationDuration'),
+        },
+        viewport
+      );
+    } finally {
+      graphSaver.resume(suspension);
+      await graphSaver.forceSave();
+    }
+
+    if (isDebug('d_scene')) console.log(`[AutoLayout] Scaled scene of ${targets.size} nodes by ${factor}`);
   }
 
   /**
@@ -195,6 +333,7 @@ export class AutoLayout {
         params: {
           ringSpacing: getSetting('autolayout.ringSpacing'),
           siblingGap: getSetting('autolayout.siblingGap'),
+          footprintScale: getSetting('autolayout.footprintScale'),
         },
       });
       if (relative.size === 0) return;

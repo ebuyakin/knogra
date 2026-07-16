@@ -10,7 +10,7 @@
  */
 
 import type { NodeId } from '../../../core/main-types';
-import type { LayoutInputNode, LayoutInputEdge } from './types';
+import type { LayoutInputNode, LayoutInputEdge, Position } from './types';
 
 export interface TreeNode {
   id: NodeId;
@@ -103,8 +103,7 @@ export function computeLeafWeights(node: TreeNode): number {
 }
 
 /** Subdivide each node's angular wedge among its children by leaf weight. */
-export function assignAngles(node: TreeNode, start: number, end: number): void {
-  node.angleStart = start;
+export function assignAngles(node: TreeNode, start: number, end: number): void {  node.angleStart = start;
   node.angleEnd = end;
   if (node.children.length === 0) return;
 
@@ -116,4 +115,28 @@ export function assignAngles(node: TreeNode, start: number, end: number): void {
     assignAngles(child, cursor, cursor + childSpan);
     cursor += childSpan;
   }
+}
+
+/**
+ * Reorder each node's children by their current on-screen angle around `center`,
+ * measured clockwise from due north — the wedge start `assignAngles` sweeps from.
+ * This preserves the circular sequence the user arranged by hand while the
+ * algorithm only perfects radius and spacing. Nodes without a known position
+ * sort last and keep their relative order (stable).
+ */
+export function orderChildrenByAngle(
+  node: TreeNode,
+  posById: Map<NodeId, Position>,
+  center: Position
+): void {
+  if (node.children.length > 1) {
+    const angleKey = (child: TreeNode): number => {
+      const pos = posById.get(child.id);
+      if (!pos) return Number.MAX_SAFE_INTEGER;
+      const key = Math.atan2(pos.y - center.y, pos.x - center.x) + Math.PI / 2;
+      return key < 0 ? key + 2 * Math.PI : key;
+    };
+    node.children.sort((left, right) => angleKey(left) - angleKey(right));
+  }
+  for (const child of node.children) orderChildrenByAngle(child, posById, center);
 }

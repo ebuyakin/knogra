@@ -12,6 +12,7 @@ import type { SceneContext } from '../../../ai/context-builder';
 
 import { chatSession } from '../../../ai/chat-session';
 import { chatStore } from '../../../storage/chat-store';
+import { eventBus } from '../../../events/event-bus';
 import { localiseAttachment } from '../../../ai/image-search/image-search';
 import { QUICK_ACTIONS, resolveQuickActionMessage } from '../../../ai/prompts';
 import { getSetting } from '../../../config';
@@ -34,6 +35,7 @@ export class ChatPanel {
   #messagesContainer: HTMLElement;
   #input: HTMLTextAreaElement;
   #quickActionsContainer: HTMLElement;
+  #chatContainer: HTMLElement;
   #cy: Core;
   #onActionsReceived: ((actions: ProposedAction[]) => void) | null = null;
 
@@ -42,6 +44,7 @@ export class ChatPanel {
 
     const chatContainer = document.getElementById('chat');
     if (!chatContainer) throw new Error('Chat container #chat not found');
+    this.#chatContainer = chatContainer;
 
     const messagesContainer = chatContainer.querySelector('.chat-messages');
     if (!messagesContainer) throw new Error('.chat-messages not found');
@@ -60,6 +63,19 @@ export class ChatPanel {
     } else {
       this.#quickActionsContainer = document.createElement('div');
     }
+
+    const veil = document.createElement('div');
+    veil.className = 'chat-lights-off-veil';
+    veil.textContent = 'Hidden during quiz';
+    if (inputContainer) {
+      chatContainer.insertBefore(veil, inputContainer);
+    } else {
+      chatContainer.appendChild(veil);
+    }
+
+    eventBus.on('quizStateChanged', ({ active }) => {
+      this.#chatContainer.classList.toggle('lights-off', active);
+    });
 
     this.#messagesContainer.innerHTML = '';
     this.#setupEventListeners();

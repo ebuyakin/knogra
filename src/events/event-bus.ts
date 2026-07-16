@@ -19,6 +19,7 @@ export interface EventMap {
   transitionStart: void;
   transitionEnd: void;
   appModeChanged: { mode: AppMode };
+  quizStateChanged: { active: boolean };
   // Future events:
   // nodeSelected: { nodeId: NodeId };
 }

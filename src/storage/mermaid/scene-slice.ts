@@ -21,7 +21,8 @@ export function getMermaidSceneSlice(
   anchorMermaidId: string,
   depth: number,
   allLevels: boolean,
-  edgeFlags: EdgeSceneFlags[]
+  edgeFlags: EdgeSceneFlags[],
+  secondLevelThreshold = 0
 ): MermaidSceneSlice {
   if (!parsed.nodes.some(node => node.mermaidId === anchorMermaidId)) {
     throw new Error('Could not choose a central node.');
@@ -50,6 +51,25 @@ export function getMermaidSceneSlice(
     }
   }
 
+  // Two-level readability budget (generated sub-scenes only, never `allLevels`).
+  // Collapse the busiest direct neighbours' second level until the scene fits.
+  if (secondLevelThreshold > 0 && !allLevels && maxDepth === 2) {
+    const level1 = [...distances].filter(([, d]) => d === 1).map(([id]) => id);
+    const level2 = new Set([...distances].filter(([, d]) => d === 2).map(([id]) => id));
+    const contributions = new Map<string, Set<string>>();
+    for (const a of level1) {
+      const g = new Set<string>();
+      for (const next of adjacency.get(a) ?? []) {
+        if (level2.has(next)) g.add(next);
+      }
+      contributions.set(a, g);
+    }
+    const retained = pruneSecondLevelToThreshold(1 + level1.length, contributions, secondLevelThreshold);
+    for (const node of level2) {
+      if (!retained.has(node)) nodeIds.delete(node);
+    }
+  }
+
   const edgeIndexes = collectSceneEdgeIndexes(parsed, nodeIds, parentByMermaidId, edgeFlags);
 
   const nodeCount = nodeIds.size;
@@ -66,6 +86,47 @@ export function getMermaidSceneSlice(
     overEdgeLimit,
     overLimit: overNodeLimit || overEdgeLimit,
   };
+}
+
+/**
+ * Whole-neighbour-granular second-level prune. Given each direct neighbour's set
+ * of second-degree nodes (`contributions`, where shared second-degree nodes may
+ * appear under several neighbours), returns the second-degree nodes to keep so
+ * that `baseCount + kept.size <= threshold`. Repeatedly collapses the direct
+ * neighbour with the largest raw second-degree count — its second level is
+ * dropped, but second-degree nodes still reached through another still-expanded
+ * neighbour survive. Selection is deterministic (insertion order breaks ties).
+ */
+function pruneSecondLevelToThreshold(
+  baseCount: number,
+  contributions: Map<string, Set<string>>,
+  threshold: number
+): Set<string> {
+  const expanded = new Set(contributions.keys());
+  const unionRetained = (): Set<string> => {
+    const retained = new Set<string>();
+    for (const neighbour of expanded) {
+      for (const node of contributions.get(neighbour) ?? []) retained.add(node);
+    }
+    return retained;
+  };
+
+  let retained = unionRetained();
+  while (baseCount + retained.size > threshold) {
+    let victim: string | null = null;
+    let victimSize = 0;
+    for (const neighbour of expanded) {
+      const size = contributions.get(neighbour)?.size ?? 0;
+      if (size > victimSize) {
+        victimSize = size;
+        victim = neighbour;
+      }
+    }
+    if (!victim || victimSize === 0) break;
+    expanded.delete(victim);
+    retained = unionRetained();
+  }
+  return retained;
 }
 
 export function computeAnchorParentMap(
@@ -144,7 +205,8 @@ export function getMermaidFanSceneSlice(
   centralMermaidId: string,
   parentByMermaidId: Map<string, string>,
   depth: number,
-  edgeFlags: EdgeSceneFlags[]
+  edgeFlags: EdgeSceneFlags[],
+  secondLevelThreshold = 0
 ): MermaidSceneSlice {
   if (!parsed.nodes.some(node => node.mermaidId === centralMermaidId)) {
     throw new Error('Could not choose a central node.');
@@ -160,11 +222,30 @@ export function getMermaidFanSceneSlice(
   const nodeIds = new Set<string>([centralMermaidId]);
   const parentId = parentByMermaidId.get(centralMermaidId);
   if (parentId) nodeIds.add(parentId);
-  for (const child of childrenByParent.get(centralMermaidId) ?? []) {
-    nodeIds.add(child);
-    if (depth < 2) continue;
-    for (const grandchild of childrenByParent.get(child) ?? []) {
-      nodeIds.add(grandchild);
+  const children = childrenByParent.get(centralMermaidId) ?? [];
+  for (const child of children) nodeIds.add(child);
+
+  if (depth >= 2) {
+    // In the anchor parent-tree every grandchild has a single parent, so each
+    // child's second-degree set is disjoint; the shared prune helper still
+    // applies (the union is simply the sum).
+    const contributions = new Map<string, Set<string>>();
+    for (const child of children) {
+      const g = new Set<string>();
+      for (const grandchild of childrenByParent.get(child) ?? []) {
+        nodeIds.add(grandchild);
+        g.add(grandchild);
+      }
+      contributions.set(child, g);
+    }
+    if (secondLevelThreshold > 0) {
+      const baseCount = 1 + (parentId ? 1 : 0) + children.length;
+      const retained = pruneSecondLevelToThreshold(baseCount, contributions, secondLevelThreshold);
+      for (const g of contributions.values()) {
+        for (const grandchild of g) {
+          if (!retained.has(grandchild)) nodeIds.delete(grandchild);
+        }
+      }
     }
   }
 

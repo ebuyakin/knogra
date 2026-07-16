@@ -164,6 +164,7 @@ export class Quiz {
     setAppMode('view');
     this.#refreshSelectedNode();
     this.#applyCurrentSceneState();
+    eventBus.emit('quizStateChanged', { active: true });
     this.#emitSnapshot();
   }
 
@@ -226,6 +227,7 @@ export class Quiz {
     }
 
     this.#ending = false;
+    eventBus.emit('quizStateChanged', { active: false });
     this.#emitSnapshot();
   }
 

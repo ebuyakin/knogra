@@ -18,6 +18,8 @@ export interface Position {
 export interface LayoutInputNode {
   id: NodeId;
   footprint: { width: number; height: number };
+  /** Current on-screen position (scene coords). Used by angular ring ordering. */
+  currentPos?: Position;
 }
 
 export interface LayoutInputEdge {
@@ -32,6 +34,18 @@ export interface LayoutParams {
   ringSpacing: number;
   /** Minimum gap enforced between sibling nodes on the same ring (px). */
   siblingGap: number;
+  /**
+   * Scales the reserved node footprint used when sizing ring radii. The
+   * half-diagonal footprint over-reserves space; values <1 pack rings and
+   * siblings tighter, >1 looser. Defaults to 1 when omitted.
+   */
+  footprintScale?: number;
+  /**
+   * How siblings are sequenced around a ring. `'edge'` (default) follows edge
+   * insertion order; `'angular'` preserves the node's current on-screen angular
+   * order (requires `currentPos` on the nodes).
+   */
+  ringOrder?: 'edge' | 'angular';
 }
 
 export interface LayoutInput {

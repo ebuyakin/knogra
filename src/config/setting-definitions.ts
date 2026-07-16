@@ -536,6 +536,43 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         step: 5
       },
       {
+        key: 'autolayout.footprintScale',
+        label: 'Density',
+        description: 'Scales reserved node footprint; below 1 packs rings and siblings tighter',
+        type: 'number',
+        min: 0.1,
+        max: 2,
+        step: 0.05
+      },
+      {
+        key: 'autolayout.ringOrder',
+        label: 'Ring Order',
+        description: 'How nodes are sequenced around a ring. "Preserve current angular order" keeps the clockwise order you arranged by hand — drag nodes into the order you want, then re-run.',
+        type: 'select',
+        options: [
+          { value: 'edge', label: 'Edge order (default)' },
+          { value: 'angular', label: 'Preserve current angular order' }
+        ]
+      },
+      {
+        key: 'autolayout.rotateStep',
+        label: 'Rotate Step',
+        description: 'Angle (degrees) the scene rotates per Rotate command',
+        type: 'number',
+        min: 1,
+        max: 180,
+        step: 1
+      },
+      {
+        key: 'autolayout.densityStep',
+        label: 'Density Step',
+        description: 'Multiplier the scene spreads/tightens per Spacing command; below 2, above 1. The opposite command exactly reverses it.',
+        type: 'number',
+        min: 1.01,
+        max: 2,
+        step: 0.01
+      },
+      {
         key: 'autolayout.animate',
         label: 'Animate',
         description: 'Animate nodes to their new positions instead of snapping',

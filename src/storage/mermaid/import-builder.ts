@@ -1,5 +1,5 @@
 import type { Edge, EdgeId, EdgeType, EdgeTypeId, Node, NodeId, Scene, SceneId } from '../../core/main-types';
-import type { Conversation } from '../../core/chat-types';
+import type { ChatMessage, Conversation } from '../../core/chat-types';
 import { getSetting } from '../../config';
 import { getDefaultEdgeTypeId } from '../../config/edge-type-settings';
 import type { ParsedMermaidGraph } from './flowchart';
@@ -44,6 +44,7 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
   const nodes = parsed.nodes.map((node, index): Node => {
     const id = `n-${prefix}-${index + 1}` as NodeId;
     const equation = selection.importEquations ? parsed.equationsByMermaidId.get(node.mermaidId)?.trim() : '';
+    const comment = selection.importComments ? parsed.commentsByMermaidId.get(node.mermaidId)?.trim() : '';
     const tags = selection.importTags ? parsed.tagsByMermaidId.get(node.mermaidId) ?? [] : [];
     const nodeTags = [...tags];
     if (selection.layoutParams.tagLeavesAndBranches) {
@@ -56,7 +57,10 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
       id,
       title: node.title,
       tags: nodeTags,
-      properties: equation ? { equation } : {},
+      properties: {
+        ...(equation ? { equation } : {}),
+        ...(comment ? { comment } : {}),
+      },
       createdAt: now,
       updatedAt: now,
       attachments: [],
@@ -117,7 +121,7 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
     // Lay out only the nodes this scene actually shows (its sub-depth slice), so
     // the memoized positions that feed deeper scenes match what was displayed —
     // keeping the inherit-vs-fresh-fan decision consistent down the chain.
-    const sliceNodeIds = getMermaidFanSceneSlice(parsed, central, fanParentByMermaidId!, selection.subSceneDepth, edgeSceneFlags).nodeIds;
+    const sliceNodeIds = getMermaidFanSceneSlice(parsed, central, fanParentByMermaidId!, selection.subSceneDepth, edgeSceneFlags, generatedSecondLevelThreshold).nodeIds;
     const sliceNodes = parsed.nodes.filter(node => sliceNodeIds.has(node.mermaidId));
     const positions = computeFanScenePositions(sliceNodes, central, {
       parentScenePositionsByMermaidId: parentPositions,
@@ -134,21 +138,28 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
     ? selection.layoutParams.fanTop
     : selection.layoutParams.radial;
 
+  // Second-level node budget for generated sub-scenes. Only meaningful at 2
+  // levels; the anchor scene (explicit depth + all-levels) is never budgeted.
+  const generatedSecondLevelThreshold = selection.subSceneDepth === 2
+    ? selection.layoutParams.secondLevelThreshold
+    : 0;
+
   const buildScene = (
     centralMermaidId: string,
     depth: number,
     allLevels: boolean,
     sceneId: SceneId,
     title: string,
-    layoutMode: MermaidImportSelection['layout']
+    layoutMode: MermaidImportSelection['layout'],
+    secondLevelThreshold: number
   ): Scene | null => {
     const sceneCentralNodeId = idByMermaidId.get(centralMermaidId);
     if (!sceneCentralNodeId) return null;
 
     const useFan = layoutMode === 'fan' && fanParentByMermaidId !== undefined;
     const slice = useFan
-      ? getMermaidFanSceneSlice(parsed, centralMermaidId, fanParentByMermaidId!, depth, edgeSceneFlags)
-      : getMermaidSceneSlice(parsed, centralMermaidId, depth, allLevels, edgeSceneFlags);
+      ? getMermaidFanSceneSlice(parsed, centralMermaidId, fanParentByMermaidId!, depth, edgeSceneFlags, secondLevelThreshold)
+      : getMermaidSceneSlice(parsed, centralMermaidId, depth, allLevels, edgeSceneFlags, secondLevelThreshold);
     if (slice.overLimit) return null;
 
     const sceneNodes = parsed.nodes.filter(node => slice.nodeIds.has(node.mermaidId));
@@ -168,7 +179,9 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
       const hasImportedEquation = selection.importEquations && Boolean(parsed.equationsByMermaidId.get(node.mermaidId)?.trim());
       sceneNode.design = {
         id: hasImportedEquation ? equationDesignId : defaultDesignId,
-        params: {},
+        params: hasImportedEquation && selection.layoutParams.equationScale !== 1
+          ? { equationScale: selection.layoutParams.equationScale }
+          : {},
       };
     }
 
@@ -198,7 +211,8 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
     selection.allLevels,
     anchorSceneId,
     'Mermaid import',
-    selection.layout === 'fan' ? 'radial' : selection.layout
+    selection.layout === 'fan' ? 'radial' : selection.layout,
+    0
   );
   if (!anchorScene) throw new Error('Could not choose a central node.');
 
@@ -217,7 +231,8 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
       false,
       `${anchorSceneId}-${centralMermaidId}` as SceneId,
       titleByMermaidId.get(centralMermaidId) ?? 'Mermaid scene',
-      selection.layout
+      selection.layout,
+      generatedSecondLevelThreshold
     );
     if (scene) scenes.push(scene);
   }
@@ -225,19 +240,29 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
   const conversations: Conversation[] = [];
   if (selection.importNotes) {
     parsed.nodes.forEach((node, index) => {
-      const noteText = parsed.notesByMermaidId.get(node.mermaidId)?.trim();
-      if (!noteText) return;
       const nodeId = idByMermaidId.get(node.mermaidId);
       if (!nodeId) return;
+
+      const noteText = parsed.notesByMermaidId.get(node.mermaidId)?.trim();
+      const tutorialText = parsed.tutorialByMermaidId.get(node.mermaidId)?.trim();
+
+      const messages: ChatMessage[] = [];
+      let part = 0;
+      for (const content of [noteText, tutorialText]) {
+        if (!content) continue;
+        messages.push({
+          id: `msg-${Date.now().toString(36)}-${index}-${part++}-${Math.random().toString(36).slice(2, 7)}`,
+          role: 'assistant',
+          content,
+          timestamp: now,
+          source: 'tutorial',
+        });
+      }
+      if (messages.length === 0) return;
+
       conversations.push({
         nodeId,
-        messages: [{
-          id: `msg-${Date.now().toString(36)}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-          role: 'user',
-          content: noteText,
-          timestamp: now,
-          source: 'note',
-        }],
+        messages,
         createdAt: now,
         updatedAt: now,
       });

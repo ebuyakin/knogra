@@ -127,13 +127,14 @@ When helping with equations, write equations in LaTeX syntax, for example \\frac
 
   /**
    * Template for central node section
-   * Placeholders: {{title}}, {{tags}}, {{equation}}, {{properties}}
+   * Placeholders: {{title}}, {{tags}}, {{comment}}, {{equation}}, {{properties}}
    */
   centralNodeTemplate: `## Scene Central Node
 The main topic of this scene. The scene exists to explore, study, question, or develop this node through the visible nodes and edges.
 
 **Title:** {{title}}
 {{#if tags}}**Tags:** {{tags}}{{/if}}
+{{#if comment}}**Comment:** {{comment}}{{/if}}
 {{#if equation}}**Equation:** {{equation}}{{/if}}
 {{#if properties}}**Other properties:** {{properties}}{{/if}}`,
 

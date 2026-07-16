@@ -491,6 +491,50 @@ export class KeyboardHandler {
       return;
     }
 
+    // O - Rotate scene clockwise about the central node
+    if (key === 'o' && !event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.autolayout.rotate(
+        this.#features.scene.getCentralNodeId(),
+        getSetting('autolayout.rotateStep')
+      );
+      return;
+    }
+
+    // Shift+O - Rotate scene counter-clockwise about the central node
+    if (key === 'o' && event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.autolayout.rotate(
+        this.#features.scene.getCentralNodeId(),
+        -getSetting('autolayout.rotateStep')
+      );
+      return;
+    }
+
+    // W - Spread the scene (de-crowd) about the central node
+    if (key === 'w' && !event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.autolayout.scaleScene(
+        this.#features.scene.getCentralNodeId(),
+        getSetting('autolayout.densityStep')
+      );
+      return;
+    }
+
+    // Shift+W - Tighten the scene (pack) about the central node
+    if (key === 'w' && event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.autolayout.scaleScene(
+        this.#features.scene.getCentralNodeId(),
+        1 / getSetting('autolayout.densityStep')
+      );
+      return;
+    }
+
   }
 
   #toggleAppMode(): void {
@@ -508,10 +552,10 @@ export class KeyboardHandler {
     }
 
     const commands = {
-      h: 'positionTowardSource',
+      h: 'positionTowardTarget',
       j: 'strengthDown',
       k: 'strengthUp',
-      l: 'positionTowardTarget'
+      l: 'positionTowardSource'
     } as const;
     const command = commands[key as keyof typeof commands];
     if (!command) return false;
