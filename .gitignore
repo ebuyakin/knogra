@@ -62,6 +62,7 @@ todo.md
 docs/release-plan.md
 docs/release-plan-v1-5.md
 docs/node-expansion/
+docs/site-separation-plan.md
 
 # Generated tutorial output (publish via knogra-graphs repo, not tracked here)
 scripts/tutorial/tutorial.knogra

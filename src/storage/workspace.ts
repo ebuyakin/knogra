@@ -42,6 +42,7 @@ import {
 import { validateGraphData } from './workspace/validate';
 import { AppStateManager } from './app-state';
 import { seedInitialGraph } from './seed-workspace';
+import { APP_VERSION } from '../config/storage-config';
 
 // ============================================================================
 // TYPES
@@ -58,7 +59,6 @@ interface WorkspaceManifest {
 // CONSTANTS
 // ============================================================================
 
-const APP_VERSION = '0.1.0';
 const WORKSPACE_VERSION = '1.0';
 
 // ============================================================================

@@ -117,13 +117,13 @@ import {
 } from '../../storage/workspace/transfer';
 import { AppStateManager } from '../../storage/app-state';
 import { DEBUG } from '../../config/debug-flags';
+import { APP_VERSION } from '../../config/storage-config';
 import { getConsoleBuffer } from './console-buffer';
 import { getErrorBuffer } from './error-buffer';
 import { getActionBuffer } from './action-buffer';
 import { getTransitionBuffer } from './transition-buffer';
 import { getSaverEvents, getInvariantDrift } from './recorder';
 
-const APP_VERSION = '0.1.0';
 const SNAPSHOT_VERSION = '1.0';
 const IMAGE_DATA_PREVIEW_CHARS = 200;
 

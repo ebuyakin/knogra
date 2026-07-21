@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite'
-import { resolve } from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -9,15 +8,6 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'dist',
-    sourcemap: true,
-    rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        app: resolve(__dirname, 'app/index.html'),
-        privacy: resolve(__dirname, 'privacy.html'),
-        terms: resolve(__dirname, 'terms.html'),
-        contact: resolve(__dirname, 'contact.html'),
-      },
-    },
+    sourcemap: false,
   },
 })

@@ -1,14 +1,16 @@
 # Knogra — Marketing Copy
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-14  
+> **Last reviewed:** 2026-07-21  
 > **Authority:** Canonical source for approved marketing copy and directory listing notes.  
 > **Related:** [Documentation map](README.md), [Marketing raw ideas](marketing-raw-ideas.md), [Product vision](knogra-vision.md)
 
 **Canonical** copy for every place Knogra is described. Each slot has one purpose, one consumer, one approved version.
 
 - Brainstorm and rejected drafts → `marketing-raw-ideas.md`
-- Site body content (hero, features section, etc.) is **not** in this file — it lives in `index.html` directly.
+- Site body content (hero, features section, etc.) is **not** in this file — it lives in the `knogra-site` repo (`src/pages/index.astro` + `src/content/`).
+
+> **Note (2026-07-21):** The marketing site moved to a separate repo (`knogra-site`, deploys to `knogra.io`); the app repo now deploys to `app.knogra.io`. The on-site metadata below is implemented in `knogra-site` (`Layout.astro`, `src/pages/`), not in this repo's HTML. This file stays the canonical *copy source* — where it references `index.html`, read it as "the site's pages in `knogra-site`."
 
 ---
 
@@ -26,7 +28,7 @@
 
 # SECTION A — On-Site Metadata
 
-Copy embedded in `index.html` and served on every page load. Each item is consumed by a different audience or system.
+Copy for the site's page metadata (implemented in `knogra-site` — `Layout.astro` + per-page frontmatter), served on every page load. Each item is consumed by a different audience or system.
 
 ---
 
@@ -48,7 +50,7 @@ Copy embedded in `index.html` and served on every page load. Each item is consum
 
 > Beyond mind maps. Knogra is a knowledge graph in motion — flowing scenes tame complexity, anchor ideas in spatial memory. As you learn, the map draws itself.
 
-*Status: approved. Will be applied to `index.html` once Section A is fully reviewed.*
+*Status: approved. Applied in `knogra-site` (site page metadata).*
 
 ---
 
@@ -180,7 +182,7 @@ Each external directory has its own form fields and audience. Copy here is **per
 - **Website:** https://knogra.io
 - **Platform:** Web
 - **License:** Free (Open Source) — MIT
-- **Icon:** `public/knogra-icon.svg` (280×280, transparent, blue→purple gradient graph mark)
+- **Icon:** `knogra-icon.svg` (280×280, transparent, blue→purple gradient graph mark) — **note:** removed from the app repo during the split; restore from git history into `knogra-site/public/` when needed for submissions.
 
 **Short description** (= A2, ~155 chars):
 
@@ -225,7 +227,7 @@ Supporting material referenced across sections — keywords, app facts, friction
 | Field | Value |
 |-------|-------|
 | URL | https://knogra.io |
-| App URL | https://knogra.io/app/ |
+| App URL | https://app.knogra.io/ |
 | Pricing | Free |
 | Account required | No |
 | Platform | Web (any modern browser) |
@@ -309,4 +311,4 @@ Use these to lead with pain before pitching the solution.
 
 ## OG / Social Image
 
-`/public/og-image.jpg` — used for Open Graph and Twitter Card previews. Size: 1200×630.
+`knogra-site/public/og-image.jpg` (served at `https://knogra.io/og-image.jpg`) — used for Open Graph and Twitter Card previews. Size: 1200×630.

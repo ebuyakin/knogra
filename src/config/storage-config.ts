@@ -3,6 +3,10 @@
  * Centralized database and localStorage key names and schemas
  */
 
+// Application version — single source of truth. Consumed by the workspace
+// export manifest and the diagnostics snapshot so the two never drift.
+export const APP_VERSION = '1.5.0';
+
 // IndexedDB database names
 export const GRAPH_DB_NAME = 'knogra-graph';
 export const CHAT_DB_NAME = 'knogra-chat';

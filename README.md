@@ -10,7 +10,7 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 
 ## Getting started
 
-**Option A — start fresh:** Go to [knogra.io/app](https://knogra.io/app) and start building. Double-click the canvas to create a node, drag between nodes to connect them, click a connected node to transition into its scene.
+**Option A — start fresh:** Go to [app.knogra.io](https://app.knogra.io) and start building. Double-click the canvas to create a node, drag between nodes to connect them, click a connected node to transition into its scene.
 
 **Option B — start with the tutorial:** On [knogra.io](https://knogra.io), click the **Tutorial** button. It opens the tutorial graph directly in the app — a pre-built interactive graph that walks you through the core concepts.
 
@@ -38,6 +38,7 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 - **Design system** — 20+ node designs, multiple themes, background images with color grading
 - **Paths** — guided tours through your graph for revision, presentation, or storytelling
 - **Fold & unfold** — collapse branches to focus, expand to explore
+- **Mermaid import / export** — turn Mermaid diagrams into navigable drill-down scenes, or export any graph back to Mermaid
 - **Export / import** — full workspace snapshots as `.knogra` files
 
 ## Privacy
@@ -71,7 +72,7 @@ npm run build      # production build → dist/
 npm run type-check # TypeScript check without building
 ```
 
-The app runs at `/app/`, the landing page at `/`.
+The app is served at the domain root and deploys to `app.knogra.io`. The marketing site (`knogra.io`) is a separate repo — `knogra-site`.
 
 ## Self-hosting
 

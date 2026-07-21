@@ -1,4 +1,4 @@
+# app.knogra.io is the application, not marketing content — keep it out of search
+# indexes. The public marketing site (knogra.io) has its own robots.txt + sitemap.
 User-agent: *
-Allow: /
-
-Sitemap: https://knogra.io/sitemap.xml
+Disallow: /

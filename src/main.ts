@@ -79,13 +79,31 @@ AppStateManager.initAppState();
 // value to decide both whether to show the import dialog AND when to import.
 const hadRealDataAtStartup = await hasMeaningfulWorkspaceData();
 
+// Cross-origin handoff from the marketing site (knogra.io). The Library "Open"
+// and Tutorial flows navigate to app.knogra.io/?import=<graph-url>. sessionStorage
+// cannot cross origins, so the graph URL travels in a query param instead. The
+// param is user-controllable, so only knogra-graphs raw URLs are honoured — an
+// allowlist prevents the app from being coerced into fetching arbitrary content.
+const KNOGRA_GRAPHS_URL_PREFIX = 'https://raw.githubusercontent.com/ebuyakin/knogra-graphs/';
+
+function consumePendingImportUrl(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('import');
+  if (!raw) return null;
+  // Strip the param so a page refresh doesn't re-trigger the import.
+  params.delete('import');
+  const query = params.toString();
+  const cleaned = window.location.pathname + (query ? `?${query}` : '') + window.location.hash;
+  window.history.replaceState(null, '', cleaned);
+  return raw.startsWith(KNOGRA_GRAPHS_URL_PREFIX) ? raw : null;
+}
+
 // Catalog import — EARLY branch.
-// If the user had no real data and clicked Open in the landing catalog, import
+// If the user had no real data and clicked Open in the site catalog, import
 // the graph NOW, before seeding or opening any scene. This avoids the visual
 // glitch where the seed "New Idea" flashes briefly before being replaced.
-const pendingImportUrl = sessionStorage.getItem('knogra.pendingImport');
+const pendingImportUrl = consumePendingImportUrl();
 if (pendingImportUrl && !hadRealDataAtStartup) {
-  sessionStorage.removeItem('knogra.pendingImport');
   const imported = await importFromUrl(pendingImportUrl, { showDialog: false });
   if (imported) {
     // importWorkspace has called window.location.reload(). The browser queues
@@ -172,7 +190,6 @@ initTabGuard();
 // Runs after full init so the dialog appears over the rendered workspace,
 // letting the user see what's about to be replaced and choose to export first.
 if (pendingImportUrl && hadRealDataAtStartup) {
-  sessionStorage.removeItem('knogra.pendingImport');
   await importFromUrl(pendingImportUrl, { showDialog: true });
 }
 
