@@ -43,7 +43,7 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 
 ## Privacy
 
-Everything stays in your browser. No server, no account, no tracking. IndexedDB storage, works offline. AI calls go directly from your browser to your chosen provider — no proxy, no logging.
+Your work stays in your browser — IndexedDB storage, works offline, no account required. AI calls go directly from your browser to your chosen provider — no proxy, no logging. No personal data, no third-party trackers, no cookies. The only data Knogra receives is anonymous, aggregate usage counts (app opens, workspace import/export) — simple tallies with no per-user identity. Full details in the [Privacy Policy](https://knogra.io/privacy).
 
 ---
 
