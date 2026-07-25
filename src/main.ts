@@ -216,6 +216,11 @@ if (import.meta.env.DEV) {
 // To audit current scene (cy vs db, fold state diff, node/edge detail):
 //   knogra.auditScene()              // current scene from cy.scratch
 //   knogra.auditScene('scene-id')    // explicit scene id
+//
+// To capture a PNG of the current viewport (background layer included) for the
+// marketing-site graph library:
+//   knogra.capturePreview()                           // knogra-preview.png, 2×
+//   knogra.capturePreview({ name: 'graph-calculus' }) // sets the file name
 // @ts-expect-error ts(2339)
 window.knogra = {
   snapshot: import.meta.env.DEV
@@ -252,6 +257,12 @@ window.knogra = {
         clearInvariantDrift();
         clearActionBuffer();
         console.log('[diagnostics] All buffers cleared.');
+      }
+    : undefined,
+  capturePreview: import.meta.env.DEV
+    ? async (options?: Parameters<typeof import('./utils/screenshot').captureScreenshot>[1]) => {
+        const { captureScreenshot } = await import('./utils/screenshot');
+        captureScreenshot(cy, options);
       }
     : undefined
 };

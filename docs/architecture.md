@@ -371,6 +371,7 @@ this.#cy.on('scene:changed', (_event, sceneId) => {
 | `transitionStart` | (none) | Transition | UI transition guards |
 | `transitionEnd` | (none) | Transition | UI transition guards |
 | `appModeChanged` | `{mode}` | AppMode | Quiz, SuggestionPanel, and other mode-aware UI |
+| `pathModeChanged` *(planned)* | `{active, pathId, name}` | Path | Transition (navigation guard), PathPanel, ContextMenu, NodeManager |
 
 ### 3.7 AI Module (`src/ai/`)
 
@@ -454,6 +455,41 @@ Pure functions and external package wrappers shared across layers.
 | `mathjax.ts` | MathJax initialization |
 
 **Note:** Most utilities are feature-specific and live in `features/utils/`.
+
+### 3.10 Restrictive Regimes (Cross-Layer)
+
+Several parts of the app deliberately take capabilities away from the user. They grew up
+independently but form one family, and a new restriction should join this table rather than
+invent a fourth mechanism.
+
+| Regime | Purpose | Restricts | Owner | Layer | Lifetime |
+|--------|---------|-----------|-------|-------|----------|
+| **View mode** | Protect the graph from accidental edits; reading and presentation | Graph mutations; GraphSaver suspended | `storage/app-mode.ts` | Storage | Persisted, long-lived |
+| **Quiz mode** | Test recall | Hides sampled node content; forces View mode | `features/quiz.ts` | Features | Session |
+| **Transition input guard** | Prevent input from corrupting state mid-animation | *All* input, for the duration of one animation | `ui/transition-input-guard.ts` | UI | ~1 second |
+| **Path mode** *(planned)* | Linear guided traversal of a fixed scene sequence | Graph-initiated scene navigation only | `features/path/path.ts` | Features | Session, persisted in `knogra.state` |
+
+**Why they compose without negotiation:** each regime restricts a *different axis* — editing,
+seeing, all-input-briefly, navigating. Quiz stacks on View by design. Path mode stacks on
+either. No regime needs to know another exists.
+
+**Rule:** a new restriction that would constrain an axis already owned by an existing regime
+must extend that regime rather than run in parallel. Two owners of one axis is a defect.
+
+**Layer placement rule:**
+
+| Kind of mode | Layer | Mechanism |
+|--------------|-------|-----------|
+| Persisted, user-facing application mode | Storage | Module-level singleton + EventBus broadcast (`app-mode.ts`) |
+| Transient mode owned by one feature | Features | Feature-private state + EventBus broadcast (`quiz.ts`) |
+| Pure input plumbing with no domain meaning | UI | EventBus subscription + DOM capture (`transition-input-guard.ts`) |
+
+**Enforcement rule:** the consequence of a mode belongs to the *owner* of the mode, expressed
+through EventBus, never through a cross-feature import (§4.2). A feature that must refuse an
+action while another feature's mode is active subscribes to that mode's event and guards its
+own entry point. Guarding at scattered UI call sites is permitted only for *affordances*
+(greying out menu items, disabling buttons) — never as the sole enforcement, because
+affordances drift as entry points are added.
 
 ---
 

@@ -250,11 +250,21 @@ export class NodeShelf {
   async #placeCreateConnected(action: CreateConnectedAction): Promise<void> {
     const design = selectShelfDesign(action);
     const direction = action.connectionType === 'parent' ? 'parent' : 'child';
+
+    // Preserve the AI's node description: its `reason` (the shelf tooltip) is a
+    // short description of the concept, but only `properties` reach the created
+    // node. Fold it into `comment` so it survives placement and feeds back into
+    // AI context. Don't clobber a comment the AI set explicitly in properties.
+    const reason = action.reason?.trim();
+    const properties = reason && !action.properties?.comment
+      ? { ...action.properties, comment: reason }
+      : action.properties;
+
     await this.#features.graph.addConnectedNode(
       this.#currentNodeId!,
       direction,
       action.title,
-      action.properties,
+      properties,
       design
     );
   }

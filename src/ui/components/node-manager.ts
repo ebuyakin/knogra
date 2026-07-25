@@ -7,6 +7,7 @@ import type { NodeId, NodeInfo, SceneId } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
 import { isDebug } from '../../config/debug-flags';
 import { graphStore } from '../../storage/graph-store';
+import { chatStore } from '../../storage/chat-store';
 import { isEditMode } from '../../storage/app-mode';
 import { validateScenes } from '../../storage/workspace/validate';
 import { cascadeSceneDeletion } from '../../storage/scene-deletion';
@@ -14,7 +15,7 @@ import { GraphStatisticsModal } from './graph-statistics-modal';
 import '../../styles/node-manager.css';
 
 type NodeManagerStatusFilter = 'all' | 'ok' | 'errors' | 'unchecked';
-type NodeManagerSortKey = 'default' | 'title' | 'nodeId' | 'sceneCount' | 'connectionCount' | 'anchorDistance' | 'hasOwnScene' | 'isInCurrentScene' | 'status';
+type NodeManagerSortKey = 'default' | 'title' | 'nodeId' | 'sceneCount' | 'connectionCount' | 'anchorDistance' | 'hasOwnScene' | 'isInCurrentScene' | 'chatCount' | 'updatedAt' | 'status';
 type NodeManagerSortDirection = 'asc' | 'desc';
 
 export class NodeManager {
@@ -23,6 +24,7 @@ export class NodeManager {
   #selectedNodes: Set<NodeId> = new Set();
   #allNodesInfo: NodeInfo[] = [];
   #filteredNodesInfo: NodeInfo[] = [];
+  #chatCounts: Map<NodeId, number> = new Map();
   #sceneValidation: Map<SceneId, string[]> | null = null;
   #statusFilter: NodeManagerStatusFilter = 'all';
   #sortKey: NodeManagerSortKey = 'default';
@@ -52,6 +54,23 @@ export class NodeManager {
     this.#renderTableBody();
     this.#dialog?.showModal();
     this.#positionDialog();
+    void this.#loadChatCounts();
+  }
+
+  /**
+   * Load per-node chat message counts asynchronously and repaint the table.
+   * The dialog opens immediately; the Chat column fills once counts resolve
+   * (mirrors how scene-status dots stay grey until validation runs).
+   */
+  async #loadChatCounts(): Promise<void> {
+    try {
+      this.#chatCounts = await chatStore.getConversationMessageCounts();
+    } catch {
+      this.#chatCounts = new Map();
+      return;
+    }
+    this.#filteredNodesInfo = this.#applySort(this.#filteredNodesInfo);
+    this.#renderTableBody();
   }
 
   /**
@@ -135,6 +154,8 @@ export class NodeManager {
                 <th class="col-anchor-distance sortable" data-sort-key="anchorDistance" title="Shortest graph distance from the anchor node; — means disconnected"><span class="node-manager-th-content">Dist <span class="sort-indicator"></span></span></th>
                 <th class="col-own-scene sortable" data-sort-key="hasOwnScene" title="Whether this node has its own scene as the central node"><span class="node-manager-th-content">Own <span class="sort-indicator"></span></span></th>
                 <th class="col-in-scene sortable" data-sort-key="isInCurrentScene" title="Whether this node is included in the current scene"><span class="node-manager-th-content">Here <span class="sort-indicator"></span></span></th>
+                <th class="col-chat sortable" data-sort-key="chatCount" title="Number of chat messages associated with this node"><span class="node-manager-th-content">Chat <span class="sort-indicator"></span></span></th>
+                <th class="col-edited sortable" data-sort-key="updatedAt" title="Last content edit (title, tags, properties). Design, position and chat are tracked separately."><span class="node-manager-th-content">Edited <span class="sort-indicator"></span></span></th>
                 <th class="col-status sortable" data-sort-key="status" title="Scene integrity status for this node's own scene"><span class="node-manager-th-content">Status <span class="sort-indicator"></span></span></th>
               </tr>
             </thead>
@@ -185,7 +206,7 @@ export class NodeManager {
     if (this.#filteredNodesInfo.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="9" class="node-manager-empty">No nodes found</td>
+          <td colspan="11" class="node-manager-empty">No nodes found</td>
         </tr>
       `;
       return;
@@ -195,6 +216,9 @@ export class NodeManager {
       const anchorMarker = info.node.isAnchor ? ' <span class="anchor-marker">(A)</span>' : '';
       const statusCell = this.#renderStatusCell(info);
       const anchorDistance = info.anchorDistance ?? '—';
+      const chatCount = this.#chatCounts.get(info.node.id) ?? 0;
+      const chatCell = chatCount > 0 ? String(chatCount) : '';
+      const editedCell = info.node.updatedAt ? new Date(info.node.updatedAt).toLocaleDateString() : '—';
       return `
       <tr data-node-id="${info.node.id}" class="${this.#selectedNodes.has(info.node.id) ? 'selected' : ''}">
         <td class="col-checkbox">
@@ -215,6 +239,8 @@ export class NodeManager {
         <td class="col-in-scene">
           <span class="indicator ${info.isInCurrentScene ? 'active' : ''}"></span>
         </td>
+        <td class="col-chat">${chatCell}</td>
+        <td class="col-edited">${editedCell}</td>
         <td class="col-status">${statusCell}</td>
       </tr>
     `;
@@ -284,6 +310,11 @@ export class NodeManager {
       case 'anchorDistance': return this.#compareNullableNumbers(left.anchorDistance, right.anchorDistance);
       case 'hasOwnScene': return Number(left.hasOwnScene) - Number(right.hasOwnScene);
       case 'isInCurrentScene': return Number(left.isInCurrentScene) - Number(right.isInCurrentScene);
+      case 'chatCount': return (this.#chatCounts.get(left.node.id) ?? 0) - (this.#chatCounts.get(right.node.id) ?? 0);
+      case 'updatedAt': return this.#compareNullableNumbers(
+        left.node.updatedAt ? new Date(left.node.updatedAt).getTime() : null,
+        right.node.updatedAt ? new Date(right.node.updatedAt).getTime() : null,
+      );
       case 'status': return this.#statusRank(left) - this.#statusRank(right);
       default: return this.#compareDefault(left, right);
     }
@@ -761,7 +792,11 @@ export class NodeManager {
       : this.#filteredNodesInfo;
 
     const text = source
-      .map(info => `${info.node.title}\t${info.node.id}`)
+      .map(info => {
+        const chatCount = this.#chatCounts.get(info.node.id) ?? 0;
+        const edited = info.node.updatedAt ? new Date(info.node.updatedAt).toLocaleDateString() : '';
+        return `${info.node.title}\t${info.node.id}\t${chatCount}\t${edited}`;
+      })
       .join('\n');
 
     const btn = this.#dialog?.querySelector('.btn-copy-list') as HTMLButtonElement | null;

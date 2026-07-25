@@ -181,6 +181,15 @@ export function scrollToBottom(container: HTMLElement): void {
 // MARKDOWN
 // ============================================================================
 
+/**
+ * Math spans in every delimiter convention models produce: `$$...$$`, `\[...\]`,
+ * `\(...\)`, `$...$`, and bare `\begin{env}...\end{env}` blocks. The inline `$`
+ * form requires a non-space opening and refuses a backtick or digit neighbour so
+ * inline code and currency amounts are not mistaken for math.
+ */
+const MATH_SPAN_PATTERN =
+  /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\\begin\{[a-zA-Z*]+\}[\s\S]*?\\end\{[a-zA-Z*]+\}|(?<!`)\$(?!\s)[^$\n]*?\$(?![`\d])/g;
+
 /** Convert markdown text to HTML */
 export function renderMarkdown(text: string): string {
   let html = text;
@@ -190,6 +199,21 @@ export function renderMarkdown(text: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+
+  // Fenced math blocks (```latex / ```math / ```tex) become display math
+  html = html.replace(
+    /```(?:math|latex|tex)[^\S\n]*\n([\s\S]*?)```/gi,
+    (_, body: string) => `\n$$\n${body.trim()}\n$$\n`
+  );
+
+  // Lift math out of the markdown pipeline: the transforms below inject <p>,
+  // <br>, <em> and <li> into the text, which would split a multi-line $$...$$
+  // block across elements and stop MathJax from pairing its delimiters.
+  const mathSpans: string[] = [];
+  html = html.replace(MATH_SPAN_PATTERN, match => {
+    mathSpans.push(match);
+    return `\u0000MATH${mathSpans.length - 1}\u0000`;
+  });
 
   // Code blocks (``` ... ```)
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
@@ -232,6 +256,9 @@ export function renderMarkdown(text: string): string {
 
   // Clean up empty paragraphs
   html = html.replace(/<p>\s*<\/p>/g, '');
+
+  // Restore math spans verbatim so MathJax can typeset them
+  html = html.replace(/\u0000MATH(\d+)\u0000/g, (_, index: string) => mathSpans[Number(index)] ?? '');
 
   return html;
 }

@@ -12,7 +12,7 @@ import { isEditMode } from '../../storage/app-mode';
 import { StyleGenerator } from '../../styles/style-generator';
 import { getSetting } from '../../config';
 import { isDebug } from '../../config/debug-flags';
-import { circularSpreadSafe } from '../utils/pure/position-expansion';
+import { circularSpreadSafe, placeBeyondRing } from '../utils/pure/position-expansion';
 import { computeTagStylePlan, type TagStyleParams, type TagStylePlan } from './tag-style-plan';
 
 /**
@@ -371,13 +371,15 @@ export class SceneNodeOps {
     const existingPositions = this.#cy.nodes().map(n => n.position());
     const positions = circularSpreadSafe(refPos, 1, existingPositions, minRadius);
 
-    if (positions.length === 0) {
-      console.warn(`No valid position found for including node ${nodeId}`);
-      return 0;
-    }
+    // circularSpreadSafe returns [] when no free angular sector exists around the
+    // reference — the common case for a central node ringed by its children.
+    // Fall back to placing the node just beyond the ring so the include never
+    // silently aborts (mirrors the create-connected path's own fallback).
+    const includePosition = positions[0]
+      ?? placeBeyondRing(refPos, existingPositions, minRadius);
 
     // Include the node in scene (handles design, stylesheet, cy.add)
-    await this.includeNode(nodeId, positions[0], design);
+    await this.includeNode(nodeId, includePosition, design);
 
     // Connect node to its placement reference. Reuse an existing graph edge
     // between the two endpoints if present; otherwise create a new one.

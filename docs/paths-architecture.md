@@ -1,13 +1,22 @@
 # Paths Feature Architecture
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-14  
-> **Authority:** Current model for navigation history, saved paths, and the path panel.  
-> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Scene transitions](scene-transitions.md)
+> **Last reviewed:** 2026-07-25  
+> **Authority:** Current model for navigation history, saved paths, and the path panel.
+> Sections 1–13 describe shipped behaviour. Sections 14–19 are the **approved specification**
+> for navigation modes, the path manager, and the full-path generator — not yet implemented.  
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md),
+> [Restrictive regimes](architecture.md#310-restrictive-regimes-cross-layer),
+> [Scene transitions](scene-transitions.md)
 
 ## 1. Overview
 
 The Paths feature allows users to track, save, and navigate through sequences of scenes. It provides a breadcrumb-style panel showing the current navigation journey and enables saving meaningful paths for later use.
+
+Paths serve two purposes. The first is **replay** — a graph is non-linear, but revision,
+presentation, and storytelling sometimes need a line through it. The second is **audit** —
+a generated path that visits every scene in the workspace lets an author verify that no scene
+has been forgotten, which matters for large authored graphs.
 
 ---
 
@@ -426,3 +435,337 @@ Forward (]):                 History: [A, B, C, D], current = C
 Navigate to E:               History: [A, B, E], current = E
                              (C and D dropped — forward history cleared)
 ```
+
+---
+
+# Part II — Navigation Modes, Path Manager, Full Path Generator
+
+> **Status:** Approved specification, not yet implemented.  
+> **Agreed:** 2026-07-25.
+
+## 14. Navigation Modes
+
+### 14.1 The Problem
+
+Sections 1–13 describe a single `NavigationHistory` serving two incompatible jobs. Loading a
+saved path replaces the history array, but the array then keeps browser semantics: any graph
+navigation pushes onto it, truncates everything after the cursor, and (past the size cap)
+shifts entries off the front. A loaded path is therefore silently destructible — the user
+clicks one node halfway through a tour and the remainder is gone.
+
+The fix is to name the two jobs.
+
+### 14.2 The Two Modes
+
+| | **History mode** | **Path mode** |
+|---|---|---|
+| Purpose | Free travel; *makes* paths | Replay; *consumes* a path |
+| Sequence | Grows and truncates as you navigate | **Immutable** |
+| Graph navigation | Normal | Blocked (§14.4) |
+| Breadcrumbs | Plain labels | **Numbered** (`12. Wave function`) |
+| Path button | Normal | **Accent colour (active)** |
+| Backing structure | `NavigationHistory` | `PathCursor` |
+
+History mode is the default and is unchanged from Part I. Path mode is entered by loading or
+generating a path, and exited explicitly.
+
+**Rationale for immutability:** a path is an artefact. Editing it is a deliberate act performed
+in the Path Manager (§15), not a side effect of walking it.
+
+**Rationale for blocking navigation rather than tracking "off-path" excursions:** an off-path
+state requires the user to remember which mode they are in and where they strayed. Blocking
+makes the mode total and self-evident — in path mode there is exactly one way to move.
+
+### 14.3 Mode Transitions
+
+```
+                  load / generate a path
+   History mode ─────────────────────────▶ Path mode
+        ▲                                      │
+        └──────────────────────────────────────┘
+                  exit (explicit)
+           path becomes the new history,
+           cursor position preserved
+```
+
+On exit, the path's scenes are loaded into `NavigationHistory` with the cursor where the user
+left off, and normal browser semantics resume. The saved `Path` record is never modified by
+either transition — the store is written only by the Path Manager.
+
+**Entering** path mode: loading a path from the manager, or generating one and choosing to walk it.
+**Exiting** path mode: the exit control on the panel, or confirming the Home button prompt (§15.4).
+
+### 14.4 Navigation Blocking — Enforcement Model
+
+Follows the enforcement rule in
+[architecture.md §3.10](architecture.md#310-restrictive-regimes-cross-layer): the consequence of
+a mode belongs to the owner of the mode, expressed through EventBus, never through a
+cross-feature import (§4.2 of the architecture).
+
+```
+Path (feature, owns the mode)
+   │
+   │ eventBus.emit('pathModeChanged', { active, pathId, name })
+   │
+   ├──▶ Transition ....... sets #pathModeActive; goToSceneByNode() early-returns
+   │                       (ENFORCEMENT — single funnel, single guard)
+   │
+   ├──▶ PathPanel ........ numbering, exit control, Path button active state
+   ├──▶ ContextMenu ...... greys out "Go to node's scene (G)"
+   └──▶ NodeManager ...... greys out open-scene action
+                           (AFFORDANCES — honesty, not enforcement)
+```
+
+**Why the guard sits in `Transition.goToSceneByNode()`:** it is the single funnel for all
+graph-initiated navigation, and it already hosts a mode guard of exactly this shape
+(`if (!targetScene && !isEditMode()) return;`). `goToSceneFromPath()` is deliberately *not*
+guarded — that is the path's own movement.
+
+**Rejected alternatives:**
+- *Guard at each UI call site.* The invariant "path mode ⟹ navigation blocked" would live in five
+  places and drift as entry points are added.
+- *UI acquires a lock on Transition.* The lock would be applied by the panel rather than by the
+  mode's owner, so entering path mode by any other route would silently skip it.
+
+**Known bypass:** Node Manager opens scenes via `closeScene()` + `openScene()` rather than the
+funnel. `openScene` cannot be locked — the panel's own Home button uses it. Node Manager is
+therefore handled as an affordance (greyed action), which is acceptable because it is an
+explicit UI offer rather than a gesture.
+
+### 14.5 Affordance Table
+
+| Entry point | Behaviour in path mode |
+|---|---|
+| Double-tap node | Silent no-op |
+| Context menu → "Go to node's scene (G)" | Greyed out |
+| Keyboard `G` / fade navigation key | Silent no-op |
+| Node Manager → open scene | Greyed out |
+| `[` `]`, `«` `»`, breadcrumb clicks | Work normally |
+| Home | Works, after "Exit path mode?" confirmation |
+
+**Principle:** explicit offers (menus, buttons) must tell the truth and are greyed out. Gestures
+(double-tap, shortcut keys) make no promise and may no-op silently. The mode is signalled
+persistently by the numbered breadcrumbs and the accent-coloured Path button, so a silent
+no-op reads as "I am touring" rather than "the app froze".
+
+### 14.6 Structures
+
+`NavigationHistory` (`features/path/history.ts`) — unchanged except the size cap (§18.1).
+Serves history mode only.
+
+`PathCursor` (`features/path/path-cursor.ts`) — **new**, pure. Holds a readonly `SceneId[]` and
+an index. Exposes `back`, `forward`, `first`, `last`, `goToIndex`, `current`, `indexOf`,
+`canGoBack`, `canGoForward`. Has no mutation path for the sequence.
+
+`Path` (`features/path/path.ts`) — owns `#mode`, delegates to whichever structure is active.
+**The existing public API keeps its exact signatures** (`getHistory`, `getCurrentIndex`, `back`,
+`forward`, `canGoBack`, `canGoForward`, `goToFirst`, `goToLast`, `current`), so the panel's
+rendering and the keyboard handler need no changes. Adds `getMode()`, `enterPathMode(path)`,
+`exitPathMode()`, and the persistence methods in §15.2.
+
+`scene:changed` handling branches by mode: history mode pushes; path mode moves the cursor if
+the scene is in the path and otherwise ignores the event (which should not occur, since
+graph navigation is blocked).
+
+## 15. Path Manager
+
+### 15.1 Consolidation
+
+The panel's `Save` and `Load` buttons and the hidden right-click "Edit path…" are replaced by a
+single **Path** button opening a Path Manager — the same shape as `edge-type-manager`,
+`theme-editor`, `node-manager`, and `background-editor`.
+
+Panel left group becomes: **Home** + **Path**.
+
+This also removes a real defect: "Edit path…" is currently disabled when no paths exist, so it
+cannot bootstrap the first path.
+
+Manager contents:
+- List of saved paths (name, scene count, missing-scene count) → **Load** / **Edit** / **Delete**
+- **Save current history as path…** (history mode only)
+- **Generate ▸** — currently one entry, `Full path` (§16); the extension point for future
+  generators and generator parameters
+
+`PathEditor` (rename, reorder, remove scenes, delete) is retained and reached from the list.
+
+### 15.2 Removing the Storage Debt
+
+[architecture.md §3.8](architecture.md) flags `path-picker.ts` and `path-panel.ts` as technical
+debt for writing `PathStore` directly. This work would otherwise add to that debt, so it pays it
+off instead: path persistence moves behind the feature.
+
+```
+Before:  PathPanel / PathPicker ──▶ pathStore          (UI → Storage, flagged debt)
+After:   PathManager ──▶ Path (feature) ──▶ pathStore  (UI → Features → Storage)
+```
+
+`Path` gains `listSaved()`, `saveHistoryAs(name)`, `updateSaved(path)`, `deleteSaved(pathId)`.
+Features → Storage is permitted, and saved paths are already a named explicit storage workflow
+(architecture §1, §5.1b).
+
+### 15.3 Stale Paths
+
+Scene deletion leaves dangling `SceneId`s in saved paths. Current behaviour already tolerates
+this (the breadcrumb renders `Unknown`). Generated full paths make staleness routine, since the
+graph keeps growing after generation.
+
+Policy: **regenerate, do not repair.** The manager displays a missing-scene count per path so a
+stale path is visible; the remedy is to generate a fresh one.
+
+### 15.4 Home Button
+
+Remains enabled in path mode. Pressing it prompts `Exit path mode?` (native `confirm()`, matching
+the established pattern across the codebase). On confirmation: exit path mode, then reset history
+to the anchor scene and navigate there. On cancellation: nothing happens.
+
+## 16. Full Path Generator
+
+### 16.1 Purpose
+
+Produce a path that visits **every scene in the workspace exactly once**, so an author can walk
+the whole collection and verify nothing was missed.
+
+### 16.2 Graph, Not Scenes
+
+The traversal runs over the **graph** (nodes and edges), not over scene membership. Per the
+architecture lexicon, a scene is a *curated view* — it need not contain every edge that exists
+between its nodes, so scene membership is not a sound model of connectivity. Scenes are also
+reachable outside transitions (Node Manager), so scene adjacency is not the only navigation
+relation.
+
+### 16.3 Algorithm
+
+```
+1. root = anchor node
+        → else central node of the current scene
+        → else oldest node by createdAt
+2. Depth-first traversal from root:
+        - outgoing edges first (sourceId → targetId), then incoming
+        - neighbours ordered by node createdAt ascending
+        - each node visited once
+3. When the component is exhausted, restart at the oldest unvisited node.
+   Repeat until every node is visited (covers disconnected components).
+4. Map the node sequence to scenes, dropping nodes that have no scene.
+   A node without a scene is a legitimate leaf, not an omission.
+5. Sweep graphStore.scenes and append any scene not already present
+   (defends against scenes whose central node is missing or unreachable).
+```
+
+**Postcondition:** `result.length === graphStore.scenes.length`. Completeness is guaranteed by
+step 5 by construction, not by trusting the traversal to be exhaustive. This is what makes the
+result usable as an audit instrument.
+
+**On ordering:** ordering is a readability concern, not a correctness one. Where several orders
+are defensible, one is chosen and applied consistently. Node `createdAt` is used rather than edge
+`createdAt` because every node carries one.
+
+### 16.4 No Transition Changes Required
+
+`goToSceneFromPath()` already routes correctly for arbitrary scene pairs: if the target's central
+node is *visible* in the current scene it morphs, otherwise it falls back to close → open. A
+generated path may contain any pair of consecutive scenes; both cases are already handled.
+
+### 16.5 Placement
+
+`features/path/full-path.ts` — a feature-owned pure utility, mirroring `scene/traversal.ts`.
+Signature:
+
+```typescript
+generateFullPath(
+  nodes: Node[],
+  edges: Edge[],
+  scenes: Scene[],
+  rootNodeId: NodeId | null
+): SceneId[]
+```
+
+No `cy`, no store imports — pure and directly testable. The `Path` feature supplies the arguments
+from `graphStore`.
+
+## 17. Persisting Path Mode
+
+Path mode survives reload. `AppState` (`knogra.state`) gains:
+
+```typescript
+pathId?: PathId;       // Which path is being walked (absent = history mode)
+pathIndex?: number;    // Cursor position within it
+```
+
+On startup, if `pathId` is present: look up the path; if it exists and the scene at `pathIndex`
+still exists, re-enter path mode at that position. If either check fails, clear the fields and
+start in history mode. **Failure is silent** — a missing path is not an error worth interrupting
+startup for.
+
+**Rationale:** an audit of a large workspace spans sessions, and losing your place at scene 87 of
+140 to a page refresh is a real cost. The risk of returning to a restrictive mode without
+remembering why is neutralised by the persistent mode signals (§14.2).
+
+Note that `Path` in `main-types.ts` already anticipated `pathId` in AppState (§3.3); it was never
+implemented.
+
+## 18. Known Issues This Work Must Fix
+
+### 18.1 History Size Cap
+
+`NavigationHistory` caps at 50 entries. `loadPath` bypasses the cap by assigning the array
+directly, but the next `push()` trims from the front and decrements the cursor — silently
+corrupting a long loaded path. A full path over a large workspace hits this immediately.
+
+Path mode is uncapped (a `PathCursor` never pushes). History mode keeps a cap, raised to 200.
+
+### 18.2 Breadcrumb Measurement Cost
+
+`PathPanel.#measureItemWidths()` runs on **every** render and, for **every** entry in the whole
+sequence, creates a DOM element, appends it, reads `offsetWidth` (forcing layout), and removes it
+— plus two linear `graphStore` scans to build the label. Invisible at 50 entries; at 300 it is
+~300 forced layouts and ~600 array scans per keypress.
+
+Fix: cache measured widths keyed by `SceneId`, invalidated on node rename. This is a prerequisite
+for raising the cap, not an optional optimisation.
+
+Numbering (§14.2) adds width per item and must be included in the measurement or the virtual
+window drifts.
+
+### 18.3 Panel File Size
+
+`path-panel.ts` is ~460 lines against the ~300 target (architecture §7.2). The virtual-window
+math (`#measureItemWidths`, `#calculateVisibleWindow`, `#findWindowStartFromEnd`,
+`#findWindowEndFromStart`, `#expandWindowGreedy`) is self-contained and extracts cleanly to
+`ui/panels/path-panel/breadcrumb-window.ts`.
+
+### 18.4 Breadcrumb Click Hack
+
+`PathPanel.#navigateToScene()` moves the cursor by calling
+`loadPath(getHistory(), sceneId)` — reloading the whole sequence to change an index. With a real
+cursor this becomes `goToIndex(i)` in both modes.
+
+## 19. Implementation Plan
+
+### Phase 7: Panel Foundations
+Independent of modes; fixes latent defects that path mode would otherwise expose.
+- [ ] Extract `ui/panels/path-panel/breadcrumb-window.ts` (§18.3)
+- [ ] Cache breadcrumb widths by `SceneId` (§18.2)
+- [ ] Raise history cap to 200 (§18.1)
+
+### Phase 8: Navigation Modes
+- [ ] `features/path/path-cursor.ts` — pure cursor (§14.6)
+- [ ] Two-mode `Path` feature; existing public API signatures unchanged
+- [ ] `pathModeChanged` added to `EventMap`
+- [ ] `Transition` subscribes and guards `goToSceneByNode()` (§14.4)
+- [ ] Affordances: context menu, Node Manager (§14.5)
+- [ ] Panel: numbering, exit control, active-state Path button, `goToIndex` (§18.4)
+- [ ] Persist `pathId` / `pathIndex` in `AppState` with validated restore (§17)
+
+### Phase 9: Path Manager and Generator
+- [ ] Move path persistence behind the `Path` feature (§15.2)
+- [ ] `ui/components/path-manager.ts` replaces `path-picker.ts` (§15.1)
+- [ ] Panel left group reduced to Home + Path
+- [ ] Home button confirmation (§15.4)
+- [ ] `features/path/full-path.ts` — pure generator (§16)
+- [ ] `Generate ▸ Full path` in the manager; missing-scene counts in the list (§15.3)
+
+### Documentation Follow-Up
+On completion: mark Part II sections as shipped, drop the *(planned)* markers from
+`architecture.md` §3.6 and §3.10, and clear the `path-picker.ts` / `path-panel.ts` debt markers
+in §3.8.
+

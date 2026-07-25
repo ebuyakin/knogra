@@ -142,9 +142,43 @@ function renderCentralNodeSection(node: Node): string {
 function renderSelectedNodesSection(selectedNodes: Node[], centralNodeId: NodeId): string {
   return renderTemplate(SYSTEM_PROMPT.selectedNodesTemplate, {
     selectedNodes: selectedNodes
-      .map(n => formatNodeForPrompt(n, { centralNodeId }))
-      .join('\n')
+      .map(n => formatSelectedNodeDetail(n, centralNodeId))
+      .join('\n\n')
   });
+}
+
+/**
+ * Selected nodes are the subject of the Node quick action, so they are rendered
+ * with their full authored content — title, tags, comment, equation, and any
+ * other properties — instead of the one-line list form used elsewhere.
+ */
+function formatSelectedNodeDetail(node: Node, centralNodeId: NodeId): string {
+  const lines: string[] = [`- **${node.title}**${node.id === centralNodeId ? ' (central node)' : ''}`];
+
+  if (node.tags && node.tags.length > 0) {
+    lines.push(`  - Tags: ${node.tags.join(', ')}`);
+  }
+
+  const comment = node.properties?.comment;
+  if (typeof comment === 'string' && comment.trim()) {
+    lines.push(`  - Comment: ${comment.trim()}`);
+  }
+
+  const equation = node.properties?.equation;
+  if (equation) {
+    lines.push(`  - Equation: ${String(equation)}`);
+  }
+
+  const otherProperties = Object.entries(node.properties ?? {})
+    .filter(([key]) => key !== 'equation' && key !== 'comment')
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ');
+
+  if (otherProperties) {
+    lines.push(`  - Other properties: ${otherProperties}`);
+  }
+
+  return lines.join('\n');
 }
 
 function renderConnectedConceptsSection(
@@ -155,11 +189,11 @@ function renderConnectedConceptsSection(
   const data: Record<string, string> = {};
 
   if (parents.length > 0) {
-    data.parents = parents.map(n => formatNodeForPrompt(n, { sceneNodeIds })).join('\n');
+    data.parents = parents.map(n => formatNodeForPrompt(n, { sceneNodeIds, includeComment: true })).join('\n');
   }
 
   if (children.length > 0) {
-    data.children = children.map(n => formatNodeForPrompt(n, { sceneNodeIds })).join('\n');
+    data.children = children.map(n => formatNodeForPrompt(n, { sceneNodeIds, includeComment: true })).join('\n');
   }
 
   return renderTemplate(SYSTEM_PROMPT.connectedConceptsTemplate, data);

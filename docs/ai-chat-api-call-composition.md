@@ -1,7 +1,7 @@
 # AI Chat API Call Composition
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-16  
+> **Last reviewed:** 2026-07-25  
 > **Authority:** Current implementation contract for AI chat API calls and prompt/context assembly. Use with [AI assistant vision](ai-assistant-vision.md) and [Chat panel architecture](chat-panel-architecture.md).  
 
 ## Purpose
@@ -62,7 +62,7 @@ Scene membership and graph connection are different signals. A node may be direc
 
 Answer the user's latest request directly. Treat scene context strength as a weighting signal: the more detailed, coherent, and relationship-rich the current scene is, the more it should shape your emphasis. If the scene is empty, sparse, weakly connected, or mixed, do not be confused and do not overfit; rely more on the central node and full graph.
 
-When helping with equations, write equations in LaTeX syntax, for example \frac{a}{b}, \alpha, x^{2}; the app renders equations with MathJax.
+When helping with equations, write mathematics in LaTeX, never in Unicode math characters such as ψ, ħ, ∇, ×, or ∑. Every mathematical expression in your response must be wrapped in delimiters, down to a single symbol: $...$ for inline math, and $$...$$ on their own lines for a displayed equation. A bare LaTeX command outside delimiters, such as \frac{a}{b} written directly into a sentence, is displayed to the user as raw source and is a failure. Delimit every one.
 
 ## Scene Central Node
 The main topic of this scene. The scene exists to explore, study, question, or develop this node through the visible nodes and edges.
@@ -73,7 +73,7 @@ The main topic of this scene. The scene exists to explore, study, question, or d
 {{#if properties}}**Other properties:** {{properties}}{{/if}}
 
 {{#if selectedNodes}}## Currently Selected Node(s)
-Use these node(s) as the requested subject when the latest request uses the Node quick action. This section is routing context; do not mention selection state in the response unless the user asks about it.
+Use these node(s) as the requested subject when the latest request uses the Node quick action. Each entry lists the node's own content: title, tags, comment, equation, and any other saved properties. Interpret a node from all of these together — the comment is the user's own clarification, disambiguation, or working definition and takes precedence over a generic reading of the title, and the equation is the precise form the user means. This section is routing context; do not mention selection state in the response unless the user asks about it.
 
 {{selectedNodes}}{{/if}}
 
@@ -136,7 +136,7 @@ Action rules:
 - Use `include_existing` to suggest an existing Full Graph node that should be added to the current scene.
 - For `include_existing`, choose only nodes listed under "Full Graph nodes not included in the current scene; available to include" and use the exact listed title.
 - Only suggest actions when relevant. Prioritize being a helpful collaborator first.
-- When a node has an equation, write it in LaTeX syntax. Never use Unicode math symbols or informal notation.
+- The `equation` property is stored directly as the node's equation and is not part of the conversational response, so the delimiter rule above does not apply to it. The value must be a MathJax-compatible LaTeX body: no dollar or bracket delimiters, no code fences, no explanations, no Unicode math symbols, and no alternatives. Because the value sits inside JSON, escape every command backslash as a double backslash: write "\\frac{a}{b}", never "\frac{a}{b}". The parsed value must contain ordinary LaTeX commands, not control characters or Unicode lookalikes.
 
 ======================= END SYSTEM MESSAGE =======================
 ````
@@ -172,7 +172,7 @@ If no custom instructions are configured, this section is omitted.
 This section explains fields in the prompt. It is documentation for developers, not system-message text.
 
 - **Central node** means the node that owns the current scene and the node whose chat conversation is active.
-- **Currently selected node(s)** are the user's runtime Cytoscape selection inside the current scene. They are not persisted and can differ from the central node.
+- **Currently selected node(s)** are the user's runtime Cytoscape selection inside the current scene. They are not persisted and can differ from the central node. They are rendered in full authored detail — title, tags, comment, equation, other properties — because they are the subject of the Node quick action; every other node list uses the compact one-line form.
 - **Other properties** are arbitrary saved properties on the central node, except `equation`, which is shown separately because equations have special rendering and prompt rules.
 - **Scene note** comes from `Scene.description` if the scene record has a description. Many scenes may not have one.
 - **Scene context strength** is a coarse label based on scene node count and scene edge density.
@@ -181,6 +181,18 @@ This section explains fields in the prompt. It is documentation for developers, 
 - **Directly connected to central node** lists direct parents and children of the central node in the full graph. They are not the same as scene nodes.
 - **Full Graph nodes already included in the current scene** and **Full Graph nodes not included in the current scene** split the full graph by scene membership. They are operational lists for graph actions, especially duplicate avoidance and include-existing suggestions.
 - The system lists all concepts that are in the current scene, but caps the out-of-scene list at 200 concepts.
+
+Node content is included per section, by relevance and token cost:
+
+| Section | Title | Tags | Comment | Equation |
+|---|---|---|---|---|
+| Scene Central Node | yes | yes | yes | yes |
+| Currently Selected Node(s) | yes | yes | yes | yes |
+| Current Scene | yes | no | yes (except the central node, listed above) | yes |
+| Directly Connected To Central Node | yes | no | yes | yes |
+| Full Graph rosters | yes | no | no | yes |
+
+The Full Graph rosters stay title-only by design: they are operational lists for duplicate avoidance and include-existing choices, and every node close enough to need disambiguation — central, selected, in-scene, or directly connected — already carries its comment in an earlier section. Tags are limited to the central and selected nodes, where the request is actually about that node.
 
 Scene inclusion and direct graph connection are independent axes. A node can be directly connected to the central node and included in the scene, directly connected but outside the scene, not directly connected but included in the scene, or neither. The prompt describes the axes rather than listing all four categories in the system message.
 
@@ -198,14 +210,16 @@ For quick actions, the visible chat text can differ from the hidden prompt sent 
 
 | Command | Prompt sent to LLM | Text shown/stored in chat |
 |---|---|---|
-| Scene | See [Canonical Scene Message](#canonical-scene-message). | `Discuss the current scene.` |
-| Node | See [Canonical Node Message](#canonical-node-message). | `Explain the selected node(s).` |
+| Scene | See [Canonical Scene Message](#canonical-scene-message). | `Discuss “<central node title>” and the full content of the current scene.` (falls back to `Discuss the current scene.` when the central node has no title) |
+| Node | See [Canonical Node Message](#canonical-node-message). | `Explain the selected node(s): “<selected titles>”.`, or `Explain “<central node title>”.` when nothing is selected |
 | Suggest | `Suggest new concepts related to the scene central node that are NOT already in my knowledge graph. Only suggest brand new concepts to create — do not suggest including existing nodes. Return each suggested new concept as a create_connected action so it appears on the node shelf.` | `Suggest new concepts to add to my knowledge graph.` |
 | Connect | `Look at concepts in my knowledge graph that are NOT in the current scene. Identify ones that are relevant to the scene central node and should be included in this scene. Only suggest existing nodes to include — do not create new ones. Return each suggested existing concept as an include_existing action so it appears on the node shelf.` | `Find existing concepts that belong in this scene.` |
 
+Scene and Node display text is composed at click time in `chat-panel.ts` from the live selection and central node; the static `displayText` in `prompts.ts` is only the fallback. The prompt and context sent to the model are unaffected.
+
 This means Suggest and Connect have explicit command intent in the user message. The system prompt should improve their relevance, but should not change their action type.
 
-Scene and Node provide two different explanatory shortcuts: Scene asks about the scene-level construction around the central node, while Node asks about the currently selected node(s) in the context of that central node and scene.
+Scene and Node provide two different explanatory shortcuts: Scene asks about the scene-level construction around the central node, while Node asks strictly about the requested node(s) as concepts, with the scene used only as invisible calibration.
 
 ### Canonical Scene Message
 
@@ -238,13 +252,19 @@ The text between the boundary lines is sent as the latest user message for the N
 ```md
 ======================= BEGIN NODE MESSAGE =======================
 
-Explain the node or nodes identified for this request.
+Explain the requested node or nodes: the currently selected node(s), or the scene central node when nothing is selected.
 
-Concentrate on what the requested node(s) mean, why they matter, and how they help illuminate the subject of this scene. Use the main topic of the scene, visible scene nodes, and scene edges as context for the explanation. Start with the concept itself, not with interface status or a description of where the node appears.
+This is a request about a concept, not about the workspace. Treat it as if the user pointed at this idea and said "tell me about this". Everything you write should be about the idea itself: what it means, why it matters, what it rests on, what follows from it, the distinction that is easy to miss, the confusion that is common, the reason a careful reader would find it worth knowing.
 
-If the requested node is also the main topic of the scene, explain the topic directly, using the scene contents to infer what kind of explanation the user is looking for. If multiple nodes are requested, explain them together and compare their roles in the scene. If no node is identified for this request, explain the main topic of the scene in its scene context.
+Read the requested node from all of its own content, not just its title. The comment is the user's own clarification, disambiguation, or working definition, and it overrides any generic reading of the title. The equation states the precise form the user means, so explain that form rather than a textbook variant of it. The tags hint at the domain, role, or level. When the title alone is ambiguous, let the comment, equation, and tags decide which sense to explain.
 
-Avoid turning this into a full scene review except where scene context clarifies the requested node(s). Do not propose graph actions or include a JSON action block unless additions or changes would be genuinely useful for this node-level explanation.
+Use the surrounding material only to calibrate — the scene's main topic tells you which sense of the concept is meant, and the neighbouring concepts tell you the level, vocabulary, and angle the user is already working at. That calibration must stay invisible. Do not describe, summarize, assess, or comment on the scene, its composition, its structure, or its completeness. Do not explain how the concept fits the scene, why it sits where it does, what is missing around it, or how it relates to nodes the user did not ask about. Do not use workspace vocabulary — scene, node, edge, graph, connected, included. If a sentence is about the user's map rather than about the idea, remove it.
+
+If several nodes are requested, explain each and then what genuinely separates or joins them as ideas. If the requested node is the scene's main topic, explain that concept directly, using the depth of the surrounding material to judge how basic or advanced the explanation should be.
+
+Correct an error only inside the requested node's own content — a wrong equation, an inverted definition, a misattributed result — and state it plainly as a fact about the subject. Never invent criticism, and say nothing about correctness when nothing is wrong.
+
+Do not propose graph actions and do not include a JSON action block in this response.
 
 ======================== END NODE MESSAGE ========================
 ```
@@ -259,6 +279,20 @@ Additional instructions for this shortcut:
 ```
 
 The configured additions are intentionally additive. They should bias or narrow the shortcut behavior without replacing the base command intent.
+
+## Math Rendering Contract
+
+Math reaches the user through two pipelines with opposite formats.
+
+**Chat prose** is rendered by `renderMarkdown()` and then typeset by MathJax in `chat-message-renderer.ts`. MathJax accepts `$...$`, `\(...\)`, `$$...$$`, `\[...\]`, and bare `\begin{env}...\end{env}` blocks, so no single model convention is privileged. Because the markdown pass injects `<p>`, `<br>`, `<em>`, and `<li>` into the text, math spans are lifted into placeholders before those transforms and restored afterwards; otherwise a multi-line `$$...$$` block is split across elements and never typesets. Fenced ` ```latex `, ` ```math `, and ` ```tex ` blocks are converted to display math.
+
+**Node equations** (`properties.equation`) are compiled by `tex2svgPromise()` in the equation node designs, which treats the string as TeX source. Delimiters there are literal input and must not survive, so `latex-sanitizer.ts` strips them and repairs control characters left by JSON escape collisions (`\frac` parsing into a formfeed, `\nabla` into a newline). Provider adapters escape invalid `\u` sequences before `JSON.parse` so commands such as `\upsilon` do not abort the whole action block.
+
+The contract for a stored equation value is defined once as `NODE_EQUATION_VALUE_RULES` in `prompts.ts` and reused verbatim by the chat action schema and by `EQUATION_SYSTEM_PROMPT`.
+
+### Equation Generation Is A Separate Call
+
+The node editor's equation generator (`equation-generator.ts`) does not use any of the chat composition above. It sends its own `EQUATION_SYSTEM_PROMPT` with a single user message containing the node title, the current equation, and the user's description — no graph, no scene, no conversation history — through a fresh provider instance. Its result returns to the node editor and is never written to the chat store, so it cannot enter a later chat request. The delimiter rule for chat prose therefore never reaches that call.
 
 ## Assistant Messages
 
@@ -310,6 +344,7 @@ This matters because `ChatSession` loads the node's full timeline into memory. F
 | `src/ai/prompts.ts` | Quick-action prompts, system prompt templates, action schema. |
 | `src/ai/context-builder.ts` | Builds the dynamic system prompt from graph, scene, and settings state. |
 | `src/ai/chat-session.ts` | Loads per-node conversation, appends messages, builds context, sends provider calls. |
+| `src/ai/latex-sanitizer.ts` | Repairs LaTeX damaged by JSON escape collisions and normalizes equation values. |
 | `src/ai/providers/gemini-adapter.ts` | Maps provider call shape to Gemini and parses response actions. |
 | `src/ai/providers/openrouter-adapter.ts` | Maps provider call shape to OpenRouter and parses response actions. |
 | `src/ai/node-shelf.ts` | Filters and stores actionable node suggestions, then places accepted suggestions. |

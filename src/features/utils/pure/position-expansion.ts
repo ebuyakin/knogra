@@ -218,3 +218,43 @@ export function circularSpreadSafe(
 
   return positions;
 }
+
+/**
+ * Fallback placement for a single node when {@link circularSpreadSafe} finds no
+ * usable free sector — e.g. a fully-ringed central node whose children block
+ * nearly every angle. Instead of aborting, aim at the least-crowded direction
+ * (the largest gap, even if narrower than the normal threshold) and place the
+ * node just beyond the outermost existing neighbour so it clears the ring.
+ */
+export function placeBeyondRing(
+  center: Position,
+  existingPositions: Position[],
+  minRadius: number,
+  nodeSize: number = 100
+): Position {
+  // Least-crowded direction: largest gap in the 360° obstacle map.
+  const blockedAngles = new Array(360).fill(false);
+  for (const obstaclePos of existingPositions) {
+    const blockage = calculateAngularBlockage(center, obstaclePos, nodeSize);
+    if (blockage) {
+      markAnglesAsBlocked(blockedAngles, blockage.startAngle, blockage.endAngle);
+    }
+  }
+  const freeSector = findLargestFreeSector(blockedAngles);
+  const angleDeg = freeSector ? freeSector.start + freeSector.width / 2 : 0;
+  const angleRad = (angleDeg * Math.PI) / 180;
+
+  // Radius that clears the outermost neighbour by roughly one node width, so the
+  // new node lands in open space beyond the ring rather than on top of it.
+  let maxDist = minRadius;
+  for (const p of existingPositions) {
+    const dist = Math.hypot(p.x - center.x, p.y - center.y);
+    if (dist > maxDist) maxDist = dist;
+  }
+  const radius = maxDist + nodeSize;
+
+  return {
+    x: center.x + radius * Math.cos(angleRad),
+    y: center.y + radius * Math.sin(angleRad)
+  };
+}

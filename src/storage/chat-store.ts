@@ -172,6 +172,15 @@ class ChatDataStore {
     const conversations = await this.#db.table('conversations').toArray();
     return conversations.map(c => c.nodeId);
   }
+
+  /**
+   * Map of nodeId → message count, for nodes that have a conversation record.
+   * Used by the Node Manager's Chat column (count > 0 means a real chat exists).
+   */
+  async getConversationMessageCounts(): Promise<Map<NodeId, number>> {
+    const conversations: Conversation[] = await this.#db.table('conversations').toArray();
+    return new Map(conversations.map(c => [c.nodeId, c.messages.length]));
+  }
 }
 
 // Singleton instance

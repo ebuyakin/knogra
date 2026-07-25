@@ -137,6 +137,7 @@ th.col-connections .node-manager-th-content,
 th.col-anchor-distance .node-manager-th-content,
 th.col-own-scene .node-manager-th-content,
 th.col-in-scene .node-manager-th-content,
+th.col-chat .node-manager-th-content,
 th.col-status .node-manager-th-content {
   justify-content: center;
 }
@@ -191,6 +192,8 @@ td.col-node-id {
 .col-own-scene { width: 50px; text-align: center; }
 .col-status { width: 60px; text-align: center; }
 .col-in-scene { width: 50px; text-align: center; }
+.col-chat { width: 54px; text-align: center; }
+.col-edited { width: 96px; text-align: center; white-space: nowrap; color: var(--text-secondary, #8b949e); }
 
 /* Anchor marker */
 .anchor-marker {

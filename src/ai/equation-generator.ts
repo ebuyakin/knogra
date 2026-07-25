@@ -6,6 +6,8 @@
 import type { ProviderType } from '../core/main-types';
 import { getSetting } from '../config';
 import { createProvider } from './providers/provider';
+import { NODE_EQUATION_VALUE_RULES } from './prompts';
+import { repairLatexControlEscapes, stripMathDelimiters } from './latex-sanitizer';
 
 export interface EquationGenerationRequest {
   title: string;
@@ -40,11 +42,8 @@ If the description is ambiguous and several equations could match it, return:
 If the description does not appear to correspond to a meaningful equation, return:
 {"type":"clarification","message":"<briefly say that no suitable equation can be identified and ask the user to describe it more clearly>"}
 
-When returning an equation, the latex value must be a MathJax-compatible LaTeX body.
-Do not include dollar delimiters, explanations, Unicode math symbols, or multiple alternatives in the latex value.
+When returning an equation, the latex value is stored directly as the node's equation property. ${NODE_EQUATION_VALUE_RULES}
 Use standard LaTeX commands such as \\frac, \\sqrt, \\sum, \\int, \\partial, and \\nabla.
-Because the response is JSON, every LaTeX command backslash in the JSON string must be escaped as two backslashes: write "\\\\frac{a}{b}", never "\\frac{a}{b}".
-The parsed latex value must contain ordinary LaTeX commands for MathJax, not control characters or Unicode lookalikes.
 Prefer a canonical compact form unless the user's prompt requests a specific form.`;
 
 export async function generateEquationFromPrompt(request: EquationGenerationRequest): Promise<EquationGenerationResult> {
@@ -200,19 +199,6 @@ function extractLatexEquation(content: string): string {
   return containsEquationSyntax(equation) ? equation : '';
 }
 
-function repairLatexControlEscapes(text: string): string {
-  return text.replace(/[\b\t\n\f\r](?=[A-Za-z])/g, char => {
-    switch (char) {
-      case '\b': return '\\b';
-      case '\t': return '\\t';
-      case '\n': return '\\n';
-      case '\f': return '\\f';
-      case '\r': return '\\r';
-      default: return char;
-    }
-  });
-}
-
 function extractEquationFromJson(text: string): string {
   try {
     const parsed: unknown = JSON.parse(text);
@@ -225,15 +211,6 @@ function extractEquationFromJson(text: string): string {
   }
 
   return '';
-}
-
-function stripMathDelimiters(text: string): string {
-  let result = text.trim();
-  if (result.startsWith('$$') && result.endsWith('$$')) return result.slice(2, -2).trim();
-  if (result.startsWith('\\[') && result.endsWith('\\]')) return result.slice(2, -2).trim();
-  if (result.startsWith('\\(') && result.endsWith('\\)')) return result.slice(2, -2).trim();
-  if (result.startsWith('$') && result.endsWith('$')) return result.slice(1, -1).trim();
-  return result;
 }
 
 function stripWrappingQuotes(text: string): string {

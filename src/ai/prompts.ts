@@ -53,7 +53,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
     id: 'node',
     label: 'Node',
     displayText: 'Explain the selected node(s).',
-    prompt: 'Explain the node or nodes identified for this request.\n\nConcentrate on what the requested node(s) mean, why they matter, and how they help illuminate the subject of this scene. Use the main topic of the scene, visible scene nodes, and scene edges as context for the explanation. Start with the concept itself, not with interface status or a description of where the node appears.\n\nIf the requested node is also the main topic of the scene, explain the topic directly, using the scene contents to infer what kind of explanation the user is looking for. If multiple nodes are requested, explain them together and compare their roles in the scene. If no node is identified for this request, explain the main topic of the scene in its scene context.\n\nAim the explanation at what the user does not already have: the meaning and significance of the concept, the deeper reason it matters, its implications, distinctions that are easy to miss, or how it genuinely reshapes the surrounding topic, rather than a restatement of its title or its place in the scene. Speak about the concept directly, not as an item on the canvas. Where you are confident, flag a genuine problem — an incorrect equation or a relationship stated backwards — as an advisory correction phrased about the idea rather than the graph object; do not invent criticism, say nothing about correctness when nothing is wrong, and treat deliberate but loose connections as valid choices, not errors.\n\nAvoid turning this into a full scene review except where scene context clarifies the requested node(s). Do not propose graph actions or include a JSON action block unless additions or changes would be genuinely useful for this node-level explanation.'
+    prompt: 'Explain the requested node or nodes: the currently selected node(s), or the scene central node when nothing is selected.\n\nThis is a request about a concept, not about the workspace. Treat it as if the user pointed at this idea and said "tell me about this". Everything you write should be about the idea itself: what it means, why it matters, what it rests on, what follows from it, the distinction that is easy to miss, the confusion that is common, the reason a careful reader would find it worth knowing.\n\nRead the requested node from all of its own content, not just its title. The comment is the user\'s own clarification, disambiguation, or working definition, and it overrides any generic reading of the title. The equation states the precise form the user means, so explain that form rather than a textbook variant of it. The tags hint at the domain, role, or level. When the title alone is ambiguous, let the comment, equation, and tags decide which sense to explain.\n\nUse the surrounding material only to calibrate — the scene\'s main topic tells you which sense of the concept is meant, and the neighbouring concepts tell you the level, vocabulary, and angle the user is already working at. That calibration must stay invisible. Do not describe, summarize, assess, or comment on the scene, its composition, its structure, or its completeness. Do not explain how the concept fits the scene, why it sits where it does, what is missing around it, or how it relates to nodes the user did not ask about. Do not use workspace vocabulary — scene, node, edge, graph, connected, included. If a sentence is about the user\'s map rather than about the idea, remove it.\n\nIf several nodes are requested, explain each and then what genuinely separates or joins them as ideas. If the requested node is the scene\'s main topic, explain that concept directly, using the depth of the surrounding material to judge how basic or advanced the explanation should be.\n\nCorrect an error only inside the requested node\'s own content — a wrong equation, an inverted definition, a misattributed result — and state it plainly as a fact about the subject. Never invent criticism, and say nothing about correctness when nothing is wrong.\n\nDo not propose graph actions and do not include a JSON action block in this response.'
   },
   {
     id: 'suggest',
@@ -104,6 +104,14 @@ function getQuickActionInstructions(id: CustomizableQuickActionId): string {
 // ============================================================================
 
 /**
+ * Contract for a LaTeX value that is stored directly as a node's equation
+ * property. Node designs compile it with `tex2svgPromise`, which treats the
+ * string as TeX source, so delimiters are literal input rather than markers.
+ * Shared verbatim by the chat action schema and the equation-generator prompt.
+ */
+export const NODE_EQUATION_VALUE_RULES = `The value must be a MathJax-compatible LaTeX body: no dollar or bracket delimiters, no code fences, no explanations, no Unicode math symbols, and no alternatives. Because the value sits inside JSON, escape every command backslash as a double backslash: write "\\\\frac{a}{b}", never "\\frac{a}{b}". The parsed value must contain ordinary LaTeX commands, not control characters or Unicode lookalikes.`;
+
+/**
  * System prompt configuration
  * Uses {{placeholder}} syntax for dynamic values
  */
@@ -123,7 +131,7 @@ Scene membership and graph connection are different signals. A node may be direc
 
 Answer the user's latest request directly. Treat scene context strength as a weighting signal: the more detailed, coherent, and relationship-rich the current scene is, the more it should shape your emphasis. If the scene is empty, sparse, weakly connected, or mixed, do not be confused and do not overfit; rely more on the central node and full graph.
 
-When helping with equations, write equations in LaTeX syntax, for example \\frac{a}{b}, \\alpha, x^{2}; the app renders equations with MathJax.`,
+When helping with equations, write mathematics in LaTeX, never in Unicode math characters such as ψ, ħ, ∇, ×, or ∑. Every mathematical expression in your response must be wrapped in delimiters, down to a single symbol: $...$ for inline math, and $$...$$ on their own lines for a displayed equation. A bare LaTeX command outside delimiters, such as \\frac{a}{b} written directly into a sentence, is displayed to the user as raw source and is a failure. Delimit every one.`,
 
   /**
    * Template for central node section
@@ -143,7 +151,7 @@ The main topic of this scene. The scene exists to explore, study, question, or d
    * Placeholders: {{selectedNodes}}
    */
   selectedNodesTemplate: `## Currently Selected Node(s)
-Use these node(s) as the requested subject when the latest request uses the Node quick action. This section is routing context; do not mention selection state in the response unless the user asks about it.
+Use these node(s) as the requested subject when the latest request uses the Node quick action. Each entry lists the node's own content: title, tags, comment, equation, and any other saved properties. Interpret a node from all of these together — the comment is the user's own clarification, disambiguation, or working definition and takes precedence over a generic reading of the title, and the equation is the precise form the user means. This section is routing context; do not mention selection state in the response unless the user asks about it.
 
 {{selectedNodes}}`,
 
@@ -200,7 +208,7 @@ When suggesting actions for the knowledge graph, include them in a JSON code blo
     "type": "create_connected",
     "title": "New Concept Name",
     "connectionType": "child",
-    "properties": { "equation": "x = y^{2}" },  // Must be valid LaTeX
+    "properties": { "equation": "x = y^{2}" },
     "reason": "Brief explanation"
   },
   {
@@ -224,7 +232,7 @@ IMPORTANT:
 - Use \`include_existing\` to suggest an existing Full Graph node that should be added to the current scene.
 - For \`include_existing\`, choose only nodes listed under "Full Graph nodes not included in the current scene; available to include" and use the exact listed title.
 - Only suggest actions when relevant. Prioritize being a helpful collaborator first.
-- When a node has an equation, write it in LaTeX syntax. Never use Unicode math symbols or informal notation.`,
+- The \`equation\` property is stored directly as the node's equation and is not part of the conversational response, so the delimiter rule above does not apply to it. ${NODE_EQUATION_VALUE_RULES}`,
 
 
   /**

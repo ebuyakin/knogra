@@ -11,6 +11,7 @@
 
 import type { AIProvider } from './provider';
 import type { AIResponse, ProviderMessage, ProposedAction } from '../types';
+import { escapeInvalidUnicodeEscapes, normalizeActionEquation } from '../latex-sanitizer';
 
 // ============================================================================
 // CONSTANTS
@@ -164,7 +165,7 @@ export class OpenRouterAdapter implements AIProvider {
           item !== null &&
           'type' in item &&
           validTypes.includes((item as { type: string }).type)
-      ) as ProposedAction[];
+      ).map(normalizeActionEquation) as ProposedAction[];
     } catch (error) {
       console.warn('[OpenRouter] Failed to parse actions:', error);
       return [];
@@ -175,12 +176,14 @@ export class OpenRouterAdapter implements AIProvider {
    * Sanitize LLM-generated JSON for common issues.
    * - Escape lone backslashes (LaTeX)
    * - Preserve already-escaped backslashes
+   * - Escape invalid \u escapes (LaTeX: \upsilon, \underline) that would abort the parse
    * - Remove trailing commas before ] or }
    */
   #sanitizeJson(json: string): string {
     const placeholder = '\x00ESC\x00';
     let result = json.split('\\\\').join(placeholder);
     result = result.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+    result = escapeInvalidUnicodeEscapes(result);
     result = result.split(placeholder).join('\\\\');
     return result.replace(/,\s*([}\]])/g, '$1');
   }

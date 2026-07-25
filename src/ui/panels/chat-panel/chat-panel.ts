@@ -14,7 +14,7 @@ import { chatSession } from '../../../ai/chat-session';
 import { chatStore } from '../../../storage/chat-store';
 import { eventBus } from '../../../events/event-bus';
 import { localiseAttachment } from '../../../ai/image-search/image-search';
-import { QUICK_ACTIONS, resolveQuickActionMessage } from '../../../ai/prompts';
+import { QUICK_ACTIONS, resolveQuickActionMessage, type QuickActionId } from '../../../ai/prompts';
 import { getSetting } from '../../../config';
 
 import {
@@ -128,6 +128,47 @@ export class ChatPanel {
     return (this.#cy.getElementById(nodeId).data('title') as string | undefined)?.trim() ?? '';
   }
 
+  /**
+   * Display text for the Node quick action, naming the node(s) actually being
+   * explained so the sent message stays meaningful in the history. Uses the
+   * current selection when present, otherwise the central node the action falls
+   * back to. Purely cosmetic — the real prompt and context are unaffected.
+   */
+  #nodeActionDisplayText(fallback?: string): string {
+    const titles: string[] = [];
+    this.#cy.nodes(':selected').forEach(node => {
+      const title = (node.data('title') as string | undefined)?.trim();
+      if (title) titles.push(title);
+    });
+
+    if (titles.length > 0) {
+      const plural = titles.length > 1 ? 's' : '';
+      return `Explain the selected node${plural}: ${titles.map(t => `“${t}”`).join(', ')}.`;
+    }
+
+    const centralTitle = this.#currentNodeTitle();
+    if (centralTitle) return `Explain “${centralTitle}”.`;
+    return fallback ?? 'Explain the selected node(s).';
+  }
+
+  /**
+   * Display text for the Scene quick action, naming the central node so the
+   * stored message states which topic the answer is about. Purely cosmetic —
+   * the real prompt and context are unaffected.
+   */
+  #sceneActionDisplayText(fallback?: string): string {
+    const centralTitle = this.#currentNodeTitle();
+    if (centralTitle) return `Discuss “${centralTitle}” and the full content of the current scene.`;
+    return fallback ?? 'Discuss the current scene.';
+  }
+
+  /** Chat-history text for a quick action, contextualized where it helps readability. */
+  #quickActionDisplayText(id: QuickActionId, fallback?: string): string | undefined {
+    if (id === 'node') return this.#nodeActionDisplayText(fallback);
+    if (id === 'scene') return this.#sceneActionDisplayText(fallback);
+    return fallback;
+  }
+
   // ==========================================================================
   // PRIVATE: SETUP
   // ==========================================================================
@@ -147,7 +188,8 @@ export class ChatPanel {
           this.#clearChat();
         } else {
           const message = resolveQuickActionMessage(action);
-          this.#sendQuickAction(message.prompt, message.displayText);
+          const displayText = this.#quickActionDisplayText(action.id, message.displayText);
+          this.#sendQuickAction(message.prompt, displayText);
         }
       });
 

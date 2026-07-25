@@ -12,8 +12,12 @@ export async function initializeMathJax(): Promise<void> {
   // Configure MathJax
   window.MathJax = {
     tex: {
-      inlineMath: [['$', '$']],
-      displayMath: [['$$', '$$']]
+      // Accept every delimiter convention models use, so rendering does not
+      // depend on a given model's formatting habits. `\begin{...}` environments
+      // are handled by processEnvironments, which is on by default.
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true
     },
     svg: { 
       fontCache: 'none'

@@ -8,6 +8,7 @@ import type { AIProvider } from './provider';
 import type { AIResponse, ProviderMessage, ProposedAction } from '../types';
 import { getSetting } from '../../config';
 import { isDebug } from '../../config/debug-flags';
+import { escapeInvalidUnicodeEscapes, normalizeActionEquation } from '../latex-sanitizer';
 import type { ThinkingLevel } from '../../config/ai-settings';
 
 // ============================================================================
@@ -129,7 +130,7 @@ export class GeminiAdapter implements AIProvider {
           item !== null &&
           'type' in item &&
           validTypes.includes((item as { type: string }).type)
-      ) as ProposedAction[];
+      ).map(normalizeActionEquation) as ProposedAction[];
 
     } catch (error) {
       console.warn('[GeminiAdapter] Failed to parse actions:', error);
@@ -141,6 +142,7 @@ export class GeminiAdapter implements AIProvider {
    * Sanitize LLM-generated JSON for common issues
    * - Escape lone backslashes (LaTeX: \nabla, \partial, \frac, etc.)
    * - Preserve already-escaped backslashes (\\mu stays \\mu)
+   * - Escape invalid \u escapes (LaTeX: \upsilon, \underline) that would abort the parse
    * - Remove trailing commas before ] or }
    */
   #sanitizeJson(json: string): string {
@@ -151,10 +153,13 @@ export class GeminiAdapter implements AIProvider {
     // Step 2: Escape lone backslashes not followed by valid JSON escape chars
     result = result.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
 
-    // Step 3: Restore already-escaped backslashes
+    // Step 3: Escape \u sequences that are not valid JSON unicode escapes
+    result = escapeInvalidUnicodeEscapes(result);
+
+    // Step 4: Restore already-escaped backslashes
     result = result.split(placeholder).join('\\\\');
 
-    // Step 4: Remove trailing commas
+    // Step 5: Remove trailing commas
     return result.replace(/,\s*([}\]])/g, '$1');
   }
 
