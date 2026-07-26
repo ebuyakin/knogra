@@ -562,6 +562,10 @@ export class NodeManager {
     const editMode = isEditMode();
     const hasSelection = this.#selectedNodes.size > 0;
     const singleSelection = this.#selectedNodes.size === 1;
+    // Path mode blocks navigation and deletion (paths-architecture §14.5, §14.6).
+    // Open Scene bypasses the transition funnel (it uses close+open directly), so
+    // for that action this check is the enforcement, not merely an affordance.
+    const pathMode = this.#features.path.isPathMode();
 
     const includeBtn = this.#dialog?.querySelector('.btn-include') as HTMLButtonElement;
     const openSceneBtn = this.#dialog?.querySelector('.btn-open-scene') as HTMLButtonElement;
@@ -578,7 +582,7 @@ export class NodeManager {
         const info = this.#allNodesInfo.find(i => i.node.id === nodeId);
         canOpen = !!info?.hasOwnScene;
       }
-      openSceneBtn.disabled = !canOpen;
+      openSceneBtn.disabled = !canOpen || pathMode;
     }
 
     // Delete and Clear Scenes are blocked when the current scene's central node
@@ -588,7 +592,7 @@ export class NodeManager {
     const includesCurrentCentral = currentCentralId !== null
       && selectedArr.includes(currentCentralId);
 
-    if (deleteBtn) deleteBtn.disabled = !editMode || !hasSelection || includesCurrentCentral;
+    if (deleteBtn) deleteBtn.disabled = !editMode || !hasSelection || includesCurrentCentral || pathMode;
 
     // Clear Scenes: at least one selected node must have its own scene,
     // and the current scene's central node must not be in the selection.
@@ -596,7 +600,7 @@ export class NodeManager {
       const anyHasScene = selectedArr.some(id =>
         this.#allNodesInfo.find(i => i.node.id === id)?.hasOwnScene === true
       );
-      clearScenesBtn.disabled = !editMode || !anyHasScene || includesCurrentCentral;
+      clearScenesBtn.disabled = !editMode || !anyHasScene || includesCurrentCentral || pathMode;
     }
   }
 
@@ -634,6 +638,12 @@ export class NodeManager {
 
   async #handleOpenScene(): Promise<void> {
     if (this.#selectedNodes.size !== 1) return;
+
+    // This path uses closeScene+openScene rather than the transition funnel, so
+    // the Path feature's navigation guard does not cover it (paths-architecture
+    // §14.4). Enforced here instead of widening the lock to openScene, which the
+    // path panel's own Home button needs.
+    if (this.#features.path.isPathMode()) return;
 
     const nodeId = Array.from(this.#selectedNodes)[0];
 
@@ -750,6 +760,10 @@ export class NodeManager {
    */
   async #handleClearScenes(): Promise<void> {
     if (!isEditMode()) return;
+    // Scene deletion is blocked in path mode (paths-architecture §14.6). This
+    // calls cascadeSceneDeletion directly rather than going through a feature
+    // (pre-existing debt, architecture §3.8), so the guard has to live here.
+    if (this.#features.path.isPathMode()) return;
     if (this.#selectedNodes.size === 0) return;
 
     // Collect scenes that actually exist for selected nodes

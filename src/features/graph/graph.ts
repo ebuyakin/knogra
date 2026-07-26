@@ -9,6 +9,7 @@ import type { AnchorLinkResult } from './anchor-traversal';
 import type { GraphStatistics } from './statistics';
 import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
+import { eventBus } from '../../events/event-bus';
 import { cascadeNodeDeletion } from '../../storage/node-deletion';
 import { StyleGenerator } from '../../styles/style-generator';
 import { circularSpreadSafe } from '../utils/pure/position-expansion';
@@ -23,9 +24,35 @@ export type { GraphStatistics, GraphStatisticBucket } from './statistics';
 
 export class Graph {
   #cy: Core;
+  /**
+   * True while the user is walking a saved path. A path is immutable, so it
+   * cannot repair itself if a scene it contains is deleted mid-walk; blocking
+   * deletion removes the cause instead of adding machinery to recover from it
+   * (paths-architecture §14.6).
+   *
+   * Set from `pathModeChanged` rather than read from the Path feature — features
+   * must not import each other (architecture §4.2).
+   */
+  #pathModeActive: boolean = false;
 
   constructor(cy: Core) {
     this.#cy = cy;
+
+    eventBus.on('pathModeChanged', ({ active }) => {
+      this.#pathModeActive = active;
+    });
+  }
+
+  /**
+   * Deletion is blocked while a path is being walked. Silent: path mode is
+   * visible at a glance, and the delete menu items are disabled, so an alert
+   * would be noise. Contrast the anchor/central-node guards below, which do
+   * alert because those conditions are not otherwise apparent.
+   */
+  #deletionBlockedByPathMode(operation: string): boolean {
+    if (!this.#pathModeActive) return false;
+    console.warn(`[Graph] ${operation} blocked — exit path mode first`);
+    return true;
   }
 
   getAnchorDistances(): Map<NodeId, number> {
@@ -338,6 +365,8 @@ export class Graph {
       return;
     }
 
+    if (this.#deletionBlockedByPathMode('deleteNode')) return;
+
     // Check if node is the anchor (always protected)
     const node = graphStore.nodes.find(n => n.id === nodeId);
     if (node?.isAnchor) {
@@ -393,6 +422,10 @@ export class Graph {
       return { success: false, error: 'Cannot delete nodes in View mode' };
     }
 
+    if (this.#pathModeActive) {
+      return { success: false, error: 'Cannot delete while walking a path — exit path mode first' };
+    }
+
     // Check if node is the anchor (always protected)
     const node = graphStore.nodes.find(n => n.id === nodeId);
     if (!node) {
@@ -432,6 +465,8 @@ export class Graph {
       console.warn('Cannot delete edges in View mode');
       return;
     }
+
+    if (this.#deletionBlockedByPathMode('deleteEdge')) return;
 
     // Mark for deletion from database
     const toDelete = this.#cy.scratch('edgesToDelete') || [];

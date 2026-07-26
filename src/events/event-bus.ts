@@ -5,7 +5,7 @@
  * Data flows unidirectionally: Graph System → AI System
  */
 
-import type { AppMode, NodeId, SceneId } from '../core/main-types';
+import type { AppMode, NodeId, PathId, SceneId } from '../core/main-types';
 
 // ============================================================================
 // EVENT TYPES
@@ -20,6 +20,19 @@ export interface EventMap {
   transitionEnd: void;
   appModeChanged: { mode: AppMode };
   quizStateChanged: { active: boolean };
+  /**
+   * Path mode entered or left. Emitted by the Path feature, which owns the mode.
+   *
+   * Enforcement subscribers: Transition (blocks graph-initiated navigation) and
+   * Graph (blocks node/edge deletion). Both guard their own entry points rather
+   * than being policed from outside — features must not import each other
+   * (architecture §4.2), and the consequence of a mode belongs to its owner
+   * (architecture §3.10).
+   *
+   * Affordance subscribers (PathPanel, ContextMenu, NodeManager) only reflect
+   * the mode in the UI; they never carry correctness.
+   */
+  pathModeChanged: { active: boolean; pathId: PathId | null; name: string | null };
   // Future events:
   // nodeSelected: { nodeId: NodeId };
 }

@@ -174,6 +174,16 @@ export interface Path {
   scenes: SceneId[];
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Workspace scene count when this path was generated. Present only on
+   * generated paths; absent on hand-recorded ones.
+   *
+   * A generated path is a snapshot: scenes added afterwards are not in it, so a
+   * "full path" can silently stop being full. Comparing this against the live
+   * scene count lets the path manager flag that, which matters because the whole
+   * point of a full path is trusting it covers everything.
+   */
+  generatedSceneCount?: number;
 }
 
 /**

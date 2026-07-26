@@ -371,7 +371,7 @@ this.#cy.on('scene:changed', (_event, sceneId) => {
 | `transitionStart` | (none) | Transition | UI transition guards |
 | `transitionEnd` | (none) | Transition | UI transition guards |
 | `appModeChanged` | `{mode}` | AppMode | Quiz, SuggestionPanel, and other mode-aware UI |
-| `pathModeChanged` *(planned)* | `{active, pathId, name}` | Path | Transition (navigation guard), PathPanel, ContextMenu, NodeManager |
+| `pathModeChanged` | `{active, pathId, name}` | Path | Transition (navigation guard), Graph (deletion guard), PathPanel, ContextMenu, NodeManager |
 
 ### 3.7 AI Module (`src/ai/`)
 
@@ -418,7 +418,7 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 | `node-manager.ts` | Node management and scene cleanup dialog ⚠️ |
 | `node-picker.ts` | Node selection dialog |
 | `scene-picker.ts` | Scene selection dialog |
-| `path-picker.ts` | Saved path picker/editor ⚠️ |
+| `path-manager.ts` | Saved path manager — list, walk, edit, generate (parts in `path-manager/`) |
 | `background-editor.ts` | Background image picker/editor ⚠️ |
 | `theme-editor.ts` | Custom theme editor |
 | `quiz-panel.ts` | Floating quiz controls for runtime recall mode |
@@ -427,7 +427,10 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 | `fold-badge.ts` | Fold state affordance |
 | `shortcut-overlay.ts` | Keyboard shortcut overlay |
 
-⚠️ **Technical debt:** `background-editor.ts`, `path-picker.ts`, and parts of `node-manager.ts` directly access storage. Prefer feature/service facades for future edits.
+⚠️ **Technical debt:** `background-editor.ts` and parts of `node-manager.ts` directly access storage. Prefer feature/service facades for future edits.
+
+`path-manager.ts` persists through the Path feature (UI → Features → Storage) and is the
+reference for how the remaining cases should be reworked.
 
 #### Panels (`ui/panels/`)
 
@@ -437,9 +440,9 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 |-------|---------|
 | `chat-panel/` | Chat, notes, tutorial timeline, AI controls ⚠️ |
 | `suggestion-panel.ts` | AI-suggested nodes shelf |
-| `path-panel.ts` | Navigation breadcrumbs ⚠️ |
+| `path-panel.ts` | Navigation breadcrumbs (window arithmetic in `breadcrumb-window.ts`) |
 
-⚠️ **Technical debt:** `path-panel.ts` writes saved paths directly, and `chat-panel/chat-note-editor.ts` writes notes directly to ChatStore. These should eventually move behind feature/service facades.
+⚠️ **Technical debt:** `chat-panel/chat-note-editor.ts` writes notes directly to ChatStore. This should eventually move behind a feature/service facade.
 
 #### Keyboard Handler
 
@@ -464,17 +467,25 @@ invent a fourth mechanism.
 
 | Regime | Purpose | Restricts | Owner | Layer | Lifetime |
 |--------|---------|-----------|-------|-------|----------|
-| **View mode** | Protect the graph from accidental edits; reading and presentation | Graph mutations; GraphSaver suspended | `storage/app-mode.ts` | Storage | Persisted, long-lived |
+| **View mode** | Protect the graph from accidental edits; reading and presentation | *All* graph mutations; GraphSaver suspended | `storage/app-mode.ts` | Storage | Persisted, long-lived |
 | **Quiz mode** | Test recall | Hides sampled node content; forces View mode | `features/quiz.ts` | Features | Session |
 | **Transition input guard** | Prevent input from corrupting state mid-animation | *All* input, for the duration of one animation | `ui/transition-input-guard.ts` | UI | ~1 second |
-| **Path mode** *(planned)* | Linear guided traversal of a fixed scene sequence | Graph-initiated scene navigation only | `features/path/path.ts` | Features | Session, persisted in `knogra.state` |
+| **Path mode** | Linear guided traversal of a fixed scene sequence | Graph-initiated scene navigation; node/edge/scene **deletion** | `features/path/path.ts` | Features | Session, persisted in `knogra.state` |
 
-**Why they compose without negotiation:** each regime restricts a *different axis* — editing,
-seeing, all-input-briefly, navigating. Quiz stacks on View by design. Path mode stacks on
-either. No regime needs to know another exists.
+**Why they compose without negotiation:** each regime restricts for a *different reason*, and
+where two regimes touch the same capability the narrower one is a strict subset of the wider one.
+Quiz stacks on View by design. Path mode stacks on either. No regime needs to know another exists.
 
-**Rule:** a new restriction that would constrain an axis already owned by an existing regime
-must extend that regime rather than run in parallel. Two owners of one axis is a defect.
+**Rule — one owner per rationale, subsets permitted.** A new restriction must not duplicate an
+existing regime's *purpose*; two regimes protecting the same thing for the same reason is a defect
+and they must be merged. A regime may restrict a capability another regime also restricts, provided
+it is a **narrower subset held for a distinct reason** — and that reason must be recorded in this
+table.
+
+*Worked example:* View mode blocks all graph mutation to protect the graph from accidental edits.
+Path mode blocks only deletion, to protect the integrity of the sequence being walked — a walked
+path must not have scenes removed from under it. Creation, editing, scene composition, fold, and
+layout stay live in path mode. Different reason, strict subset, no conflict.
 
 **Layer placement rule:**
 

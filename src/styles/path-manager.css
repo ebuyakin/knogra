@@ -1,8 +1,15 @@
 /**
- * Path Picker / Editor Modal + Context Menu Styles
+ * Path Manager Styles
  *
- * Overlay is anchored to the cytoscape area (#cy) by inline top/left/width/height,
- * not the full viewport, so it does not cover the chat panel.
+ * Covers the manager list, the sequence editor, and the small popup menus.
+ *
+ * Overlays are anchored to the cytoscape area (#cy) by inline
+ * top/left/width/height rather than the full viewport, so they do not cover the
+ * chat panel.
+ *
+ * Class names keep the `path-picker-*` / `path-editor-*` prefixes from the
+ * component this replaced: they are shared by both surfaces and renaming them
+ * would be churn with no behavioural gain.
  */
 
 .path-picker-overlay {
@@ -65,36 +72,97 @@
   color: var(--text-secondary, #8b949e);
   padding: 24px;
   font-size: 13px;
+  line-height: 1.5;
 }
 
-/* Picker items (load/edit selection) */
-.path-picker-item {
+/* ---------------------------------------------------------------------- */
+/* Manager list                                                            */
+/* ---------------------------------------------------------------------- */
+
+.path-list-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
   border-radius: 6px;
-  cursor: pointer;
   transition: background-color 0.15s;
+  /*
+   * Transparent border in the resting state so the walking row's border adds no
+   * height — otherwise rows would shift as path mode is entered and left.
+   */
+  border: 1px solid transparent;
 }
 
-.path-picker-item:hover {
+.path-list-row:hover {
   background: var(--bg-tertiary, #1c2128);
 }
 
-.path-picker-item-title {
+/*
+ * The path currently being walked. Marked in place rather than listed separately:
+ * one record per path, so the list never shows the same name twice.
+ */
+.path-list-row.walking {
+  border-color: #1f6feb;
+  background: rgba(31, 111, 235, 0.08);
+}
+
+.path-list-badge {
+  color: #58a6ff;
+  font-weight: 500;
+}
+
+.path-list-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.path-list-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary, #e6edf3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.path-picker-item-meta {
+.path-list-meta {
   font-size: 11px;
   color: var(--text-secondary, #8b949e);
 }
 
+/* Generated path that no longer covers the workspace. */
+.path-list-stale {
+  color: #d29922;
+}
+
+/* Row actions stay hidden until hover to keep the list scannable. */
+.path-list-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.path-list-row:hover .path-list-actions,
+.path-list-row:focus-within .path-list-actions,
+/* The walking row keeps its actions visible — it is the one row the user is
+   already thinking about, so hiding its controls would be perverse. */
+.path-list-row.walking .path-list-actions {
+  opacity: 1;
+}
+
+.path-list-footer-left {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 /* ---------------------------------------------------------------------- */
-/* Context menu                                                            */
+/* Popup menus                                                             */
 /* ---------------------------------------------------------------------- */
 
 .path-ctx-menu {
@@ -126,8 +194,88 @@
   cursor: not-allowed;
 }
 
+/* Sits above the manager footer, so it needs to clear the overlay stack. */
+.path-generate-menu {
+  z-index: 2200;
+}
+
 /* ---------------------------------------------------------------------- */
-/* Path editor                                                             */
+/* Jump list                                                               */
+/* ---------------------------------------------------------------------- */
+
+.path-jump-filter-row {
+  padding: 10px 12px 6px;
+}
+
+.path-jump-filter-row .path-editor-name-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/*
+ * Capped height so a few hundred entries stay scrollable inside the modal rather
+ * than stretching it to the overlay bounds.
+ */
+.path-jump-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 8px 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.path-jump-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.path-jump-row:hover {
+  background: var(--bg-tertiary, #1c2128);
+}
+
+.path-jump-row.current {
+  background: rgba(31, 111, 235, 0.12);
+  cursor: default;
+}
+
+.path-jump-num {
+  font-size: 11px;
+  color: var(--text-secondary, #8b949e);
+  min-width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-jump-row.current .path-jump-num {
+  color: #58a6ff;
+}
+
+.path-jump-title {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary, #e6edf3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.path-jump-here {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #58a6ff;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Sequence editor                                                         */
 /* ---------------------------------------------------------------------- */
 
 .path-editor-modal {
@@ -196,6 +344,7 @@
   width: 22px;
   text-align: right;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .path-editor-scene-title {
@@ -251,6 +400,10 @@
   gap: 6px;
 }
 
+/* ---------------------------------------------------------------------- */
+/* Buttons                                                                 */
+/* ---------------------------------------------------------------------- */
+
 .path-editor-btn {
   background: var(--bg-primary, #0d1117);
   border: 1px solid var(--border-primary, #30363d);
@@ -262,9 +415,14 @@
   transition: background-color 0.15s, border-color 0.15s;
 }
 
-.path-editor-btn:hover {
+.path-editor-btn:hover:not(:disabled) {
   background: var(--bg-tertiary, #1c2128);
   border-color: var(--text-secondary, #8b949e);
+}
+
+.path-editor-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .path-editor-btn-primary {
@@ -273,7 +431,7 @@
   color: #ffffff;
 }
 
-.path-editor-btn-primary:hover {
+.path-editor-btn-primary:hover:not(:disabled) {
   background: #388bfd;
   border-color: #388bfd;
 }
@@ -282,7 +440,7 @@
   color: #f85149;
 }
 
-.path-editor-btn-danger:hover {
+.path-editor-btn-danger:hover:not(:disabled) {
   background: #5a1d1d;
   border-color: #b85c5c;
   color: #ffdada;

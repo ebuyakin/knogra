@@ -11,7 +11,14 @@ export class NavigationHistory {
   #currentIndex: number = -1;
   #maxSize: number;
 
-  constructor(maxSize: number = 50) {
+  /**
+   * @param maxSize Entries retained before the oldest are dropped. Sized for
+   *   walking a large workspace end to end: an author auditing a few hundred
+   *   scenes should not have the start of the journey silently trimmed away.
+   *   Cost is a few hundred id strings, so the limit exists only to bound
+   *   unbounded growth, not to save meaningful memory.
+   */
+  constructor(maxSize: number = 200) {
     this.#maxSize = maxSize;
   }
 
@@ -99,6 +106,22 @@ export class NavigationHistory {
     }
     this.#currentIndex = this.#history.length - 1;
     return this.#history[this.#currentIndex];
+  }
+
+  /**
+   * Jump to an absolute position without altering the sequence.
+   *
+   * Used by breadcrumb clicks. Distinct from `push()`, which would treat the
+   * jump as new travel and discard everything after it.
+   *
+   * @returns Scene ID at that index, or null if out of range
+   */
+  goToIndex(index: number): SceneId | null {
+    if (index < 0 || index >= this.#history.length) {
+      return null;
+    }
+    this.#currentIndex = index;
+    return this.#history[index];
   }
 
   /**

@@ -83,6 +83,13 @@ export class Transition {
   #sceneToSceneOrchestrator: SceneToSceneOrchestrator;
   #openCloseOrchestrator: OpenCloseOrchestrator;
   #foldStateHandler: FoldStateHandler;
+  /**
+   * True while the user is walking a saved path. Set from `pathModeChanged`
+   * rather than read from the Path feature — features must not import each other
+   * (architecture §4.2), and the mode's owner announces its own consequences
+   * (architecture §3.10).
+   */
+  #pathModeActive: boolean = false;
 
   constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
     this.#cy = cy;
@@ -91,6 +98,10 @@ export class Transition {
     this.#sceneToSceneOrchestrator = new SceneToSceneOrchestrator(cy, backgroundRenderer);
     this.#openCloseOrchestrator = new OpenCloseOrchestrator(cy, backgroundRenderer);
     this.#foldStateHandler = new FoldStateHandler(cy);
+
+    eventBus.on('pathModeChanged', ({ active }) => {
+      this.#pathModeActive = active;
+    });
   }
 
   // ==========================================================================
@@ -102,6 +113,16 @@ export class Transition {
    * Emits scene:changed event for path feature to track
    */
   async goToSceneByNode(targetNodeId: NodeId, options?: { fade?: boolean }): Promise<void> {
+    // Path mode: the sequence is the only way to move (paths-architecture §14.4).
+    // This is the single funnel for graph-initiated navigation, so one guard here
+    // covers double-tap, the context menu, and the G shortcuts. Silent by design
+    // — the numbered breadcrumbs and lit Path button already state the mode, and
+    // the corresponding menu items are disabled.
+    if (this.#pathModeActive) {
+      if (isDebug('d_transition')) console.log('[d_transition] toNode: blocked — path mode active');
+      return;
+    }
+
     if (isDebug('d_transition')) console.log(`[d_transition] toNode: Starting transition to node: ${targetNodeId}`);
     
     const useFade = options?.fade ?? getSetting('transition.transitionMode') === 'fade';

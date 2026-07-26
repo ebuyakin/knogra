@@ -35,7 +35,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'G', description: 'Go to scene (selected node)' },
       { key: 'Shift+G', description: 'Go to scene (fade, no animation)' },
       { key: 'I', description: 'Show link to anchor for selected node' },
-      { key: '[ / ]', description: 'Navigate back / forward in history' },
+      { key: '[ / ]', description: 'Navigate back / forward in history or path' },
       { key: 'Arrows', description: 'Navigate between nodes' },
       { key: 'Escape', description: 'Deselect all' },
       { key: 'F', description: 'Fit graph to view' },

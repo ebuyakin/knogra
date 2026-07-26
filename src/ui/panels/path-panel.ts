@@ -1,16 +1,22 @@
 /**
  * Path Panel
- * Displays navigation history as breadcrumbs
- * 
- * Listens to: cy.on('path:updated')
+ *
+ * Breadcrumb strip over the active scene sequence. Renders whichever mode the
+ * Path feature is in (paths-architecture §14): plain labels for history, numbered
+ * items plus an exit control for a loaded path.
+ *
+ * Listens to: cy.on('path:updated') — emitted for movement *and* for mode
+ * changes, so one subscription covers both; there is no need to also listen to
+ * `pathModeChanged`, which exists for modules that are not re-rendered anyway.
  */
 
 import type { Core } from 'cytoscape';
 import type { SceneId } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
 import { graphStore } from '../../storage/graph-store';
-import { pathStore } from '../../storage/path-store';
-import { PathPicker, PathEditor, PathContextMenu } from '../components/path-picker';
+import { PathManager } from '../components/path-manager';
+import { PathJumpList } from '../components/path-manager/path-jump-list';
+import { BreadcrumbWindow } from './breadcrumb-window';
 import '../../styles/path-panel.css';
 
 export class PathPanel {
@@ -18,18 +24,15 @@ export class PathPanel {
   #features: FeatureAPI;
   #container: HTMLElement;
   #visible: boolean = true;
-  #windowStart: number = 0;  // First visible item index in virtual window
-  #windowEnd: number = 0;    // Last visible item index in virtual window
-  #itemWidths: number[] = []; // Cached item widths for window calculation
-  #lastFirstSceneId: SceneId | null = null; // Detects full history replacement (loadPath/reset)
-  #picker = new PathPicker();
-  #editor = new PathEditor();
-  #ctxMenu = new PathContextMenu();
+  #window = new BreadcrumbWindow();
+  #manager: PathManager;
+  #jumpList = new PathJumpList();
 
   constructor(cy: Core, features: FeatureAPI, container: HTMLElement) {
     this.#cy = cy;
     this.#features = features;
     this.#container = container;
+    this.#manager = new PathManager(features);
 
     // Initial render
     this.#render();
@@ -37,19 +40,6 @@ export class PathPanel {
     // Listen for path updates
     this.#cy.on('path:updated', () => {
       this.#render();
-    });
-
-    // Right-click on panel: small context menu (extensible).
-    this.#container.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const hasPaths = pathStore.getAllPaths().length > 0;
-      this.#ctxMenu.open(e.clientX, e.clientY, [
-        {
-          label: 'Edit path…',
-          disabled: !hasPaths,
-          onClick: () => this.#openEditFlow(),
-        },
-      ]);
     });
   }
 
@@ -92,37 +82,38 @@ export class PathPanel {
     const history = this.#features.path.getHistory();
     const currentIndex = this.#features.path.getCurrentIndex();
 
-    // Detect full replacement (loadPath / reset / clear): when the first scene
-    // in history changes, the cached window indices no longer correspond to the
-    // new path. Reset the window so the greedy fill below picks neighbours of
-    // the new currentIndex instead of clinging to stale positions.
-    const firstSceneId = history[0] ?? null;
-    if (firstSceneId !== this.#lastFirstSceneId) {
-      this.#windowStart = currentIndex >= 0 ? currentIndex : 0;
-      this.#windowEnd = this.#windowStart;
-      this.#lastFirstSceneId = firstSceneId;
-    }
+    // Path mode numbers the breadcrumbs (1., 2., …) so position within a fixed
+    // sequence is always legible; numbers are meaningless for a history that
+    // rewrites itself, so history mode omits them (paths-architecture §14.2).
+    const pathMode = this.#features.path.isPathMode();
 
-    // First pass: measure all items to get widths (render hidden)
-    this.#measureItemWidths(history);
+    this.#window.update({
+      count: history.length,
+      currentIndex,
+      containerWidth: this.#breadcrumbsWidth(),
+      // Identity of the sequence: a wholesale replacement (path loaded, history
+      // reset) changes the first scene, and cached indices must not survive it.
+      sequenceKey: history[0] ?? null,
+      // Label and ordinal are both part of the key: a rename or a switch between
+      // numbered and plain items changes rendered width, and must re-measure.
+      cacheKeyOf: (index) =>
+        `${pathMode ? index + 1 : ''}\u0000${history[index]}\u0000${this.#sceneLabel(history[index])}`,
+      itemHtmlOf: (index) =>
+        this.#itemInnerHtml(this.#sceneLabel(history[index]), pathMode ? index + 1 : null),
+    });
 
-    // Calculate visible window based on current index and available width
-    this.#calculateVisibleWindow(history, currentIndex);
+    const windowStart = this.#window.start;
 
     // Build breadcrumb HTML for visible items only
-    const visibleHistory = history.slice(this.#windowStart, this.#windowEnd + 1);
+    const visibleHistory = history.slice(windowStart, this.#window.end + 1);
     const breadcrumbs = visibleHistory.map((sceneId, visibleIndex) => {
-      const actualIndex = this.#windowStart + visibleIndex;
-      const scene = graphStore.scenes.find(s => s.id === sceneId);
-      const node = scene 
-        ? graphStore.nodes.find(n => n.id === scene.centralNodeId)
-        : null;
-      const label = node?.title || scene?.title || 'Unknown';
+      const actualIndex = windowStart + visibleIndex;
       const isCurrent = actualIndex === currentIndex;
+      const ordinal = pathMode ? actualIndex + 1 : null;
 
       return `
         <div class="path-item ${isCurrent ? 'current' : ''}" data-index="${actualIndex}" data-scene-id="${sceneId}">
-          <span class="path-item-label" title="${label}">${label}</span>
+          ${this.#itemInnerHtml(this.#sceneLabel(sceneId), ordinal)}
         </div>
       `;
     }).join('<span class="path-chevron">›</span>');
@@ -135,16 +126,28 @@ export class PathPanel {
 
     // Build icons (all 16x16 with consistent sizing)
     const homeIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 7.5l6-5.5 6 5.5M4 6.5v7h3v-4h2v4h3v-7"/></svg>`;
-    const saveIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 2h10v12H3zM5 2v4h6V2M8 9v3M6 11h4"/></svg>`;
-    const loadIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 5h5l1.5 1.5H14v7H2zM2 5V3h4l1 1"/></svg>`;
-    const hasPaths = pathStore.paths.length > 0;
+    // Ordered-list glyph: a path is scenes in numbered order, and in path mode the
+    // breadcrumbs are numbered too, so the icon mirrors the feature's own
+    // signature. Markers are squares, not circles, and there is no connecting
+    // line — circles joined by lines are nodes and edges in this app, so that
+    // shape would read as a graph fragment rather than a sequence.
+    const pathIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M6.5 3.5h7M6.5 8h7M6.5 12.5h7"/><rect x="2.2" y="2.7" width="1.7" height="1.7" rx="0.3" fill="currentColor" stroke="none"/><rect x="2.2" y="7.2" width="1.7" height="1.7" rx="0.3" fill="currentColor" stroke="none"/><rect x="2.2" y="11.7" width="1.7" height="1.7" rx="0.3" fill="currentColor" stroke="none"/></svg>`;
 
-    // Left controls (home, save, load)
+    // Left controls are a fixed pair — Home + Path — in both modes. The button
+    // count must not change with mode: adding a control would shift the
+    // breadcrumbs sideways, and a strip that moves under the cursor is worse than
+    // one extra click to leave path mode (exit lives in the manager).
+    // The Path button tints its icon while a path is loaded — one of the two
+    // persistent mode signals, alongside the numbered breadcrumbs (§14.2).
+    const pathName = this.#features.path.getActivePathName();
+    const pathTitle = pathMode
+      ? `Paths — walking "${pathName ?? 'path'}"`
+      : 'Paths — save, load, edit, generate';
+
     const leftControls = `
       <div class="path-controls path-controls-left">
         <button class="path-btn" data-action="home" title="Go to anchor node" ${!hasAnchor ? 'disabled' : ''}>${homeIcon}</button>
-        <button class="path-btn" data-action="save" title="Save path" ${history.length === 0 ? 'disabled' : ''}>${saveIcon}</button>
-        <button class="path-btn" data-action="load" title="Load path" ${!hasPaths ? 'disabled' : ''}>${loadIcon}</button>
+        <button class="path-btn ${pathMode ? 'active' : ''}" data-action="paths" title="${pathTitle}">${pathIcon}</button>
       </div>
     `;
 
@@ -180,24 +183,27 @@ export class PathPanel {
     const items = this.#container.querySelectorAll('.path-item:not(.current)');
     items.forEach(item => {
       item.addEventListener('click', async () => {
-        const sceneId = item.getAttribute('data-scene-id') as SceneId;
-        if (sceneId) {
-          await this.#navigateToScene(sceneId);
+        const index = Number(item.getAttribute('data-index'));
+        if (Number.isInteger(index)) {
+          await this.#navigateToIndex(index);
         }
       });
     });
+
+    // The current breadcrumb opens the jump list. Only a handful of items fit on
+    // screen, so stepping to a distant position is impractical in a long path;
+    // this is the "where can I go" counterpart to "where am I". Uses the current
+    // item because it needs no extra chrome — the panel's button pair stays fixed.
+    const currentItem = this.#container.querySelector('.path-item.current');
+    currentItem?.addEventListener('click', () => this.#openJumpList());
 
     // Home button
     const homeBtn = this.#container.querySelector('[data-action="home"]');
     homeBtn?.addEventListener('click', () => this.#goHome());
 
-    // Save button
-    const saveBtn = this.#container.querySelector('[data-action="save"]');
-    saveBtn?.addEventListener('click', () => this.#savePath());
-
-    // Load button
-    const loadBtn = this.#container.querySelector('[data-action="load"]');
-    loadBtn?.addEventListener('click', () => this.#showLoadDialog());
+    // Path manager — save, load, edit, generate, exit path mode
+    const pathsBtn = this.#container.querySelector('[data-action="paths"]');
+    pathsBtn?.addEventListener('click', () => this.#manager.open(() => this.#render()));
 
     // Back button
     const backBtn = this.#container.querySelector('[data-action="back"]');
@@ -237,74 +243,32 @@ export class PathPanel {
   }
 
   /**
-   * Save current path with a name prompt
+   * Navigate to an absolute position in the sequence (breadcrumb click).
+   *
+   * Moves the position first, then transitions: `goToSceneFromPath` does not emit
+   * `scene:changed`, so the sequence would otherwise not know the cursor moved.
+   * `goToIndex` is unambiguous where a scene id would not be — a sequence may
+   * legitimately visit the same scene twice (§12).
    */
-  async #savePath(): Promise<void> {
-    const history = this.#features.path.getHistory();
-    if (history.length === 0) return;
-
-    const name = prompt('Enter a name for this path:');
-    if (!name || name.trim() === '') return;
-
-    await pathStore.createPath(name.trim(), history);
-    this.#render(); // Re-render to enable load button
-  }
-
-  /**
-   * Show dialog to select and load a saved path
-   */
-  #showLoadDialog(): void {
-    if (pathStore.getAllPaths().length === 0) return;
-    this.#picker.open('Load Path', async (selectedPath) => {
-      // Activate the FIRST scene in the path (where the journey begins),
-      // not the last. Pass it as currentSceneId so the breadcrumb highlight
-      // matches what is on screen.
-      const firstScene = selectedPath.scenes[0];
-      if (!firstScene) return;
-      this.#features.path.loadPath(selectedPath.scenes, firstScene);
-      await this.#features.transition.goToSceneFromPath(firstScene);
-    });
-  }
-
-  /**
-   * Right-click → “Edit path…”: pick which saved path, then open the editor.
-   */
-  #openEditFlow(): void {
-    if (pathStore.getAllPaths().length === 0) return;
-    this.#picker.open('Edit Path', (selectedPath) => {
-      this.#editor.open(selectedPath, {
-        onSave: (updated) => {
-          // After save, load the path so the panel reflects the new sequence
-          // — same UX as the load icon.
-          const first = updated.scenes[0];
-          if (!first) {
-            this.#render();
-            return;
-          }
-          this.#features.path.loadPath(updated.scenes, first);
-          void this.#features.transition.goToSceneFromPath(first);
-        },
-        onDelete: () => this.#render(),
-      });
-    });
-  }
-
-  /**
-   * Navigate to a scene from breadcrumb click
-   * This is a non-adjacent jump, uses simplified transition
-   */
-  async #navigateToScene(sceneId: SceneId): Promise<void> {
-    // For now, use the same navigation method
-    // Phase 3 will implement simplified fade transition
+  async #navigateToIndex(index: number): Promise<void> {
+    const sceneId = this.#features.path.goToIndex(index);
+    if (!sceneId) return;
     await this.#features.transition.goToSceneFromPath(sceneId);
-    
-    // Update path to this position
-    // The path feature will handle updating history via the scene:changed event
-    // But wait - navigateToScene doesn't emit scene:changed...
-    // We need to manually update the path position
-    this.#features.path.loadPath(
-      this.#features.path.getHistory(),
-      sceneId
+  }
+
+  /**
+   * Full sequence as a filterable list, for reaching a position too far away to
+   * step to. Works in both modes — `goToIndex` is mode-agnostic, and a 200-entry
+   * history has the same problem as a long path.
+   */
+  #openJumpList(): void {
+    const sequence = this.#features.path.getHistory();
+    if (sequence.length < 2) return;
+
+    this.#jumpList.open(
+      sequence,
+      this.#features.path.getCurrentIndex(),
+      (index) => void this.#navigateToIndex(index)
     );
   }
 
@@ -326,6 +290,14 @@ export class PathPanel {
     const anchorSceneId = this.#getAnchorSceneId();
     if (!anchorSceneId) return;
 
+    // Home restarts navigation from the anchor, which is incompatible with
+    // walking a fixed sequence — so it doubles as the deliberate way out of path
+    // mode, and asks first (paths-architecture §15.4).
+    if (this.#features.path.isPathMode()) {
+      if (!confirm('Exit path mode and return to the anchor scene?')) return;
+      this.#features.path.exitPathMode();
+    }
+
     // Reset path history to anchor scene
     this.#features.path.reset(anchorSceneId);
     
@@ -335,174 +307,37 @@ export class PathPanel {
   }
 
   /**
-   * Measure widths of all items by rendering them in a hidden container
+   * Display label for a scene — the central node's title, falling back to the
+   * scene title. Also the width-cache key input, so it must be stable.
    */
-  #measureItemWidths(history: SceneId[]): void {
-    // Create a hidden measuring container
-    const measurer = document.createElement('div');
-    measurer.style.cssText = 'position: absolute; visibility: hidden; white-space: nowrap;';
-    measurer.className = 'path-breadcrumbs';
-    document.body.appendChild(measurer);
-
-    this.#itemWidths = history.map((sceneId) => {
-      const scene = graphStore.scenes.find(s => s.id === sceneId);
-      const node = scene 
-        ? graphStore.nodes.find(n => n.id === scene.centralNodeId)
-        : null;
-      const label = node?.title || scene?.title || 'Unknown';
-
-      // Create item element to measure
-      const item = document.createElement('div');
-      item.className = 'path-item';
-      item.innerHTML = `<span class="path-item-label">${label}</span>`;
-      measurer.appendChild(item);
-      const width = item.offsetWidth;
-      measurer.removeChild(item);
-      
-      return width;
-    });
-
-    document.body.removeChild(measurer);
+  #sceneLabel(sceneId: SceneId): string {
+    const scene = graphStore.scenes.find(s => s.id === sceneId);
+    const node = scene
+      ? graphStore.nodes.find(n => n.id === scene.centralNodeId)
+      : null;
+    return node?.title || scene?.title || 'Unknown';
   }
 
   /**
-   * Calculate which items should be visible in the window
-   * Ensures currentIndex is always visible
+   * Inner markup of one breadcrumb. Shared by the live render and the offscreen
+   * measurement pass so the two can never disagree on width.
+   *
+   * @param ordinal 1-based position, shown in path mode only; null to omit.
    */
-  #calculateVisibleWindow(history: SceneId[], currentIndex: number): void {
-    if (history.length === 0) {
-      this.#windowStart = 0;
-      this.#windowEnd = 0;
-      return;
-    }
-
-    // Get container width
-    const breadcrumbsContainer = this.#container.querySelector('.path-breadcrumbs');
-    const containerWidth = breadcrumbsContainer?.clientWidth || 
-      (this.#container.clientWidth - 200); // Estimate if not rendered yet (minus buttons)
-
-    const gap = 8;      // CSS gap between items
-    const chevronWidth = 12; // Approximate chevron width
-
-    // Check if current item is within existing window
-    if (currentIndex >= this.#windowStart && currentIndex <= this.#windowEnd) {
-      // Current item is visible, check if window still fits
-      let totalWidth = 0;
-      for (let i = this.#windowStart; i <= this.#windowEnd && i < history.length; i++) {
-        totalWidth += this.#itemWidths[i] || 0;
-        if (i > this.#windowStart) {
-          totalWidth += gap + chevronWidth + gap;
-        }
-      }
-      if (totalWidth <= containerWidth) {
-        // Window still fits. Try to expand outward into any unused space
-        // before returning — covers the loadPath/reset case where the window
-        // was just collapsed to [currentIndex, currentIndex].
-        this.#expandWindowGreedy(history.length, containerWidth, gap, chevronWidth);
-        return;
-      }
-    }
-
-    // Need to recalculate window to include currentIndex
-    // Strategy depends on direction:
-    // - If currentIndex > windowEnd: expand/shift right (keep currentIndex at right)
-    // - If currentIndex < windowStart: expand/shift left (keep currentIndex at left)
-
-    if (currentIndex > this.#windowEnd || this.#windowEnd === 0) {
-      // Going forward: currentIndex should be at right edge, find what fits before it
-      this.#windowEnd = currentIndex;
-      this.#windowStart = this.#findWindowStartFromEnd(currentIndex, containerWidth, gap, chevronWidth);
-    } else if (currentIndex < this.#windowStart) {
-      // Going back: currentIndex should be at left edge, find what fits after it
-      this.#windowStart = currentIndex;
-      this.#windowEnd = this.#findWindowEndFromStart(currentIndex, containerWidth, gap, chevronWidth, history.length);
-    }
-
-    // After the sticky-edge logic, greedily expand the window outward to fill
-    // any remaining space. Without this, loading a path or resetting history
-    // can leave the window at [currentIndex, currentIndex] when currentIndex
-    // sits at one end — hiding all the other scenes in the path.
-    this.#expandWindowGreedy(history.length, containerWidth, gap, chevronWidth);
+  #itemInnerHtml(label: string, ordinal: number | null): string {
+    const number = ordinal === null
+      ? ''
+      : `<span class="path-item-num">${ordinal}.</span>`;
+    return `${number}<span class="path-item-label" title="${label}">${label}</span>`;
   }
 
   /**
-   * Expand the window outward (alternating right then left) while extra items
-   * still fit in the available container width.
+   * Available width of the breadcrumb strip. Before the first render the strip
+   * does not exist yet, so fall back to the panel width less the button groups.
    */
-  #expandWindowGreedy(historyLength: number, containerWidth: number, gap: number, chevronWidth: number): void {
-    const itemPlusSep = (idx: number): number =>
-      (this.#itemWidths[idx] || 0) + gap + chevronWidth + gap;
-
-    let used = 0;
-    for (let i = this.#windowStart; i <= this.#windowEnd && i < historyLength; i++) {
-      used += this.#itemWidths[i] || 0;
-      if (i > this.#windowStart) used += gap + chevronWidth + gap;
-    }
-
-    // Alternate sides so the window stays roughly centred on currentIndex.
-    let didExpand = true;
-    while (didExpand) {
-      didExpand = false;
-      if (this.#windowEnd + 1 < historyLength) {
-        const w = itemPlusSep(this.#windowEnd + 1);
-        if (used + w <= containerWidth) {
-          this.#windowEnd++;
-          used += w;
-          didExpand = true;
-        }
-      }
-      if (this.#windowStart > 0) {
-        const w = itemPlusSep(this.#windowStart - 1);
-        if (used + w <= containerWidth) {
-          this.#windowStart--;
-          used += w;
-          didExpand = true;
-        }
-      }
-    }
+  #breadcrumbsWidth(): number {
+    const strip = this.#container.querySelector('.path-breadcrumbs');
+    return strip?.clientWidth || (this.#container.clientWidth - 200);
   }
 
-  /**
-   * Find the earliest startIndex where items [startIndex...endIndex] fit
-   */
-  #findWindowStartFromEnd(endIndex: number, containerWidth: number, gap: number, chevronWidth: number): number {
-    let totalWidth = this.#itemWidths[endIndex] || 0;
-    let startIndex = endIndex;
-
-    for (let i = endIndex - 1; i >= 0; i--) {
-      const itemWidth = this.#itemWidths[i] || 0;
-      const additionalWidth = itemWidth + gap + chevronWidth + gap;
-      
-      if (totalWidth + additionalWidth > containerWidth) {
-        break;
-      }
-      
-      totalWidth += additionalWidth;
-      startIndex = i;
-    }
-
-    return startIndex;
-  }
-
-  /**
-   * Find the latest endIndex where items [startIndex...endIndex] fit
-   */
-  #findWindowEndFromStart(startIndex: number, containerWidth: number, gap: number, chevronWidth: number, historyLength: number): number {
-    let totalWidth = this.#itemWidths[startIndex] || 0;
-    let endIndex = startIndex;
-
-    for (let i = startIndex + 1; i < historyLength; i++) {
-      const itemWidth = this.#itemWidths[i] || 0;
-      const additionalWidth = gap + chevronWidth + gap + itemWidth;
-      
-      if (totalWidth + additionalWidth > containerWidth) {
-        break;
-      }
-      
-      totalWidth += additionalWidth;
-      endIndex = i;
-    }
-
-    return endIndex;
-  }
 }

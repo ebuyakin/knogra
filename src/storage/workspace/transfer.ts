@@ -388,8 +388,18 @@ export async function importThemes(themes: unknown[]): Promise<void> {
   await db.table('themes').bulkPut(themes);
 }
 
+/**
+ * Restore app state, dropping the path-mode session.
+ *
+ * Current exports omit `pathId` / `pathIndex` already, but files written before
+ * that fix may carry them, and they must never be honoured: path mode is session
+ * state, and entering it unasked lands the user in a restrictive mode with no
+ * explanation.
+ */
 export function importAppState(appState: Record<string, unknown>): void {
-  if (Object.keys(appState).length > 0) {
-    localStorage.setItem(STATE_KEY, JSON.stringify(appState));
+  const { pathId: _pathId, pathIndex: _pathIndex, ...sessionFree } = appState;
+
+  if (Object.keys(sessionFree).length > 0) {
+    localStorage.setItem(STATE_KEY, JSON.stringify(sessionFree));
   }
 }

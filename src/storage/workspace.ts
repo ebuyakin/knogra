@@ -184,7 +184,12 @@ export async function exportWorkspace(): Promise<void> {
   // screen dimensions (used by import to offer a proportional scale-to-fit).
   const container = getCyContainerSize();
   if (container) AppStateManager.saveAuthoringContainerSize(container.w, container.h);
-  const appState = AppStateManager.getAppState();
+  // Path-mode session is deliberately excluded: it describes the exporting
+  // session, not the workspace. Shipping it would drop whoever imports the file
+  // into someone else's tour at someone else's cursor position — and because
+  // paths import with their original ids, the reference often resolves, so the
+  // validation in Path.restoreSession() would not catch it.
+  const appState = AppStateManager.getExportableAppState();
   zip.file('app-state.json', JSON.stringify(appState, null, 2));
   
   // 9. Export custom themes from IndexedDB

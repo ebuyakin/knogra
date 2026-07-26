@@ -35,6 +35,23 @@
   color: #8b949e;
 }
 
+/*
+ * Ordinal shown in path mode only — position within a fixed sequence. Dimmer
+ * than the label so the titles still read as the primary content, and
+ * tabular-nums keeps the strip from reflowing as the numbers gain digits.
+ */
+.path-item-num {
+  color: #6e7681;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding-left: 4px;
+  flex-shrink: 0;
+}
+
+.path-item.current .path-item-num {
+  color: #8b949e;
+}
+
 .path-item-label:hover {
   color: #c9d1d9;
   text-decoration: underline;
@@ -47,8 +64,14 @@
   text-underline-offset: 3px;
 }
 
+/*
+ * The current item is clickable too — it opens the jump list. Brightens on hover
+ * without gaining an underline, so it stays visually distinct from the other
+ * items, which navigate rather than open a dialog.
+ */
 .path-item.current .path-item-label:hover {
-  cursor: default;
+  cursor: pointer;
+  color: #c9d1d9;
 }
 
 /* Chevron separator */
@@ -114,10 +137,20 @@
 
 .path-btn:disabled {
   cursor: not-allowed;
+  opacity: 0.4;
 }
 
+/*
+ * Path-mode signal on the Path button. Deliberately icon-only: background or
+ * border changes read as "pressed" and pull the eye to the chrome, when the
+ * breadcrumbs are the thing worth looking at. The tinted glyph is enough to
+ * answer "am I on a path?" alongside the numbered items (paths-architecture
+ * §14.2).
+ */
 .path-btn.active {
-  background: #21262d;
   color: #58a6ff;
-  border-color: #58a6ff;
+}
+
+.path-btn.active:hover:not(:disabled) {
+  color: #79c0ff;
 }

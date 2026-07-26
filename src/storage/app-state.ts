@@ -9,7 +9,7 @@
  * Listens to EventBus sceneChanged (fires from all transition paths)
  */
 
-import type { AppMode, EdgeTypeId, SceneId } from '../core/main-types';
+import type { AppMode, EdgeTypeId, PathId, SceneId } from '../core/main-types';
 import { STATE_KEY } from '../config/storage-config';
 import { eventBus } from '../events/event-bus';
 
@@ -25,6 +25,14 @@ interface AppState {
   fitSceneOnNextOpen?: SceneId;
   /** Last selected edge type id (persisted for new-edge default) */
   lastEdgeTypeId?: EdgeTypeId;
+  /**
+   * Saved path being walked in path mode, and the cursor position within it.
+   * Absent → history mode. Both are written together and validated on restore:
+   * a path or scene that no longer exists silently falls back to history mode,
+   * since a stale session is not worth interrupting startup for.
+   */
+  pathId?: PathId;
+  pathIndex?: number;
   /**
    * CSS-pixel size of the Cytoscape container at export time — the screen the
    * shared `.knogra` file was authored on. Used on import to offer a
@@ -84,6 +92,50 @@ export class AppStateManager {
    */
   static saveLastSceneId(sceneId: SceneId): void {
     this.updateAppState({ lastSceneId: sceneId });
+  }
+
+  /**
+   * App state minus anything session-scoped, for workspace export.
+   *
+   * The path-mode session is excluded: it says where *this* user had got to in a
+   * tour, which is meaningless in another user's workspace and actively harmful
+   * there, since saved paths import with their original ids and the reference
+   * would often resolve — silently starting someone else's tour.
+   *
+   * Kept here rather than at the export call site so the rule lives beside the
+   * state definition, where a future field has to consider it.
+   */
+  static getExportableAppState(): Omit<AppState, 'pathId' | 'pathIndex'> {
+    const { pathId: _pathId, pathIndex: _pathIndex, ...exportable } = this.getAppState();
+    return exportable;
+  }
+
+  /**
+   * Get the persisted path-mode session, if any.
+   * Presence does not guarantee validity — the caller must confirm the path and
+   * its scenes still exist before entering path mode.
+   */
+  static getPathSession(): { pathId: PathId; pathIndex: number } | undefined {
+    const state = this.getAppState();
+    if (!state.pathId) return undefined;
+    return { pathId: state.pathId, pathIndex: state.pathIndex ?? 0 };
+  }
+
+  /**
+   * Record the path being walked and the cursor position within it.
+   */
+  static savePathSession(pathId: PathId, pathIndex: number): void {
+    this.updateAppState({ pathId, pathIndex });
+  }
+
+  /**
+   * Drop the path-mode session — on exit, or when a restore fails validation.
+   */
+  static clearPathSession(): void {
+    const state = this.getAppState();
+    delete state.pathId;
+    delete state.pathIndex;
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
   }
 
   /**

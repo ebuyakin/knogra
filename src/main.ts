@@ -167,17 +167,24 @@ cy.on('select', 'node', (event) => {
 // =============================================================================
 // 7. STARTUP (open scene, initialize features that need scene context)
 // =============================================================================
-await features.transition.openScene(currentSceneId);
-if (AppStateManager.consumeFitOnNextOpen(currentSceneId)) {
+// Restore a path-mode session before opening a scene, so a tour interrupted by a
+// reload resumes at the scene it was left on rather than the last-visited one.
+// Returns null (and stays in history mode) if the saved path or scene is gone.
+const restoredPathSceneId = features.path.restoreSession();
+const sceneToOpen: SceneId = restoredPathSceneId ?? currentSceneId;
+
+await features.transition.openScene(sceneToOpen);
+if (AppStateManager.consumeFitOnNextOpen(sceneToOpen)) {
   features.scene.fit();
 }
-features.path.init(currentSceneId);
+// No-op when a path session was restored — that already established the position.
+features.path.init(sceneToOpen);
 
 // Initialize AI chat panel — try auto-init from settings, load conversation regardless
 await chatSession.tryAutoInit();
-const scene = graphStore.scenes.find(s => s.id === currentSceneId);
+const scene = graphStore.scenes.find(s => s.id === sceneToOpen);
 if (scene) {
-  await panels.chatPanel.loadForScene(currentSceneId, scene.centralNodeId);
+  await panels.chatPanel.loadForScene(sceneToOpen, scene.centralNodeId);
 }
 
 ping('session_start');

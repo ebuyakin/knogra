@@ -172,9 +172,15 @@ export class ContextMenu {
     const isFolded = this.#features.scene.isFolded(nodeId);
     const canFold = this.#cy.getElementById(nodeId as string).outgoers('node').length > 0 && !isFolded;
 
+    // Path mode restricts navigation and deletion (paths-architecture §14.5).
+    // Enforcement lives in the Transition and Graph features; these flags only
+    // keep the menu honest about what it will actually do.
+    const pathMode = this.#features.path.isPathMode();
+
     const items: MenuItem[] = [
       {
         label: "Go to node's scene (G)",
+        enabled: !pathMode,
         action: async () => {
           await this.#features.transition.goToSceneByNode(nodeId);
         }
@@ -347,7 +353,7 @@ export class ContextMenu {
             action: async () => {
               await this.#features.graph.deleteNode(nodeId);
             },
-            enabled: editMode && !isCentralNode && !isAnchor
+            enabled: editMode && !isCentralNode && !isAnchor && !pathMode
           },
           {
             label: 'Set as anchor',
@@ -572,7 +578,8 @@ export class ContextMenu {
       },
       {
         label: 'Delete edge (D)',
-        enabled: editMode,
+        // Blocked in path mode (paths-architecture §14.6) — enforced in Graph.
+        enabled: editMode && !this.#features.path.isPathMode(),
         action: () => {
           this.#features.graph.deleteEdge(edgeId);
         }
