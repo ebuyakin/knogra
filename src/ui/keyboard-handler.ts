@@ -535,6 +535,30 @@ export class KeyboardHandler {
       return;
     }
 
+    // T - Align selected node centres into a row (shared Y)
+    if (key === 't' && !event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.align.row();
+      return;
+    }
+
+    // U - Align selected node centres into a column (shared X)
+    if (key === 'u' && !event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.align.column();
+      return;
+    }
+
+    // Y - Align selected nodes onto the min-X → max-X diagonal line
+    if (key === 'y' && !event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.align.diagonal();
+      return;
+    }
+
   }
 
   #toggleAppMode(): void {

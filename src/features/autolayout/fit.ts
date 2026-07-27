@@ -10,7 +10,7 @@
 import type { Core } from 'cytoscape';
 import type { NodeId } from '../../core/main-types';
 import type { Position } from './algorithms/types';
-import type { ViewportTarget } from './autolayout-animator';
+import type { ViewportTarget } from '../utils/cy/node-position-animator';
 
 /** Viewport padding (px) around the fitted layout, matching Scene.fit(). */
 export const FIT_PADDING = 50;

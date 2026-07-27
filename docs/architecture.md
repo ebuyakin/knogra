@@ -312,6 +312,8 @@ Used by 2+ features. Split by purity:
 | Pure | `utils/pure/` | No side effects, no Cytoscape access |
 | Cy-mutating | `utils/cy/` | Accept `cy` as parameter |
 
+Example: `utils/cy/node-position-animator.ts` tweens a node set to new positions (optionally re-framing the viewport) and is shared by `autolayout` and `align` — neither imports the other, honouring the no-cross-feature-imports rule (§4.2).
+
 **Dependency rules:**
 ```
 Features (scene.ts, node.ts, etc.)
@@ -336,6 +338,8 @@ Core Types only
 | **Transition** | `transition/transition.ts` | Animated scene-to-scene navigation |
 | **Path** | `path/path.ts` | Navigation history tracking and persistence |
 | **Quiz** | `quiz.ts` | Runtime recall mode: hides sampled node content and tracks reveal/self-grade state |
+| **AutoLayout** | `autolayout/autolayout.ts` | Scene-wide re-arrangement anchored on the central node: radial layout (pluggable algorithms), grow & arrange, rotate, spacing |
+| **Align** | `align/align.ts` | Selection-scoped node alignment: snaps selected node centres into a row, column, or diagonal line |
 
 **FeatureAPI** (`feature-api.ts`) — Facade exposing all features. No business logic.
 
@@ -470,6 +474,7 @@ invent a fourth mechanism.
 | **View mode** | Protect the graph from accidental edits; reading and presentation | *All* graph mutations; GraphSaver suspended | `storage/app-mode.ts` | Storage | Persisted, long-lived |
 | **Quiz mode** | Test recall | Hides sampled node content; forces View mode | `features/quiz.ts` | Features | Session |
 | **Transition input guard** | Prevent input from corrupting state mid-animation | *All* input, for the duration of one animation | `ui/transition-input-guard.ts` | UI | ~1 second |
+| **Shelf interaction guard** | Prevent commands from disrupting an in-flight AI-shelf animation | *All* input during Add/Remove-from-shelf execution (full block); shelf commands only during post-transition / AI-addition re-arrangement (shelf-only block) | `ui/shelf-interaction-guard.ts` | UI | ~sub-second (one shelf animation) |
 | **Path mode** | Linear guided traversal of a fixed scene sequence | Graph-initiated scene navigation; node/edge/scene **deletion** | `features/path/path.ts` | Features | Session, persisted in `knogra.state` |
 
 **Why they compose without negotiation:** each regime restricts for a *different reason*, and
@@ -487,13 +492,23 @@ Path mode blocks only deletion, to protect the integrity of the sequence being w
 path must not have scenes removed from under it. Creation, editing, scene composition, fold, and
 layout stay live in path mode. Different reason, strict subset, no conflict.
 
+**Why the shelf guard is separate from the transition guard.** Both are UI input-plumbing that
+protect an animation, so at a glance they look mergeable — but they guard *different* animations
+with *different* scope. The transition guard is single-level and globally blocks input for one
+scene transition. The shelf guard is two-level: a **full block** during scene-mutating
+Add/Remove-from-shelf commands, plus a lighter **shelf-only block** that refuses shelf commands
+while leaving the rest of the app interactive during post-transition and AI-addition
+re-arrangements. That shelf-only level has no analogue in the transition guard, and keeping the two
+independent leaves the delicate, well-tested transition path untouched. Distinct subject and reason,
+per the rule above — sibling regimes, not a duplicate.
+
 **Layer placement rule:**
 
 | Kind of mode | Layer | Mechanism |
 |--------------|-------|-----------|
 | Persisted, user-facing application mode | Storage | Module-level singleton + EventBus broadcast (`app-mode.ts`) |
 | Transient mode owned by one feature | Features | Feature-private state + EventBus broadcast (`quiz.ts`) |
-| Pure input plumbing with no domain meaning | UI | EventBus subscription + DOM capture (`transition-input-guard.ts`) |
+| Pure input plumbing with no domain meaning | UI | EventBus subscription + DOM capture (`transition-input-guard.ts`); or direct panel wiring + DOM capture (`shelf-interaction-guard.ts`) |
 
 **Enforcement rule:** the consequence of a mode belongs to the *owner* of the mode, expressed
 through EventBus, never through a cross-feature import (§4.2). A feature that must refuse an

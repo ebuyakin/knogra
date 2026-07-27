@@ -26,6 +26,8 @@ export class SuggestionPanel {
   #onItemClick: ((index: number) => void) | null = null;
   #onItemDismiss: ((index: number) => void) | null = null;
   #contextMenu: HTMLDivElement | null = null;
+  /** True while the shelf is animating; suppresses item clicks and the context menu. */
+  #isBlocked: () => boolean = () => false;
 
   constructor(container: HTMLElement, _cy: Core) {
     this.#container = container;
@@ -58,6 +60,24 @@ export class SuggestionPanel {
    */
   onItemDismiss(handler: (index: number) => void): void {
     this.#onItemDismiss = handler;
+  }
+
+  /**
+   * Provide a predicate reporting whether the shelf is currently blocked (a shelf
+   * animation is running). While blocked, item clicks are ignored and the
+   * right-click menu is suppressed, so a refused command shows no affordance.
+   */
+  setBlockedPredicate(isBlocked: () => boolean): void {
+    this.#isBlocked = isBlocked;
+  }
+
+  /**
+   * Reflect the shelf's blocked state visually: while blocked, items are made
+   * non-interactive (no hover lift, no pointer cursor), so a refused command
+   * shows no affordance.
+   */
+  setBlockedVisual(blocked: boolean): void {
+    this.#shelfContainer.classList.toggle('shelf-blocked', blocked);
   }
 
   // ==========================================================================
@@ -271,6 +291,7 @@ export class SuggestionPanel {
     // Click handler
     item.addEventListener('click', () => {
       if (!isEditMode()) return;
+      if (this.#isBlocked()) return;
       this.#onItemClick?.(index);
     });
 
@@ -278,6 +299,7 @@ export class SuggestionPanel {
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (this.#isBlocked()) return;
       this.#showContextMenu(index, e.clientX, e.clientY);
     });
 

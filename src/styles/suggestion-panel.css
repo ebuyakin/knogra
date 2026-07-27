@@ -68,6 +68,13 @@
   transform: translateY(0);
 }
 
+/* While the shelf is animating, items are non-interactive: no pointer cursor,
+   no hover lift — a clear signal that shelf commands are off. */
+.suggestion-shelf.shelf-blocked .suggestion-item {
+  cursor: default;
+  pointer-events: none;
+}
+
 .suggestion-node-preview {
   position: relative;
   display: flex;

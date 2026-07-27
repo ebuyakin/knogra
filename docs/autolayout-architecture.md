@@ -23,7 +23,7 @@ The first two follow the same pipeline: gather live node footprints and edges �
 ```
 src/features/autolayout/
   autolayout.ts           public class AutoLayout — the only feature-api entry point
-  autolayout-animator.ts  tweens node positions + re-frames the viewport (layout-agnostic)
+  autolayout.ts           public class AutoLayout — the only feature-api entry point
   fit.ts                  computeFitViewport — zoom/pan to frame a layout, capped at FIT_MAX_ZOOM (1.5)
   grow-arrange.ts         neighbourhood BFS + seed/grow-in for growAndArrange
   algorithms/
@@ -32,6 +32,8 @@ src/features/autolayout/
     radial-shared.ts      reusable radial helpers (spanning forest, leaf weights, footprintRadius)
     outer-ring-spreading.ts   the default radial algorithm (§4)
 ```
+
+Position tweening lives outside the feature in the shared `utils/cy/node-position-animator.ts` (`NodePositionAnimator` — tweens a node set to new positions and optionally re-frames the viewport, layout-agnostic), shared with the `align` feature per the no-cross-feature-imports rule.
 
 **Boundaries (upheld):**
 
@@ -212,7 +214,7 @@ Because Cytoscape renders `screen = graph·zoom + pan`, this combination leaves 
 - **No viewport re-fit** and **no `FIT_MAX_ZOOM` cap.** The zoom is stepped by exactly `1/factor` about the pivot (not `computeFitViewport`), which is what pins the scene in place.
 - **Exact reversibility.** Because the pivot is the fixed central node and the zoom is not clamped (the Cytoscape instance sets no `minZoom`/`maxZoom`), applying `1/factor` restores the prior positions *and* framing exactly (to floating-point epsilon). The opposite command is a true undo.
 
-It reuses **Animation** (`AutoLayoutAnimator` with a supplied `ViewportTarget` — the one place a non-`computeFitViewport` viewport is fed in) and **Persistence** (suspend during the glide, one `forceSave` of the final positions and viewport).
+It reuses **Animation** (`NodePositionAnimator` with a supplied `ViewportTarget` — the one place a non-`computeFitViewport` viewport is fed in) and **Persistence** (suspend during the glide, one `forceSave` of the final positions and viewport).
 
 **Known limitations (shared with `rotate`):** scene background images are not scaled, so spreading detaches nodes from memory-palace placements; and a subtree folded before a spread unfolds at its (moved) root's un-spread offset.
 

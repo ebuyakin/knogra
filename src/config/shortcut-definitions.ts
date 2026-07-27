@@ -27,6 +27,8 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'D / Del', description: 'Delete selected node or edge' },
       { key: 'S', description: 'Add incident edges to scene' },
       { key: 'Shift+S', description: 'Add scene-only graph edges' },
+      { key: 'M', description: 'Open node manager' },
+      { key: 'V', description: 'Enable / disable edit mode' },
     ]
   },
   {
@@ -43,7 +45,6 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: '+ / − / 0', description: 'Zoom in / out / reset zoom and pan (current scene)' },
       { key: 'Shift +/−/0', description: 'Zoom all scenes in / out / reset to current' },
       { key: 'H', description: 'Toggle hidden connection badges' },
-      { key: 'V', description: 'Enable / disable edit mode' },
     ]
   },
   {
@@ -64,7 +65,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'Z', description: 'Toggle fold / unfold' },
       { key: 'O / Shift+O', description: 'Rotate scene clockwise / counter-clockwise' },
       { key: 'W / Shift+W', description: 'Spread / tighten scene spacing around central node' },
-      { key: 'M', description: 'Open node manager' },
+      { key: 'T / U / Y', description: 'Align selected nodes into a row / column / diagonal' },
     ]
   },
   {

@@ -20,17 +20,17 @@ import { StyleGenerator } from '../../styles/style-generator';
 import { pickCurveParams, pickVisualParams } from '../../styles/edge-visual-resolver';
 import type { LayoutInputEdge, LayoutInputNode, Position } from './algorithms/types';
 import { resolveLayout } from './algorithms/registry';
-import { AutoLayoutAnimator } from './autolayout-animator';
+import { NodePositionAnimator } from '../utils/cy/node-position-animator';
 import { computeFitViewport } from './fit';
 import { computeNeighbourhoodBall, seedEntrants, growEntrants, readCurrentThemeId } from './grow-arrange';
 
 export class AutoLayout {
   #cy: Core;
-  #animator: AutoLayoutAnimator;
+  #animator: NodePositionAnimator;
 
   constructor(cy: Core) {
     this.#cy = cy;
-    this.#animator = new AutoLayoutAnimator(cy);
+    this.#animator = new NodePositionAnimator(cy);
   }
 
   /**

@@ -261,6 +261,36 @@ export class ContextMenu {
           }
         };
       })(),
+      (() => {
+        const alignCount = this.#cy.nodes(':selected').length;
+        return {
+          label: 'Align nodes',
+          enabled: editMode && alignCount >= 2,
+          children: [
+            {
+              label: 'Row (T)',
+              enabled: editMode,
+              action: () => {
+                this.#features.align.row();
+              }
+            },
+            {
+              label: 'Column (U)',
+              enabled: editMode,
+              action: () => {
+                this.#features.align.column();
+              }
+            },
+            {
+              label: 'Diagonal (Y)',
+              enabled: editMode && alignCount >= 3,
+              action: () => {
+                this.#features.align.diagonal();
+              }
+            }
+          ]
+        };
+      })(),
       {
         label: 'Scene',
         enabled: editMode,
@@ -655,31 +685,6 @@ export class ContextMenu {
             ]
           },
           {
-            label: 'Rotate',
-            children: [
-              {
-                label: 'Clockwise (O)',
-                enabled: editMode,
-                action: () => {
-                  this.#features.autolayout.rotate(
-                    this.#features.scene.getCentralNodeId(),
-                    getSetting('autolayout.rotateStep')
-                  );
-                }
-              },
-              {
-                label: 'Counter-clockwise (Shift+O)',
-                enabled: editMode,
-                action: () => {
-                  this.#features.autolayout.rotate(
-                    this.#features.scene.getCentralNodeId(),
-                    -getSetting('autolayout.rotateStep')
-                  );
-                }
-              }
-            ]
-          },
-          {
             label: 'Spacing',
             children: [
               {
@@ -699,6 +704,57 @@ export class ContextMenu {
                   this.#features.autolayout.scaleScene(
                     this.#features.scene.getCentralNodeId(),
                     1 / getSetting('autolayout.densityStep')
+                  );
+                }
+              }
+            ]
+          },
+          {
+            label: 'Align nodes',
+            children: [
+              {
+                label: 'Row (T)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.align.row();
+                }
+              },
+              {
+                label: 'Column (U)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.align.column();
+                }
+              },
+              {
+                label: 'Diagonal (Y)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.align.diagonal();
+                }
+              }
+            ]
+          },
+          {
+            label: 'Rotate',
+            children: [
+              {
+                label: 'Clockwise (O)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.rotate(
+                    this.#features.scene.getCentralNodeId(),
+                    getSetting('autolayout.rotateStep')
+                  );
+                }
+              },
+              {
+                label: 'Counter-clockwise (Shift+O)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.rotate(
+                    this.#features.scene.getCentralNodeId(),
+                    -getSetting('autolayout.rotateStep')
                   );
                 }
               }

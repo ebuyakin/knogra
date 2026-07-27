@@ -105,9 +105,12 @@ src/features/autolayout/
                            .growAndArrange(central, degree)  ← new public method → delegates to grow-arrange.ts
   layout.ts              radial geometry (existing)
   fit.ts                 computeFitViewport — extracted from autolayout.ts, clear exported API (feature-local shared)
-  autolayout-animator.ts existing
   grow-arrange.ts        new submodule: neighbourhood BFS + generative-edge selection + seed/grow orchestration (functions)
 ```
+
+> Node position tweening now lives in the shared `utils/cy/node-position-animator.ts`
+> (`NodePositionAnimator`), moved out of the feature so `align` can reuse it; at the time
+> of this document it was the feature-local `autolayout-animator.ts`.
 
 **Dependency rules (upheld):**
 - No sibling-feature imports. The feature imports only within itself and **downstream**: `utils/`, `styles/`, `config/`, `storage/`, `core/`.
