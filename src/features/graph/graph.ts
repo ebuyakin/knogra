@@ -3,7 +3,7 @@
  * Handles graph structure operations: adding/removing nodes and edges
  */
 
-import type { Core } from 'cytoscape';
+import type { Core, NodeSingular } from 'cytoscape';
 import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../../core/main-types';
 import type { AnchorLinkResult } from './anchor-traversal';
 import type { GraphStatistics } from './statistics';
@@ -251,7 +251,7 @@ export class Graph {
     // Nearest non-overlapping spot near the reference, sized from actual bboxes.
     const obstacles: SizedObstacle[] = this.#cy.nodes()
       .filter(n => n.id() !== (nodeId as string))
-      .map(n => {
+      .map((n: NodeSingular) => {
         const bb = n.boundingBox();
         return { pos: n.position(), half: 0.5 * Math.hypot(bb.w, bb.h) };
       });

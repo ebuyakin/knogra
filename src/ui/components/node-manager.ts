@@ -250,7 +250,7 @@ export class NodeManager {
   /**
    * Format a timestamp as a compact local date-time: DD-MM-YY HH:MM.
    */
-  #formatTimestamp(timestamp: number | string): string {
+  #formatTimestamp(timestamp: Date | number | string): string {
     const date = new Date(timestamp);
     const pad = (value: number): string => String(value).padStart(2, '0');
     const day = pad(date.getDate());

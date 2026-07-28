@@ -4,7 +4,7 @@
  * Extracted from Scene to keep files under 300 lines
  */
 
-import type { Core } from 'cytoscape';
+import type { Core, NodeSingular } from 'cytoscape';
 import type { SceneId, Node, NodeId, EdgeId, DesignId } from '../../core/main-types';
 
 import { graphStore } from '../../storage/graph-store';
@@ -377,7 +377,7 @@ export class SceneNodeOps {
     const newHalf = 60 * Math.SQRT2; // bounding-circle radius of a default ~120px node
     const obstacles: SizedObstacle[] = this.#cy.nodes()
       .filter(n => n.id() !== (placementRef as string))
-      .map(n => {
+      .map((n: NodeSingular) => {
         const bb = n.boundingBox();
         return { pos: n.position(), half: 0.5 * Math.hypot(bb.w, bb.h) };
       });
