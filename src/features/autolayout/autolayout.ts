@@ -24,9 +24,20 @@ import { NodePositionAnimator } from '../utils/cy/node-position-animator';
 import { computeFitViewport } from './fit';
 import { computeNeighbourhoodBall, seedEntrants, growEntrants, readCurrentThemeId } from './grow-arrange';
 
+/** Multiplicative steps below this distance from 1 are treated as no-ops. */
+const SCALE_EPSILON = 1e-6;
+
 export class AutoLayout {
   #cy: Core;
   #animator: NodePositionAnimator;
+
+  /** Rotate: a run is animating; further presses accumulate instead of stacking tweens. */
+  #rotationInFlight = false;
+  #pendingRotationDegrees = 0;
+
+  /** Scale: same coalescing, with a multiplicative accumulator. */
+  #scaleInFlight = false;
+  #pendingScaleFactor = 1;
 
   constructor(cy: Core) {
     this.#cy = cy;
@@ -133,6 +144,12 @@ export class AutoLayout {
    * no reset — and the bounding circle about the pivot is unchanged, so no
    * viewport re-fit. Folded/hidden nodes keep their offsets. Edit mode only.
    *
+   * Repeated presses are coalesced: a step arriving while a rotation is
+   * animating is added to a pending angle and applied as a single follow-up
+   * movement once the current one lands. Each transform is therefore computed
+   * from settled positions — no half-finished orbit is ever used as the input,
+   * so N presses always yield exactly N steps with no radius drift.
+   *
    * @param centralNodeId The scene's central node (rotation pivot).
    * @param degrees Rotation step in degrees; positive rotates clockwise.
    */
@@ -143,6 +160,28 @@ export class AutoLayout {
     }
     if (!centralNodeId || degrees === 0) return;
 
+    if (this.#rotationInFlight) {
+      this.#pendingRotationDegrees += degrees;
+      if (isDebug('d_scene')) console.log(`[AutoLayout] Rotation coalesced: ${this.#pendingRotationDegrees}° pending`);
+      return;
+    }
+
+    this.#rotationInFlight = true;
+    try {
+      let step = degrees;
+      while (step !== 0) {
+        await this.#rotateOnce(centralNodeId, step);
+        step = this.#pendingRotationDegrees;
+        this.#pendingRotationDegrees = 0;
+      }
+    } finally {
+      this.#rotationInFlight = false;
+      this.#pendingRotationDegrees = 0;
+    }
+  }
+
+  /** One rigid rotation step, animated to completion. */
+  async #rotateOnce(centralNodeId: NodeId, degrees: number): Promise<void> {
     const central = this.#cy.getElementById(centralNodeId);
     if (central.length === 0 || !central.visible()) return;
 
@@ -196,6 +235,9 @@ export class AutoLayout {
    * framing. Folded/hidden nodes keep their offsets, matching `rotate`. Edit
    * mode only.
    *
+   * Repeated presses are coalesced exactly as in `rotate`, with the pending
+   * steps multiplied together.
+   *
    * @param centralNodeId The scene's central node (scaling pivot).
    * @param factor Multiplicative density step; >1 spreads, <1 tightens.
    */
@@ -206,6 +248,28 @@ export class AutoLayout {
     }
     if (!centralNodeId || factor <= 0 || factor === 1) return;
 
+    if (this.#scaleInFlight) {
+      this.#pendingScaleFactor *= factor;
+      if (isDebug('d_scene')) console.log(`[AutoLayout] Scale coalesced: ×${this.#pendingScaleFactor} pending`);
+      return;
+    }
+
+    this.#scaleInFlight = true;
+    try {
+      let step = factor;
+      while (Math.abs(step - 1) > SCALE_EPSILON) {
+        await this.#scaleSceneOnce(centralNodeId, step);
+        step = this.#pendingScaleFactor;
+        this.#pendingScaleFactor = 1;
+      }
+    } finally {
+      this.#scaleInFlight = false;
+      this.#pendingScaleFactor = 1;
+    }
+  }
+
+  /** One similarity-transform step, animated to completion. */
+  async #scaleSceneOnce(centralNodeId: NodeId, factor: number): Promise<void> {
     const central = this.#cy.getElementById(centralNodeId);
     if (central.length === 0 || !central.visible()) return;
 

@@ -220,41 +220,126 @@ export function circularSpreadSafe(
 }
 
 /**
- * Fallback placement for a single node when {@link circularSpreadSafe} finds no
- * usable free sector — e.g. a fully-ringed central node whose children block
- * nearly every angle. Instead of aborting, aim at the least-crowded direction
- * (the largest gap, even if narrower than the normal threshold) and place the
- * node just beyond the outermost existing neighbour so it clears the ring.
+ * A neighbouring node treated as a circular obstacle, with its real half-size.
  */
-export function placeBeyondRing(
-  center: Position,
-  existingPositions: Position[],
-  minRadius: number,
-  nodeSize: number = 100
-): Position {
-  // Least-crowded direction: largest gap in the 360° obstacle map.
-  const blockedAngles = new Array(360).fill(false);
-  for (const obstaclePos of existingPositions) {
-    const blockage = calculateAngularBlockage(center, obstaclePos, nodeSize);
-    if (blockage) {
-      markAnglesAsBlocked(blockedAngles, blockage.startAngle, blockage.endAngle);
+export interface SizedObstacle {
+  pos: Position;
+  /** Half of the node's larger bounding-box dimension (after scale). */
+  half: number;
+}
+
+// Single-node placement tuning — see docs/node-placement.md §4, §7.
+// Calibrated 2026-07-27: these are the values that look right at node.spacing = 1.
+/** Clearance margin between two node bodies, as a fraction of the new node's diameter. */
+const SINGLE_CLEAR_FACTOR = 0.05;
+/** Breathing room beyond touching, as a fraction of the new node's radius. */
+const SINGLE_BREATH_FACTOR = 0.25;
+
+/**
+ * Bearing (deg) at the centre of the widest angular gap between the reference's
+ * neighbours — i.e. maximally far from every existing spoke. Steers a new node
+ * BETWEEN existing edges so their connectors never overlap. Deterministic
+ * (first-widest gap clockwise from East wins on ties). East (0°) when there are
+ * no neighbours. See docs/node-placement.md §5.
+ */
+function widestNeighbourGapBisectorDeg(refPos: Position, obstacles: SizedObstacle[]): number {
+  const angles: number[] = [];
+  for (const o of obstacles) {
+    const deg = (Math.atan2(o.pos.y - refPos.y, o.pos.x - refPos.x) * 180) / Math.PI;
+    angles.push(((deg % 360) + 360) % 360);
+  }
+  if (angles.length === 0) return 0;
+  angles.sort((a, b) => a - b);
+
+  let bestGap = -1;
+  let bestMid = 0;
+  for (let i = 0; i < angles.length; i++) {
+    const a1 = angles[i];
+    const a2 = i + 1 < angles.length ? angles[i + 1] : angles[0] + 360;
+    const gap = a2 - a1;
+    if (gap > bestGap) {
+      bestGap = gap;
+      bestMid = ((a1 + a2) / 2) % 360;
     }
   }
-  const freeSector = findLargestFreeSector(blockedAngles);
-  const angleDeg = freeSector ? freeSector.start + freeSector.width / 2 : 0;
-  const angleRad = (angleDeg * Math.PI) / 180;
+  return bestMid;
+}
 
-  // Radius that clears the outermost neighbour by roughly one node width, so the
-  // new node lands in open space beyond the ring rather than on top of it.
-  let maxDist = minRadius;
-  for (const p of existingPositions) {
-    const dist = Math.hypot(p.x - center.x, p.y - center.y);
-    if (dist > maxDist) maxDist = dist;
+/**
+ * Place ONE node next to a reference node. Implements docs/node-placement.md.
+ *
+ * Direction: exactly the bisector of the widest gap between neighbour bearings.
+ * Being strictly between two distinct spokes, it can never coincide with an
+ * existing edge, so connectors never overlap (no angular grid, no aliasing).
+ * Radius: the preferred distance if it clears, otherwise the nearest larger
+ * radius along that bearing that clears every node. All radii and clearances
+ * derive from node sizes, so the layout scales with the design system.
+ *
+ * @param refPos    Reference node centre.
+ * @param refHalf   Reference node bounding-circle radius (after scale).
+ * @param newHalf   New node bounding-circle radius.
+ * @param obstacles Every other in-scene node as {pos, half}. The reference need
+ *                  not be excluded — a zero-distance obstacle is ignored.
+ * @param spacing   User multiplier for breathing room and clearance (1 = default).
+ */
+export function placeSingleNode(
+  refPos: Position,
+  refHalf: number,
+  newHalf: number,
+  obstacles: SizedObstacle[],
+  spacing: number = 1
+): Position {
+  const childSize = newHalf * 2;
+  const gClear = childSize * SINGLE_CLEAR_FACTOR * spacing;
+  const gBreath = newHalf * SINGLE_BREATH_FACTOR;
+  // `spacing` scales the WHOLE preferred distance, not just the margin: the
+  // margin is small next to the (unscaled) node radii, so scaling it alone barely
+  // moved the layout. Floored at minRadius because the reference node is not in
+  // the obstacle list — without the floor a small multiplier would drop the new
+  // node on top of its own parent.
+  const minRadius = refHalf + newHalf + gClear;
+  const rPref = Math.max(minRadius, (refHalf + newHalf + gBreath) * spacing);
+  const dR = Math.max(6, newHalf * 0.5);
+
+  // Precompute obstacle set; drop the reference itself (zero distance) and track
+  // the farthest neighbour to bound the search.
+  let maxObstDist = 0;
+  const obs: SizedObstacle[] = [];
+  for (const o of obstacles) {
+    const dist = Math.hypot(o.pos.x - refPos.x, o.pos.y - refPos.y);
+    if (dist < 1) continue;
+    obs.push(o);
+    if (dist > maxObstDist) maxObstDist = dist;
   }
-  const radius = maxDist + nodeSize;
+  const searchCap = Math.max(rPref * 4, maxObstDist + childSize);
 
-  return {
-    x: center.x + radius * Math.cos(angleRad),
-    y: center.y + radius * Math.sin(angleRad)
+  // A candidate centre clears iff its body stays gClear from every obstacle body.
+  const clears = (p: Position): boolean => {
+    for (const o of obs) {
+      const need = newHalf + o.half + gClear;
+      const dx = o.pos.x - p.x;
+      const dy = o.pos.y - p.y;
+      if (dx * dx + dy * dy < need * need) return false;
+    }
+    return true;
   };
+
+  // Direction: strictly between two existing spokes, so the new edge can never
+  // lie on top of an existing one.
+  const awayDeg = widestNeighbourGapBisectorDeg(refPos, obs);
+  const rad = (awayDeg * Math.PI) / 180;
+  const at = (r: number): Position => ({
+    x: refPos.x + r * Math.cos(rad),
+    y: refPos.y + r * Math.sin(rad)
+  });
+
+  // Nearest radius along that bearing that clears every node, starting at the
+  // preferred (aesthetic) distance.
+  for (let r = rPref; r <= searchCap; r += dR) {
+    const p = at(r);
+    if (clears(p)) return p;
+  }
+
+  // Saturated scene: non-overlapping last resort at the cap, same bearing.
+  return at(searchCap);
 }

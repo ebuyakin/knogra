@@ -115,15 +115,15 @@ export const AI_DEFAULTS: AISettings = {
   shelfPreviewGrayscale: 30,
   
   // Shelf animation settings
-  shelfExitDuration: 1000,
-  shelfPauseBetween: 1000,
-  shelfEnterDuration: 1000,
+  shelfExitDuration: 300,
+  shelfPauseBetween: 300,
+  shelfEnterDuration: 300,
   
   // Shelf item removal settings
-  shelfRemovalDuration: 1000,
-  shelfRemovalPause: 1000,
-  shelfCollapseDuration: 1000,
+  shelfRemovalDuration: 300,
+  shelfRemovalPause: 300,
+  shelfCollapseDuration: 300,
   
   // Shelf item addition settings
-  shelfAdditionDuration: 1000,
+  shelfAdditionDuration: 300,
 };

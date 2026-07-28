@@ -218,7 +218,7 @@ export class NodeManager {
       const anchorDistance = info.anchorDistance ?? '—';
       const chatCount = this.#chatCounts.get(info.node.id) ?? 0;
       const chatCell = chatCount > 0 ? String(chatCount) : '';
-      const editedCell = info.node.updatedAt ? new Date(info.node.updatedAt).toLocaleDateString() : '—';
+      const editedCell = info.node.updatedAt ? this.#formatTimestamp(info.node.updatedAt) : '—';
       return `
       <tr data-node-id="${info.node.id}" class="${this.#selectedNodes.has(info.node.id) ? 'selected' : ''}">
         <td class="col-checkbox">
@@ -245,6 +245,20 @@ export class NodeManager {
       </tr>
     `;
     }).join('');
+  }
+
+  /**
+   * Format a timestamp as a compact local date-time: DD-MM-YY HH:MM.
+   */
+  #formatTimestamp(timestamp: number | string): string {
+    const date = new Date(timestamp);
+    const pad = (value: number): string => String(value).padStart(2, '0');
+    const day = pad(date.getDate());
+    const month = pad(date.getMonth() + 1);
+    const year = pad(date.getFullYear() % 100);
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    return `${day}-${month}-${year} ${hours}:${minutes}`;
   }
 
   /**

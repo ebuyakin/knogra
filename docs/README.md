@@ -1,7 +1,7 @@
 # Knogra Documentation Map
 
 > **Status:** Current index  
-> **Last reviewed:** 2026-07-09  
+> **Last reviewed:** 2026-07-27  
 > **Authority:** Use this file to orient within `docs/`. It classifies documents by current usefulness and points to the canonical sources when older documents overlap.
 
 ## Status Legend
@@ -45,7 +45,8 @@
 | [telemetry-design.md](telemetry-design.md) | Current | Anonymous usage-counting design and privacy constraints. |
 | [landing-app-interaction.md](landing-app-interaction.md) | Current | User-facing landing/app scenarios and implementation status. |
 | [chat-image-retrieval.md](chat-image-retrieval.md) | Draft | Proposed design for retrieving real images into the per-node chat; not yet implemented. |
-| [node-expansion-spec.md](node-expansion-spec.md) | Draft | Working spec for the node-expansion placement algorithm; not yet implemented. |
+| [node-placement.md](node-placement.md) | Current | Canonical rules for placing a **single** node added to or included in a scene (add child/parent, shelf create/include, node manager): reference resolution, between-spokes direction, nearest clearing radius, and the `node.spacing` multiplier. Multi-node expansion defers to [node-expansion-spec.md](node-expansion-spec.md). |
+| [node-expansion-spec.md](node-expansion-spec.md) | Draft | Working spec for the node-expansion placement algorithm (multi-node "include children/parents/neighbours"). Doc status predates the implementation in `donut-placement.ts` — verify before relying on it. |
 
 ## Visual Systems
 

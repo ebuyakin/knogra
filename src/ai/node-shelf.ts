@@ -260,8 +260,12 @@ export class NodeShelf {
       ? { ...action.properties, comment: reason }
       : action.properties;
 
+    // Anchor on the resolved placement reference (selected-in-scene else
+    // central), consistent with the add-child command. See docs/node-placement.md §3.
+    const reference = this.#features.scene.resolvePlacementReference() ?? this.#currentNodeId!;
+
     await this.#features.graph.addConnectedNode(
-      this.#currentNodeId!,
+      reference,
       direction,
       action.title,
       properties,

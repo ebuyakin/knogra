@@ -9,7 +9,7 @@
   padding: 0;
   background: var(--bg-secondary, #161b22);
   color: var(--text-primary, #e6edf3);
-  width: 1040px;
+  width: 1180px;
   max-width: 95vw;
   height: 80vh;
   max-height: 80vh;
@@ -106,6 +106,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 
 .node-manager-table thead {
@@ -162,6 +163,8 @@ th.col-status .node-manager-th-content {
 
 .node-manager-table td {
   padding: 8px 12px;
+  height: 40px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border-primary, #21262d);
 }
 
@@ -175,9 +178,14 @@ th.col-status .node-manager-th-content {
 
 /* Column widths */
 .col-checkbox { width: 40px; text-align: center; }
-.col-title { width: auto; }
+.col-title {
+  width: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-node-id { width: 160px; }
 td.col-node-id { 
-  width: 160px; 
   font-family: monospace;
   font-size: 11px;
   color: var(--text-secondary, #8b949e);
@@ -190,7 +198,7 @@ td.col-node-id {
 .col-anchor-distance { width: 56px; text-align: center; }
 .col-anchor-distance.disconnected { color: var(--text-secondary, #8b949e); }
 .col-own-scene { width: 50px; text-align: center; }
-.col-status { width: 60px; text-align: center; }
+.col-status { width: 86px; text-align: center; }
 .col-in-scene { width: 50px; text-align: center; }
 .col-chat { width: 54px; text-align: center; }
 .col-edited { width: 96px; text-align: center; white-space: nowrap; color: var(--text-secondary, #8b949e); }

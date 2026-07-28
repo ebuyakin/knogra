@@ -12,7 +12,7 @@ import { isEditMode } from '../../storage/app-mode';
 import { StyleGenerator } from '../../styles/style-generator';
 import { getSetting } from '../../config';
 import { isDebug } from '../../config/debug-flags';
-import { circularSpreadSafe, placeBeyondRing } from '../utils/pure/position-expansion';
+import { placeSingleNode, type SizedObstacle } from '../utils/pure/position-expansion';
 import { computeTagStylePlan, type TagStyleParams, type TagStylePlan } from './tag-style-plan';
 
 /**
@@ -51,6 +51,22 @@ export class SceneNodeOps {
     this.#getThemeId = getThemeId;
     this.#collapseNode = collapseNode;
     this.#getCentralNodeId = getCentralNodeId;
+  }
+
+  /**
+   * Resolve the reference node for single-node placement: the active (selected)
+   * node when it belongs to the current scene, otherwise the scene's central
+   * node. Shared by scene-internal includes and by the AI shelf (via Scene).
+   *
+   * The active node id persists in cy.scratch across transitions, so it can
+   * point to a node absent from the current scene — the presence guard treats
+   * that as "no selection." See docs/node-placement.md §3.
+   */
+  resolvePlacementReference(): NodeId | null {
+    const activeNodeId = this.#cy.scratch('activeNodeId') as NodeId | undefined;
+    const activeInScene = activeNodeId
+      && this.#cy.getElementById(activeNodeId as string).length > 0;
+    return activeInScene ? (activeNodeId as NodeId) : this.#getCentralNodeId();
   }
 
   /**
@@ -339,15 +355,8 @@ export class SceneNodeOps {
       return 0;
     }
 
-    // Resolve placement reference: prefer the active (focused) node when it
-    // belongs to the current scene; otherwise fall back to the central node.
-    // The active node id persists in cy.scratch across scene transitions, so
-    // it can legitimately point to a node that is not in the current scene —
-    // in that case we treat it as absent.
-    const activeNodeId = this.#cy.scratch('activeNodeId') as NodeId | undefined;
-    const activeInScene = activeNodeId
-      && this.#cy.getElementById(activeNodeId as string).length > 0;
-    const placementRef = activeInScene ? activeNodeId : this.#getCentralNodeId();
+    // Resolve placement reference (active-in-scene else central).
+    const placementRef = this.resolvePlacementReference();
 
     if (!placementRef) {
       console.warn(`Cannot include node ${nodeId}: no placement reference (no active node and no central node)`);
@@ -360,23 +369,19 @@ export class SceneNodeOps {
       return 0;
     }
 
-    // Calculate collision-free position near placement reference
+    // Collision-free position near the reference (docs/node-placement.md §4):
+    // bounding-circle radii (0.5·√(w²+h²)) so diagonal placements clear corners.
     const refPos = placementRefCyNode.position();
     const refBBox = placementRefCyNode.boundingBox();
-    const refHalfSize = Math.max(refBBox.w, refBBox.h) / 2;
-    const childHalfSize = 60; // default half-size for included node
-    const margin = 20;
-    const minRadius = refHalfSize + childHalfSize + margin;
-
-    const existingPositions = this.#cy.nodes().map(n => n.position());
-    const positions = circularSpreadSafe(refPos, 1, existingPositions, minRadius);
-
-    // circularSpreadSafe returns [] when no free angular sector exists around the
-    // reference — the common case for a central node ringed by its children.
-    // Fall back to placing the node just beyond the ring so the include never
-    // silently aborts (mirrors the create-connected path's own fallback).
-    const includePosition = positions[0]
-      ?? placeBeyondRing(refPos, existingPositions, minRadius);
+    const refHalf = 0.5 * Math.hypot(refBBox.w, refBBox.h);
+    const newHalf = 60 * Math.SQRT2; // bounding-circle radius of a default ~120px node
+    const obstacles: SizedObstacle[] = this.#cy.nodes()
+      .filter(n => n.id() !== (placementRef as string))
+      .map(n => {
+        const bb = n.boundingBox();
+        return { pos: n.position(), half: 0.5 * Math.hypot(bb.w, bb.h) };
+      });
+    const includePosition = placeSingleNode(refPos, refHalf, newHalf, obstacles, getSetting('node.spacing'));
 
     // Include the node in scene (handles design, stylesheet, cy.add)
     await this.includeNode(nodeId, includePosition, design);

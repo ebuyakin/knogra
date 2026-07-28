@@ -247,7 +247,7 @@ class GraphSaver {
       tags: data.tags || [],
       properties: data.properties || {},
       createdAt: data.createdAt || new Date(),
-      updatedAt: new Date(),
+      updatedAt: data.updatedAt || new Date(),
       attachments: data.attachments || [],
       aiArtifacts: data.aiArtifacts || [],
       isAnchor: data.isAnchor
@@ -269,7 +269,7 @@ class GraphSaver {
       tags: data.tags || [],
       properties: data.properties || {},
       createdAt: data.createdAt || new Date(),
-      updatedAt: new Date()
+      updatedAt: data.updatedAt || new Date()
     };
   }
 

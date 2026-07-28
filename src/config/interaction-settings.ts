@@ -11,6 +11,6 @@ export interface InteractionSettings {
 }
 
 export const INTERACTION_DEFAULTS: InteractionSettings = {
-  doubleClickNode: 'edit',
+  doubleClickNode: 'navigate',
   zoomStep: 1.2,
 };

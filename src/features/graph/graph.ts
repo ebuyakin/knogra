@@ -3,7 +3,7 @@
  * Handles graph structure operations: adding/removing nodes and edges
  */
 
-import type { Core, SingularElementReturnValue } from 'cytoscape';
+import type { Core } from 'cytoscape';
 import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../../core/main-types';
 import type { AnchorLinkResult } from './anchor-traversal';
 import type { GraphStatistics } from './statistics';
@@ -12,7 +12,7 @@ import { isEditMode } from '../../storage/app-mode';
 import { eventBus } from '../../events/event-bus';
 import { cascadeNodeDeletion } from '../../storage/node-deletion';
 import { StyleGenerator } from '../../styles/style-generator';
-import { circularSpreadSafe } from '../utils/pure/position-expansion';
+import { placeSingleNode, type SizedObstacle } from '../utils/pure/position-expansion';
 import { getSetting } from '../../config';
 import { getDefaultEdgeTypeId } from '../../config/edge-type-settings';
 import { AppStateManager } from '../../storage/app-state';
@@ -237,34 +237,25 @@ export class Graph {
       nodeDesign = { id: getSetting('node.defaultDesign') as DesignId, params: {} };
     }
 
-    // Calculate minRadius: parent half-size + child half-size + margin
+    // Node sizes for placement (docs/node-placement.md §4): use each node's
+    // bounding-circle radius (0.5·√(w²+h²)) so diagonal placements clear the
+    // rectangle corners, not just the axis-aligned edges.
     const nodeBBox = existingNode.boundingBox();
-    const parentHalfSize = Math.max(nodeBBox.w, nodeBBox.h) / 2;
-    
-    // Child size: same as parent if inheriting, otherwise default 120
+    const parentHalf = 0.5 * Math.hypot(nodeBBox.w, nodeBBox.h);
+
+    // Child size: same as parent if inheriting, otherwise default 120. Convert
+    // the max-dimension estimate to a bounding-circle radius via √2.
     const childBaseSize = inheritDesign ? Math.max(nodeBBox.w, nodeBBox.h) : 120;
-    const childHalfSize = (childBaseSize * nodeScale) / 2;
-    
-    const margin = 20;
-    const minRadius = parentHalfSize + childHalfSize + margin;
+    const childHalf = (childBaseSize * nodeScale / 2) * Math.SQRT2;
 
-    // Get existing node positions for collision avoidance
-    const existingPositions = this.#cy.nodes().map(n => n.position());
-
-    // Calculate new node position using collision avoidance
-    const newPositions = circularSpreadSafe(
-      nodePos,
-      1,  // Just 1 node
-      existingPositions,
-      minRadius
-    );
-
-    // circularSpreadSafe returns [] when the ring around the node is full (no
-    // free sector / radius too large). Without a fallback the position would be
-    // undefined and Cytoscape would drop the node at (0,0), stacking every
-    // subsequent node on top of the central node. Instead, stack on the most
-    // recent connected node with a small diagonal shift so it stays visible.
-    const newPos = newPositions[0] ?? this.#stackedFallbackPosition(nodeId, direction);
+    // Nearest non-overlapping spot near the reference, sized from actual bboxes.
+    const obstacles: SizedObstacle[] = this.#cy.nodes()
+      .filter(n => n.id() !== (nodeId as string))
+      .map(n => {
+        const bb = n.boundingBox();
+        return { pos: n.position(), half: 0.5 * Math.hypot(bb.w, bb.h) };
+      });
+    const newPos = placeSingleNode(nodePos, parentHalf, childHalf, obstacles, getSetting('node.spacing'));
 
     // Create new node with determined design and scale (title will be auto-generated if not provided)
     const newNodeId = await this.addFreeNode(newPos, title, nodeDesign, properties, nodeScale);
@@ -279,33 +270,6 @@ export class Graph {
     }
 
     return newNodeId;
-  }
-
-  /**
-   * Fallback placement when the ring around a node is full: stack the new node
-   * onto the most recently created connected node (children for 'child',
-   * parents for 'parent') with a small diagonal shift. Node ids are
-   * timestamp-based and fixed-format, so the lexicographically largest id is the
-   * newest — making each stacked node the anchor for the next, forming a short
-   * diagonal staircase instead of an exact overlap.
-   */
-  #stackedFallbackPosition(nodeId: NodeId, direction: 'child' | 'parent'): { x: number; y: number } {
-    const STACK_SHIFT = 24;
-    const node = this.#cy.getElementById(nodeId);
-    const connected = direction === 'child' ? node.outgoers('node') : node.incomers('node');
-
-    let anchor: SingularElementReturnValue = node;
-    let newestId = '';
-    connected.forEach(candidate => {
-      const id = candidate.id();
-      if (id > newestId) {
-        newestId = id;
-        anchor = candidate;
-      }
-    });
-
-    const base = anchor.position();
-    return { x: base.x + STACK_SHIFT, y: base.y + STACK_SHIFT };
   }
 
   /**

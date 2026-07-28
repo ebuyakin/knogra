@@ -116,6 +116,15 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
             description: 'Design to use when Add Equation or Replace Equation imports an equation into a node',
             type: 'select',
             options: DESIGN_MANIFEST.map(d => ({ value: d.id, label: d.label }))
+          },
+          {
+            key: 'node.spacing',
+            label: 'Node Spacing',
+            description: 'How far a newly added child/parent is placed from its source node (1.0 = default; lower packs tighter). Affects newly placed nodes only.',
+            type: 'number',
+            min: 0.2,
+            max: 3,
+            step: 0.1
           }
         ]
       },
@@ -806,8 +815,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         settings: [
           {
             key: 'ai.shelfExitDuration',
-            label: 'Exit Duration',
-            description: 'Duration for shelf items to exit on scene change (ms)',
+            label: 'Scene transition: outgoing shelf sliding out',
+            description: 'On scene change: time for the current suggestions to slide out (ms)',
             type: 'number',
             min: 0,
             max: 3000,
@@ -815,8 +824,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           },
           {
             key: 'ai.shelfPauseBetween',
-            label: 'Pause Between',
-            description: 'Pause between exit and enter animations (ms)',
+            label: 'Scene transition: pause between outgoing and incoming shelf motions',
+            description: 'On scene change: blank pause while the shelf is empty, between old leaving and new arriving (ms)',
             type: 'number',
             min: 0,
             max: 5000,
@@ -824,8 +833,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           },
           {
             key: 'ai.shelfEnterDuration',
-            label: 'Enter Duration',
-            description: 'Duration for shelf items to enter (ms)',
+            label: 'Scene transition: incoming shelf sliding in',
+            description: 'On scene change: time for the new scene\'s suggestions to slide in (ms)',
             type: 'number',
             min: 0,
             max: 3000,
@@ -833,8 +842,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           },
           {
             key: 'ai.shelfRemovalDuration',
-            label: 'Removal Duration',
-            description: 'Duration for removing a single item (ms)',
+            label: 'Shelf operation: used node fading out',
+            description: 'When a suggestion is placed into the scene or dismissed: time for that card to fade out (ms)',
             type: 'number',
             min: 0,
             max: 3000,
@@ -842,8 +851,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           },
           {
             key: 'ai.shelfRemovalPause',
-            label: 'Removal Pause',
-            description: 'Pause after removal before collapse (ms)',
+            label: 'Shelf operation: pause after node fading out',
+            description: 'Pause after the card has gone, before the remaining cards close the gap (ms)',
             type: 'number',
             min: 0,
             max: 3000,
@@ -851,8 +860,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           },
           {
             key: 'ai.shelfCollapseDuration',
-            label: 'Collapse Duration',
-            description: 'Duration for gap collapse after removal (ms)',
+            label: 'Shelf operation: sliding to close the gap',
+            description: 'Time for the remaining cards to slide left and close the gap (ms)',
             type: 'number',
             min: 0,
             max: 3000,
@@ -860,8 +869,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           },
           {
             key: 'ai.shelfAdditionDuration',
-            label: 'Addition Duration',
-            description: 'Duration for new items to animate in (ms)',
+            label: 'New nodes sliding in',
+            description: 'When the AI adds new suggestions to the shelf: time for each new card to slide in (existing cards stay put) (ms)',
             type: 'number',
             min: 0,
             max: 3000,
