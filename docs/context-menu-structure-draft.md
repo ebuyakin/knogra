@@ -43,8 +43,8 @@ Graph
   Delete node
   Set as anchor
   -----------------
-  Add edge (L)
-  Add multiple edges (Shift+L)
+  Add edge (I)
+  Add multiple edges (Shift+I)
 ```
 
 ### Node Notes

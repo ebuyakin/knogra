@@ -30,6 +30,10 @@ export class AnchorLinkTooltip {
     this.#cy.on('scene:changed', this.#sceneChangedHandler);
   }
 
+  isOpen(): boolean {
+    return this.#element !== null;
+  }
+
   showAtRenderedPosition(result: AnchorLinkResult, position: { x: number; y: number }): void {
     this.#show(result, position);
   }

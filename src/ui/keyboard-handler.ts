@@ -11,14 +11,43 @@ import type { ConnectionBadgeManager } from './components/connection-badge';
 import type { EdgeCreationMode } from './edge-creation-mode';
 import { isDebug } from '../config/debug-flags';
 import { getSetting } from '../config';
-import type { NodeEditor, NodeEditorContext } from './components/node-editor';
+import type { NodeEditor, NodeEditorContext } from './components/node-editor/node-editor';
 import type { NodeManager } from './components/node-manager';
 import type { AnchorLinkTooltip } from './components/anchor-link-tooltip';
+import type { QuickTitleEditor } from './components/quick-title-editor';
 import { SettingsModal } from './components/settings-modal';
 import { ShortcutOverlay } from './components/shortcut-overlay';
 import { getAppMode, isEditMode, setAppMode } from '../storage/app-mode';
 import { exportWorkspace, showImportDialog, newWorkspace } from '../storage/workspace';
 import { generateEquationFromPrompt } from '../ai/equation-generator';
+
+/**
+ * Node navigation directions, keyed by the pressed key. The vim-style keys
+ * mirror the arrows so the hand can stay on the home row; edge bending claims
+ * the same letters earlier, but only while an edge is selected, so the two
+ * meanings never apply at once.
+ */
+const NAVIGATION_KEYS: Record<string, string | undefined> = {
+  arrowleft: 'arrowleft',
+  arrowright: 'arrowright',
+  arrowup: 'arrowup',
+  arrowdown: 'arrowdown',
+  h: 'arrowleft',
+  j: 'arrowdown',
+  k: 'arrowup',
+  l: 'arrowright'
+};
+
+/**
+ * Neighbourhood radius (in hops) for the grow-and-arrange shortcuts, keyed by
+ * the pressed digit. Mirrors the "N degrees" entries in the Auto-layout menu.
+ */
+const AUTOLAYOUT_GROW_KEYS: Record<string, number | undefined> = {
+  '1': 1,
+  '2': 2,
+  '3': 3,
+  '4': 4
+};
 
 export class KeyboardHandler {
   #cy: Core;
@@ -29,6 +58,7 @@ export class KeyboardHandler {
   #nodeManager: NodeManager | null;
   #container: HTMLElement | null;
   #anchorLinkTooltip: AnchorLinkTooltip | null;
+  #quickTitleEditor: QuickTitleEditor | null;
   #settingsModal: SettingsModal;
   #shortcutOverlay: ShortcutOverlay;
   #enabled: boolean = true;
@@ -41,7 +71,8 @@ export class KeyboardHandler {
     nodeEditor: NodeEditor | null = null,
     nodeManager: NodeManager | null = null,
     container: HTMLElement | null = null,
-    anchorLinkTooltip: AnchorLinkTooltip | null = null
+    anchorLinkTooltip: AnchorLinkTooltip | null = null,
+    quickTitleEditor: QuickTitleEditor | null = null
   ) {
     this.#cy = cy;
     this.#features = features;
@@ -50,6 +81,7 @@ export class KeyboardHandler {
     this.#nodeManager = nodeManager;
     this.#container = container;
     this.#anchorLinkTooltip = anchorLinkTooltip;
+    this.#quickTitleEditor = quickTitleEditor;
     this.#settingsModal = new SettingsModal();
     this.#shortcutOverlay = new ShortcutOverlay();
     
@@ -162,10 +194,17 @@ export class KeyboardHandler {
       }
     }
 
-    // H - Toggle hidden connection badges
-    if (key === 'h' && !ctrl) {
+    // B - Toggle hidden connection badges
+    if (key === 'b' && !event.shiftKey && !ctrl) {
       event.preventDefault();
       this.#badgeManager?.toggle();
+      return;
+    }
+
+    // Shift+B - Toggle the selected node's link to the anchor
+    if (key === 'b' && event.shiftKey && !ctrl) {
+      event.preventDefault();
+      this.#toggleSelectedNodeLinkToAnchor();
       return;
     }
 
@@ -187,13 +226,6 @@ export class KeyboardHandler {
         };
         this.#nodeManager.show(graphCenter);
       }
-      return;
-    }
-
-    // I - Show selected node's link to the anchor
-    if (key === 'i' && !ctrl) {
-      event.preventDefault();
-      this.#showSelectedNodeLinkToAnchor();
       return;
     }
 
@@ -224,6 +256,14 @@ export class KeyboardHandler {
       event.preventDefault();
       if (!isEditMode()) return;
       this.#editSelectedNode();
+      return;
+    }
+
+    // F2 - Quick rename of the selected node
+    if (key === 'f2' && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#quickRenameSelectedNode();
       return;
     }
 
@@ -307,6 +347,16 @@ export class KeyboardHandler {
       return;
     }
 
+    // n - Reset zoom and centre the viewport on the selected node
+    if (key === 'n' && !event.shiftKey && !ctrl) {
+      event.preventDefault();
+      const selected = this.#cy.nodes(':selected');
+      if (selected.length > 0) {
+        this.#features.scene.resetZoomOnNode(selected.first().id() as NodeId);
+      }
+      return;
+    }
+
     // Delete/Backspace - Delete selected node or edge
     if (key === 'delete' || key === 'backspace') {
       event.preventDefault();
@@ -321,12 +371,12 @@ export class KeyboardHandler {
       return;
     }
 
-    // Arrow keys - Navigate between nodes
-    // Shift+Arrow: require same perpendicular coordinate (aligned navigation)
-    if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) {
+    // Arrow keys / h j k l - Navigate between nodes
+    // Shift+<direction>: also pan the viewport to centre the newly selected node
+    const navigationDirection = NAVIGATION_KEYS[key];
+    if (navigationDirection && !ctrl) {
       event.preventDefault();
-      const alignedOnly = event.shiftKey;
-      this.#navigateToClosestNode(key, alignedOnly);
+      this.#navigateToClosestNode(navigationDirection, event.shiftKey);
       return;
     }
 
@@ -361,6 +411,13 @@ export class KeyboardHandler {
       return;
     }
 
+    // Shift+Z - Unfold all folded nodes in the scene (one tier)
+    if (key === 'z' && event.shiftKey && !ctrl) {
+      event.preventDefault();
+      await this.#features.scene.unfoldAllNodes();
+      return;
+    }
+
     // C - Expand all (children + parents)
     if (key === 'c' && !event.shiftKey && !ctrl) {
       event.preventDefault();
@@ -373,8 +430,8 @@ export class KeyboardHandler {
       return;
     }
 
-    // J - Expand children
-    if (key === 'j' && !event.shiftKey && !ctrl) {
+    // R - Include child(r)en
+    if (key === 'r' && !event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       const selected = this.#cy.$('node:selected');
@@ -385,8 +442,8 @@ export class KeyboardHandler {
       return;
     }
 
-    // Shift+J - Exclude descendants (collapse downstream subtree)
-    if (key === 'j' && event.shiftKey && !ctrl) {
+    // Shift+R - Exclude descendants (collapse downstream subtree)
+    if (key === 'r' && event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       const selected = this.#cy.$('node:selected');
@@ -467,8 +524,8 @@ export class KeyboardHandler {
       return;
     }
 
-    // Shift+L - Add edges repeatedly from the selected node
-    if (key === 'l' && event.shiftKey && !ctrl) {
+    // Shift+I - Add edges repeatedly from the selected node
+    if (key === 'i' && event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       const selected = this.#cy.$('node:selected');
@@ -479,8 +536,8 @@ export class KeyboardHandler {
       return;
     }
 
-    // L - Add edge (link)
-    if (key === 'l' && !ctrl) {
+    // I - Add edge (link)
+    if (key === 'i' && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       const selected = this.#cy.$('node:selected');
@@ -513,8 +570,19 @@ export class KeyboardHandler {
       return;
     }
 
-    // W - Spread the scene (de-crowd) about the central node
+    // W - Tighten the scene (pack) about the central node
     if (key === 'w' && !event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.autolayout.scaleScene(
+        this.#features.scene.getCentralNodeId(),
+        1 / getSetting('autolayout.densityStep')
+      );
+      return;
+    }
+
+    // Shift+W - Spread the scene (de-crowd) about the central node
+    if (key === 'w' && event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       this.#features.autolayout.scaleScene(
@@ -524,13 +592,24 @@ export class KeyboardHandler {
       return;
     }
 
-    // Shift+W - Tighten the scene (pack) about the central node
-    if (key === 'w' && event.shiftKey && !ctrl) {
+    // Q - Auto-layout the current scene about the central node (no expansion)
+    if (key === 'q' && !event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
-      this.#features.autolayout.scaleScene(
+      await this.#features.autolayout.apply(this.#features.scene.getCentralNodeId());
+      return;
+    }
+
+    // 1-4 - Pull in the degree-N neighbourhood, then auto-layout the scene.
+    // Deliberately no Shift guard: on layouts where the digits are the shifted
+    // characters (AZERTY), Shift+digit is the only way to type them.
+    const growDegree = AUTOLAYOUT_GROW_KEYS[key];
+    if (growDegree !== undefined && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      await this.#features.autolayout.growAndArrange(
         this.#features.scene.getCentralNodeId(),
-        1 / getSetting('autolayout.densityStep')
+        growDegree
       );
       return;
     }
@@ -629,9 +708,16 @@ export class KeyboardHandler {
     return selectedEdges.first().id() as EdgeId;
   }
 
-  #showSelectedNodeLinkToAnchor(): void {
+  #toggleSelectedNodeLinkToAnchor(): void {
+    if (!this.#anchorLinkTooltip) return;
+
+    if (this.#anchorLinkTooltip.isOpen()) {
+      this.#anchorLinkTooltip.hide();
+      return;
+    }
+
     const selected = this.#cy.$('node:selected');
-    if (selected.length === 0 || !this.#anchorLinkTooltip) return;
+    if (selected.length === 0) return;
 
     const nodeId = selected.first().id() as NodeId;
     const result = this.#features.graph.getLinkToAnchor(nodeId);
@@ -641,9 +727,9 @@ export class KeyboardHandler {
   /**
    * Navigate to the closest node in the arrow direction
    * @param key - Arrow key pressed
-   * @param alignedOnly - If true, only consider nodes with same perpendicular coordinate (±50px)
+   * @param centerOnTarget - If true, pan the viewport to centre the newly selected node (zoom unchanged)
    */
-  #navigateToClosestNode(key: string, _alignedOnly: boolean = false): void {
+  #navigateToClosestNode(key: string, centerOnTarget: boolean = false): void {
     const selected = this.#cy.nodes(':selected');
     
     // If no node selected, select first node
@@ -651,6 +737,7 @@ export class KeyboardHandler {
       const firstNode = this.#cy.nodes().first();
       if (firstNode.length > 0) {
         firstNode.select();
+        if (centerOnTarget) this.#features.scene.centerOnNode(firstNode.id() as NodeId);
       }
       return;
     }
@@ -673,6 +760,7 @@ export class KeyboardHandler {
     if (bestNode !== null) {
       currentNode.unselect();
       bestNode.select();
+      if (centerOnTarget) this.#features.scene.centerOnNode(bestNode.id() as NodeId);
     }
   }
 
@@ -749,8 +837,11 @@ export class KeyboardHandler {
 
   /**
    * Edit the currently selected node
+   *
+   * `titleOverride` carries text typed in the quick rename popover into the
+   * full editor, so escalating from it never loses the edit in progress.
    */
-  #editSelectedNode(): void {
+  #editSelectedNode(titleOverride?: string): void {
     if (!this.#nodeEditor || !this.#container) return;
 
     const selected = this.#cy.$('node:selected');
@@ -773,9 +864,13 @@ export class KeyboardHandler {
       containerRect: this.#container.getBoundingClientRect()
     };
 
+    const nodeData = titleOverride === undefined
+      ? editContext.nodeData
+      : { ...editContext.nodeData, title: titleOverride };
+
     this.#nodeEditor.show(
       nodeId,
-      editContext.nodeData,
+      nodeData,
       editContext.design,
       context,
       async (id, contentUpdates, designUpdates, scaleUpdate) => {
@@ -790,6 +885,45 @@ export class KeyboardHandler {
       },
       (title) => this.#features.graph.findNodeByTitle(title, nodeId)
     );
+  }
+
+  /**
+   * Rename the selected node through the anchored quick popover.
+   *
+   * Multi-line titles (mermaid imports) cannot be represented in the popover's
+   * single-line input, so they escalate straight to the full editor rather than
+   * being silently flattened.
+   */
+  #quickRenameSelectedNode(): void {
+    if (!this.#quickTitleEditor) return;
+
+    const selected = this.#cy.$('node:selected');
+    if (selected.length !== 1) return;
+
+    const nodeId = selected.first().id() as NodeId;
+    const editContext = this.#features.scene.getNodeEditContext(nodeId);
+    if (!editContext) return;
+
+    const currentTitle = editContext.nodeData.title;
+    if (currentTitle.includes('\n')) {
+      this.#editSelectedNode();
+      return;
+    }
+
+    this.#quickTitleEditor.show(nodeId, currentTitle, {
+      onSave: async (title) => {
+        await this.#features.node.update(nodeId, { title });
+        // The rendered label is baked into the node's generated stylesheet entry,
+        // so the style must be regenerated for the new title to reach the canvas.
+        // Design and scale are passed unchanged — this is a pure refresh.
+        await this.#features.scene.updateNodeStyle(nodeId, {
+          design: editContext.design,
+          scale: editContext.scale
+        });
+      },
+      hasConflict: (title) => this.#features.graph.findNodeByTitle(title, nodeId) !== null,
+      onEscalate: (typedTitle) => this.#editSelectedNode(typedTitle)
+    });
   }
 
   /**

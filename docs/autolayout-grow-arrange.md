@@ -1,7 +1,7 @@
 # Auto-layout: Grow & Arrange
 
 > **Status:** Draft — spec + implementation brief
-> **Last reviewed:** 2026-07-11
+> **Last reviewed:** 2026-08-04
 > **Authority:** Canonical model for the **Grow & Arrange** extension of the Auto-layout feature (`src/features/autolayout/`). Plain radial auto-layout (`AutoLayout.apply`) is unchanged; this document specifies the new membership-growing variant only.
 > **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Mermaid Fan Layout](mermaid-fan-layout.md) (shares the radial geometry lineage)
 
@@ -55,6 +55,8 @@ Identical geometry to plain auto-layout: the selected scene-layout algorithm (de
 
 Edge curves of every repositioned/added edge are reset to the default automatic bezier, exactly as `apply` does.
 
+**Sibling order.** The union layout honours `autolayout.ringOrder` exactly as `apply` does (see [autolayout-architecture.md](autolayout-architecture.md) §4.2.1, default `angular`). Nodes already in the scene contribute their `currentPos`, so a hand-arranged clockwise sequence survives the grow, at every ring depth. Entrants are seeded at `C` and carry no position, so they sort last within their parent's wedge — they fill in after the existing siblings rather than displacing them.
+
 ---
 
 ## 4. The animation — seed and arrange
@@ -90,7 +92,7 @@ Added to `AUTOLAYOUT_DEFAULTS` (`src/config/autolayout-settings.ts`), reused via
 | `growDirection` | `'both'` | Neighbourhood traversal direction: `both` (undirected), or later `children` / `parents`. |
 | `growConfirmThreshold` | `30` | Entrant count above which a confirmation dialog is shown. |
 
-Existing `ringSpacing`, `siblingGap`, `animate`, `animationDuration` are reused unchanged for the arrangement.
+Existing `ringSpacing`, `siblingGap`, `ringOrder`, `animate`, `animationDuration` are reused unchanged for the arrangement.
 
 ---
 
@@ -134,6 +136,7 @@ Scene
     1 degree          → autolayout.growAndArrange(central, 1)
     2 degrees         → autolayout.growAndArrange(central, 2)
     3 degrees         → autolayout.growAndArrange(central, 3)
+    4 degrees         → autolayout.growAndArrange(central, 4)
   Edges visibility
   Include all scene edges (Shift+S)
   …

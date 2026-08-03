@@ -6,7 +6,7 @@
 import type { Core } from 'cytoscape';
 import type { FeatureAPI } from '../../features/feature-api';
 
-import { NodeEditor } from './node-editor';
+import { NodeEditor } from './node-editor/node-editor';
 import { EdgeEditor } from './edge-editor';
 import { EdgeTypeManager } from './edge-type-manager';
 import { EdgeTypeVisibilityModal } from './edge-type-visibility-modal';
@@ -18,6 +18,7 @@ import { QuizPanel } from './quiz-panel';
 import { ContextMenu } from './context-menu';
 import { PasteStyleDialog } from './paste-style-dialog';
 import { AnchorLinkTooltip } from './anchor-link-tooltip';
+import { QuickTitleEditor } from './quick-title-editor';
 import { ConnectionBadgeManager } from './connection-badge';
 import { FoldBadgeManager } from './fold-badge';
 import { EdgeCreationMode } from '../edge-creation-mode';
@@ -37,6 +38,7 @@ export class UIComponentAPI {
   readonly themeEditor: ThemeEditor;
   readonly quizPanel: QuizPanel;
   readonly anchorLinkTooltip: AnchorLinkTooltip;
+  readonly quickTitleEditor: QuickTitleEditor;
   readonly contextMenu: ContextMenu;
   readonly pasteStyleDialog: PasteStyleDialog;
   readonly badgeManager: ConnectionBadgeManager;
@@ -59,6 +61,7 @@ export class UIComponentAPI {
     this.themeEditor = new ThemeEditor();
     this.quizPanel = new QuizPanel(features, container);
     this.anchorLinkTooltip = new AnchorLinkTooltip(cy, container);
+    this.quickTitleEditor = new QuickTitleEditor(cy, container);
     this.edgeCreationMode = new EdgeCreationMode(cy, container, features);
     this.pasteStyleDialog = new PasteStyleDialog(features);
 
@@ -86,7 +89,7 @@ export class UIComponentAPI {
     this.foldBadgeManager = new FoldBadgeManager(cy, container, features);
 
     // Create keyboard handler
-    this.keyboardHandler = new KeyboardHandler(cy, features, this.badgeManager, this.nodeEditor, this.nodeManager, container, this.anchorLinkTooltip);
+    this.keyboardHandler = new KeyboardHandler(cy, features, this.badgeManager, this.nodeEditor, this.nodeManager, container, this.anchorLinkTooltip, this.quickTitleEditor);
     this.keyboardHandler.setEdgeCreationMode(this.edgeCreationMode);
 
     // Create transition input guard (blocks input during transitions)

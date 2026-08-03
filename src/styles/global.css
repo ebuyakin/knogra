@@ -16,7 +16,12 @@
   --accent-blue: #58a6ff;
   --accent-green: #3fb950;
   --accent-orange: #f78166;
-  
+
+  /* Interactive accent: focus rings, active indicators, selected state.
+     Previously referenced by six stylesheets but never defined here, so each
+     one fell back to its own literal — blue in some, green in others. */
+  --accent-primary: var(--accent-blue);
+
   --border-primary: #30363d;
   --border-secondary: #21262d;
   
@@ -26,6 +31,13 @@
   --spacing-md: 1rem;
   --spacing-lg: 1.5rem;
   --spacing-xl: 2rem;
+
+  /* Modal chrome — shared so overlay headers line up across dialogs.
+     Height is fixed rather than derived from padding because each modal's
+     close/grip control has a different intrinsic size. */
+  --modal-header-height: 40px;
+  --modal-header-padding-x: 20px;
+  --modal-header-font-size: 13px;
   
   /* Typography */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;

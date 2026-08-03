@@ -49,3 +49,8 @@ export const SHELF_KEY = 'knogra.shelf';       // AI suggestions
 // so publisher-only layout knobs never travel inside an exported .knogra
 // workspace (settings.json) nor get overwritten on import.
 export const MERMAID_IMPORT_KEY = 'knogra.mermaid.import';
+
+// sessionStorage keys — deliberately not persisted across browser sessions.
+// Active Node Editor tab: sticky within a work session (a design pass keeps
+// landing on Design), reset to the default in a fresh tab.
+export const NODE_EDITOR_TAB_KEY = 'knogra.nodeEditor.tab';

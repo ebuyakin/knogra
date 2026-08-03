@@ -7,7 +7,7 @@ import type { Core } from 'cytoscape';
 import type { EdgeTypeId, NodeId } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
 import type { EdgeCreationMode } from '../edge-creation-mode';
-import type { NodeEditor, NodeEditorContext } from './node-editor';
+import type { NodeEditor, NodeEditorContext } from './node-editor/node-editor';
 import type { EdgeEditor } from './edge-editor';
 import type { EdgeTypeManager } from './edge-type-manager';
 import type { EdgeTypeVisibilityModal } from './edge-type-visibility-modal';
@@ -186,16 +186,16 @@ export class ContextMenu {
         }
       },
       {
-        label: 'Show link to anchor (I)',
-        action: () => {
-          this.#showLinkToAnchor(nodeId, position);
-        }
-      },
-      {
         label: 'Edit node (E)',
         enabled: editMode,
         action: () => {
           this.#openNodeEditor(nodeId);
+        }
+      },
+      {
+        label: 'Show link to anchor (Shift+B)',
+        action: () => {
+          this.#showLinkToAnchor(nodeId, position);
         }
       },
       ...(isFolded ? [{
@@ -310,7 +310,7 @@ export class ContextMenu {
             }
           },
           {
-            label: 'Include children (J)',
+            label: 'Include children (R)',
             enabled: editMode,
             action: async () => {
               await this.#features.scene.expandNodeAnimated(nodeId, 'children');
@@ -331,7 +331,7 @@ export class ContextMenu {
             }
           },
           {
-            label: 'Exclude descendants (Shift+J)',
+            label: 'Exclude descendants (Shift+R)',
             enabled: editMode,
             action: async () => {
               await this.#features.scene.collapseNodeAnimated(nodeId);
@@ -365,14 +365,14 @@ export class ContextMenu {
             }
           },
           {
-            label: 'Add edge (L)',
+            label: 'Add edge (I)',
             enabled: editMode,
             action: () => {
               this.#edgeCreationMode.start(nodeId, false);
             }
           },
           {
-            label: 'Add multiple edges (Shift+L)',
+            label: 'Add multiple edges (Shift+I)',
             enabled: editMode,
             action: () => {
               this.#edgeCreationMode.start(nodeId, true);
@@ -655,31 +655,38 @@ export class ContextMenu {
             label: 'Auto-layout',
             children: [
               {
-                label: 'No expansion',
+                label: 'No expansion (Q)',
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.apply(this.#features.scene.getCentralNodeId());
                 }
               },
               {
-                label: '1 degree',
+                label: '1 degree (1)',
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 1);
                 }
               },
               {
-                label: '2 degrees',
+                label: '2 degrees (2)',
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 2);
                 }
               },
               {
-                label: '3 degrees',
+                label: '3 degrees (3)',
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 3);
+                }
+              },
+              {
+                label: '4 degrees (4)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.growAndArrange(this.#features.scene.getCentralNodeId(), 4);
                 }
               }
             ]
@@ -688,22 +695,22 @@ export class ContextMenu {
             label: 'Spacing',
             children: [
               {
-                label: 'Spread (W)',
-                enabled: editMode,
-                action: () => {
-                  this.#features.autolayout.scaleScene(
-                    this.#features.scene.getCentralNodeId(),
-                    getSetting('autolayout.densityStep')
-                  );
-                }
-              },
-              {
-                label: 'Tighten (Shift+W)',
+                label: 'Tighten (W)',
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.scaleScene(
                     this.#features.scene.getCentralNodeId(),
                     1 / getSetting('autolayout.densityStep')
+                  );
+                }
+              },
+              {
+                label: 'Spread (Shift+W)',
+                enabled: editMode,
+                action: () => {
+                  this.#features.autolayout.scaleScene(
+                    this.#features.scene.getCentralNodeId(),
+                    getSetting('autolayout.densityStep')
                   );
                 }
               }
@@ -760,6 +767,12 @@ export class ContextMenu {
               }
             ]
           },
+          ...(this.#features.scene.hasAnyFold() ? [{
+            label: 'Unfold all (Shift+Z)',
+            action: async () => {
+              await this.#features.scene.unfoldAllNodes();
+            }
+          }] : []),
           {
             label: 'Edges visibility',
             action: () => {

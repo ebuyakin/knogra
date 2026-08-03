@@ -380,9 +380,28 @@ export class Scene {
     if (isDebug('d_scene')) console.log(`[Scene.unfoldNode] Complete for ${nodeId}`);
   }
 
+  /**
+   * Unfold all fold roots in the scene by one tier.
+   */
+  async unfoldAllNodes(): Promise<void> {
+    const graphSaveSuspension = graphSaver.suspend('scene:unfoldAllNodes');
+    try {
+      await this.#foldManager.unfoldAll();
+    } finally {
+      graphSaver.resume(graphSaveSuspension);
+    }
+    await this.#forceSaveIfEditMode();
+    if (isDebug('d_scene')) console.log('[Scene.unfoldAllNodes] Complete');
+  }
+
   /** Check if a node is a fold-root */
   isFolded(nodeId: NodeId): boolean {
     return this.#foldManager.isFolded(nodeId);
+  }
+
+  /** True if the scene has at least one fold root. */
+  hasAnyFold(): boolean {
+    return this.#foldManager.hasAnyFold();
   }
 
   /** Get fold state for persistence */
@@ -402,6 +421,9 @@ export class Scene {
     const graphSaveSuspension = graphSaver.suspend('scene:collapseNodeAnimated');
     try {
       await collapseNodesCascading(this.#cy, nodeId);
+      // The cascade traverses cy, which includes hidden folded nodes, so it may
+      // have removed a fold root's hidden set. Clean scratch before the saver resumes.
+      this.#foldManager.reconcile();
     } finally {
       graphSaver.resume(graphSaveSuspension);
     }
@@ -418,6 +440,9 @@ export class Scene {
     const graphSaveSuspension = graphSaver.suspend('scene:excludeNeighboursAnimated');
     try {
       await excludeNeighboursCascading(this.#cy, nodeId);
+      // Private-neighbourhood traversal reaches hidden folded nodes; drop the
+      // fold-state references they leave behind before the saver resumes.
+      this.#foldManager.reconcile();
     } finally {
       graphSaver.resume(graphSaveSuspension);
     }
@@ -539,6 +564,45 @@ export class Scene {
       pan: {
         x: container.clientWidth / 2 - centerX,
         y: container.clientHeight / 2 - centerY
+      }
+    }, {
+      duration,
+      easing: 'ease-out'
+    });
+  }
+
+  /**
+   * Pan the viewport so the given node sits at the centre, preserving zoom.
+   * No-op if the node is not in the current scene.
+   */
+  centerOnNode(nodeId: NodeId, duration: number = 250): void {
+    const node = this.#cy.getElementById(nodeId);
+    if (node.length === 0) return;
+    this.#cy.animate(
+      { center: { eles: node } },
+      { duration, easing: 'ease-out' }
+    );
+  }
+
+  /**
+   * Reset zoom to 1 and centre the viewport on the given node in a single
+   * animation. The node-centred counterpart of `resetZoom()` (which frames the
+   * whole scene). No-op if the node is not in the current scene.
+   */
+  resetZoomOnNode(nodeId: NodeId, duration: number = 500): void {
+    const node = this.#cy.getElementById(nodeId);
+    if (node.length === 0) return;
+    const container = this.#cy.container();
+    if (!container) {
+      this.#animateZoomTo(1, duration);
+      return;
+    }
+    const pos = node.position();
+    this.#cy.animate({
+      zoom: 1,
+      pan: {
+        x: container.clientWidth / 2 - pos.x,
+        y: container.clientHeight / 2 - pos.y
       }
     }, {
       duration,

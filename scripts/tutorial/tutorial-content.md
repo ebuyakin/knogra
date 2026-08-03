@@ -103,7 +103,7 @@ That's it. Five steps and you have a growing knowledge graph.
 
 ---
 
-**Keyboard shortcuts save time.** You don't need to memorize them all — just a few make a big difference: **G** (go to scene), **E** (edit node), **L** (link two nodes), **N** (node manager). You'll discover more as you go — they're shown next to each action in the right-click menus. Press **F1** at any time to open the full shortcut reference.
+**Keyboard shortcuts save time.** You don't need to memorize them all — just a few make a big difference: **G** (go to scene), **E** (edit node), **I** (link two nodes), **M** (node manager). You'll discover more as you go — they're shown next to each action in the right-click menus. Press **F1** at any time to open the full shortcut reference.
 
 ---
 
@@ -995,7 +995,7 @@ Arranging nodes by hand is satisfying, but sometimes you just want a clean layou
 
 **Running it.** Right-click the empty canvas → **Scene design → Auto-layout**, then choose how far to reach:
 - **No expansion** — arrange the nodes already in the scene.
-- **1 degree / 2 degrees / 3 degrees** — first pull in neighbouring nodes up to that many steps out from the central node, then arrange the whole result. (This is "grow and arrange" — a quick way to flesh out a sparse scene from your graph.)
+- **1 degree / 2 degrees / 3 degrees / 4 degrees** — first pull in neighbouring nodes up to that many steps out from the central node, then arrange the whole result. (This is "grow and arrange" — a quick way to flesh out a sparse scene from your graph. Reaching out 3–4 steps can pull in a lot of nodes — handy for a deliberate "helicopter view", though it may crowd the scene.)
 
 Knogra places nodes in a tidy radial arrangement around the central node and animates them into position, so you keep your bearings.
 

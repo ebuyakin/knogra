@@ -415,7 +415,8 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 | Component | Purpose |
 |-----------|---------|
 | `context-menu.ts` | Right-click menus |
-| `node-editor.ts` | Edit node modal |
+| `node-editor/` | Edit node modal — tabbed shell plus one module per tab |
+| `quick-title-editor.ts` | Anchored popover for quick node rename (`F2`) |
 | `edge-editor.ts` | Edit edge modal |
 | `edge-type-manager.ts` | Workspace edge type registry and type-level style editor |
 | `edge-type-visibility-modal.ts` | Scene-local **Edges visibility** controls |

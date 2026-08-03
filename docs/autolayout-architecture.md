@@ -1,7 +1,7 @@
 # Auto-layout Architecture
 
 > **Status:** Current — canonical
-> **Last reviewed:** 2026-07-11
+> **Last reviewed:** 2026-08-04
 > **Authority:** Canonical for the **Auto-layout feature** (`src/features/autolayout/`): its module structure, the **pluggable scene-layout registry**, and the radial **outer-ring-spreading** algorithm. The membership-growing variant is specified in [autolayout-grow-arrange.md](autolayout-grow-arrange.md); this document covers the feature skeleton and the layout algorithms it dispatches to.
 > **Related:** [Documentation map](README.md), [Grow & Arrange](autolayout-grow-arrange.md), [Mermaid Fan Layout](mermaid-fan-layout.md) (a deliberately separate layout lineage — see §6), [Architecture](architecture.md)
 
@@ -125,12 +125,16 @@ Each node's **leaf weight** = number of leaves in its subtree. The root's childr
 
 ### 4.2.1 Sibling order — edge order vs. angular preservation
 
-§4.2 fixes each child's *wedge width*; a separate rule fixes the *sequence* in which siblings fill a parent's wedge (clockwise from the wedge start). Two modes, chosen by `params.ringOrder` (setting `autolayout.ringOrder`, default `edge`):
+§4.2 fixes each child's *wedge width*; a separate rule fixes the *sequence* in which siblings fill a parent's wedge (clockwise from the wedge start). Two modes, chosen by `params.ringOrder` (setting `autolayout.ringOrder`, default `angular`):
 
 - **`edge`** — siblings follow edge insertion order (`LayoutInputEdge.order`, the Cytoscape edge index). Deterministic but semantically arbitrary: it reflects only when each edge happened to be created.
 - **`angular`** — siblings are sorted by their **current on-screen angle** around the central node, measured clockwise from due north (the angle `assignAngles` sweeps from). The layout then perfects radius and spacing while preserving the circular sequence the author arranged by hand. Uses `currentPos`; nodes lacking it sort last (stable).
 
-This lets the author encode a logical ring order **spatially**: drag the ring roughly into the desired clockwise order, re-run — it snaps to an even ring keeping that order. On a fresh scene the current angles are themselves arbitrary, so the first run is arbitrary; it stabilises once the author drags and re-runs. Implemented as `orderChildrenByAngle` (`radial-shared.ts`), applied before `assignAngles`. Sub-rings sort within their parent's wedge by the same centre-angle; the only degeneracy is a parent wedge straddling the north seam (rare).
+This lets the author encode a logical ring order **spatially**: drag the ring roughly into the desired clockwise order, re-run — it snaps to an even ring keeping that order. On a fresh scene the current angles are themselves arbitrary, so the first run is arbitrary; it stabilises once the author drags and re-runs.
+
+**Every depth, one reference point.** `orderChildrenByAngle` (`radial-shared.ts`) runs before `assignAngles` and recurses over the whole spanning tree: ring 1, ring 2 and beyond — every node's children are sorted, not just the central node's. The sort key is always the angle around the **scene's central node**, never around the local parent, because a parent's wedge is a contiguous sector as seen from the centre, so the centre-angle reproduces the visual sequence inside that wedge. The only degeneracy is a parent wedge straddling the north seam (rare).
+
+**Both re-arrangement capabilities feed it.** `apply` passes `currentPos` for every visible node. `growAndArrange` does the same for the nodes already on screen and passes the setting too; entrants are seeded at the central node and carry no `currentPos`, so they sort last within their parent (stable) — the hand-arranged sequence survives and newcomers fill in after it.
 
 ### 4.3 Ring radius — circumference (sum), not worst case
 
@@ -197,7 +201,7 @@ It reuses **Animation** (`AutoLayoutAnimator`, positions only — no viewport ta
 
 ## 7. Scene spacing (`scaleScene`)
 
-`scaleScene(central, factor)` changes how crowded the scene looks **without touching per-node `scale`** — that property stays reserved for intentional emphasis. Invoke via **Scene design ▸ Spacing ▸ Spread / Tighten** or the `W` / `Shift+W` shortcuts (`factor` = `autolayout.densityStep`, default 1.15, and its inverse). Edit mode only; folded/hidden nodes keep their offsets, matching `rotate`.
+`scaleScene(central, factor)` changes how crowded the scene looks **without touching per-node `scale`** — that property stays reserved for intentional emphasis. Invoke via **Scene design ▸ Spacing ▸ Tighten / Spread** or the `W` / `Shift+W` shortcuts (`factor` = the inverse of `autolayout.densityStep` for `W`, and `autolayout.densityStep` itself, default 1.15, for `Shift+W`). Edit mode only; folded/hidden nodes keep their offsets, matching `rotate`.
 
 Like `rotate` it is **not** a layout algorithm — no spanning forest, no registry dispatch. It is a **similarity transform about the pivot** `p` (the central node's position), combined with an inverse viewport zoom about the *same on-screen point*:
 

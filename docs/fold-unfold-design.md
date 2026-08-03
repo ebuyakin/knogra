@@ -307,14 +307,16 @@ Transition (Layer 0)
 
 | Key | Action |
 |---|---|
-| `Z` | Fold selected node |
-| `Shift+Z` | Unfold selected node |
+| `Z` | Toggle fold / unfold selected node |
+| `Shift+Z` | Unfold all folded nodes in the scene (one tier) |
 
 ### Context menu
 
 Under "Scene" submenu:
 - "Fold (Z)" — shown when node has descendants in scene
-- "Unfold (⇧Z)" — shown when node is a fold-root
+- "Unfold (Z)" — shown when node is a fold-root
+
+"Unfold all (Shift+Z)" lives in the canvas **Scene design** menu, shown only when the scene has at least one fold-root.
 
 ### Visual indicator
 

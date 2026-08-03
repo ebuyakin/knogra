@@ -196,8 +196,12 @@ export class FoldManager {
   /**
    * Unfold a node: reveal its direct children only.
    * Deeper descendants stay hidden under new fold entries on the revealed children.
+   *
+   * @param duration Optional per-node grow duration override (ms). When omitted,
+   *   falls back to the `fold.expandDuration` setting. Bulk unfold passes a
+   *   shorter value so revealing many roots does not feel sluggish.
    */
-  async unfold(rootNodeId: NodeId): Promise<void> {
+  async unfold(rootNodeId: NodeId, duration?: number): Promise<void> {
     // Rebuild working copy from authoritative scratch state
     this.loadFoldState();
     const foldedMap = this.#foldState.get(rootNodeId);
@@ -297,13 +301,42 @@ export class FoldManager {
 
     // Animate: grow revealed children from root position to offset-computed positions
     if (import.meta.env.DEV) recordAction('unfold', { rootNodeId, revealedCount: directChildren.length });
-    await this.#animateUnfold(rootNodeId, directChildren, foldedMap);
+    await this.#animateUnfold(rootNodeId, directChildren, foldedMap, duration);
 
     // Diamond cleanup: a revealed node may have been claimed by another fold root
     // (e.g. A→B, A→C, B→D, B→E, C→D, C→E — after fold(A)/unfold(A) both B and C
     // claim {D,E}; unfolding B leaves C with a stale (+) badge). Strip any
     // fold-set entries whose target is now visible, and clear empty fold roots.
     this.#reconcileFoldState();
+  }
+
+  /**
+   * Unfold every fold root in the scene by one tier.
+   *
+   * Snapshots the current fold-root set first, then unfolds each root once.
+   * This is essential: unfold() creates new fold roots (the revealed children),
+   * so iterating a live set would immediately re-unfold those children and
+   * cascade into a full multi-tier unfold. The snapshot keeps it to exactly one
+   * tier per call.
+   *
+   * Roots are unfolded sequentially (awaited) to respect the scratch sync
+   * discipline — parallel unfolds would race on cy.scratch('foldedNodes').
+   */
+  async unfoldAll(): Promise<void> {
+    const state = this.#cy.scratch('foldedNodes') as Record<string, unknown[]> | undefined;
+    if (!state) return;
+    const rootIds = Object.keys(state) as NodeId[];
+    const duration = getSetting('fold.bulkUnfoldDuration') as number;
+    for (const rootId of rootIds) {
+      await this.unfold(rootId, duration);
+    }
+  }
+
+  /** True if the scene has at least one fold root with hidden descendants. */
+  hasAnyFold(): boolean {
+    const state = this.#cy.scratch('foldedNodes') as Record<string, unknown[]> | undefined;
+    if (!state) return false;
+    return Object.values(state).some(entries => Array.isArray(entries) && entries.length > 0);
   }
 
   /**
@@ -338,6 +371,22 @@ export class FoldManager {
         console.log(`[FoldManager.cleanupRemovedNode] Cleaned fold state for removed node: ${nodeId}`);
       }
     }
+  }
+
+  /**
+   * Reconcile fold state against the live scene: drop folded-set entries whose
+   * node has left the scene or is no longer hidden, and clear roots whose set
+   * becomes empty.
+   *
+   * Call AFTER any operation that removes nodes from cy outside FoldManager.
+   * Collapse/exclude cascades build their node and edge universe from cy, which
+   * includes hidden folded nodes, so they can remove a fold root's entire hidden
+   * set. Without reconciliation the root keeps a stale (+) badge and the dangling
+   * references get persisted into Scene.foldedNodes by GraphSaver.
+   */
+  reconcile(): void {
+    this.loadFoldState();
+    this.#reconcileFoldState();
   }
 
   /**
@@ -549,10 +598,11 @@ export class FoldManager {
   async #animateUnfold(
     rootNodeId: NodeId,
     childIds: NodeId[],
-    foldedMap: Map<NodeId, { dx: number; dy: number }>
+    foldedMap: Map<NodeId, { dx: number; dy: number }>,
+    durationOverride?: number
   ): Promise<void> {
     const cy = this.#cy;
-    const duration = getSetting('fold.expandDuration') as number;
+    const duration = durationOverride ?? (getSetting('fold.expandDuration') as number);
     const rootPos = cy.getElementById(rootNodeId).position();
 
     if (isDebug('d_scene')) {

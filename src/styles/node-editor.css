@@ -1,5 +1,9 @@
 /* =============================================================================
-   Node Editor - 3-section layout: fixed top, scrollable middle, fixed bottom
+   Node Editor - fixed frame: title bar, title field, tab strip, body, footer.
+
+   The frame size is deliberately constant. Switching tabs or revealing a
+   design-specific section never resizes the dialog; each panel scrolls inside
+   the body instead.
    ============================================================================= */
 
 .node-editor-modal {
@@ -9,9 +13,6 @@
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 2000;
 }
 
@@ -20,9 +21,8 @@
   background-color: var(--bg-secondary, #161b22);
   border: 1px solid var(--border-primary, #30363d);
   border-radius: 8px;
-  min-width: 480px;
-  max-width: 600px;
-  height: 90vh;
+  width: 560px;
+  height: min(620px, 90vh);
   color: var(--text-primary, #e6edf3);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
   display: flex;
@@ -31,63 +31,149 @@
 }
 
 /* =============================================================================
-   TOP SECTION - Fixed header + core fields
+   TITLE BAR - drag handle
    ============================================================================= */
 
-.node-editor-top {
+.node-editor-titlebar {
   flex-shrink: 0;
-  padding: 16px 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--modal-header-height);
+  padding: 0 var(--modal-header-padding-x);
+  border-bottom: 1px solid var(--border-primary, #30363d);
+  cursor: move;
+  user-select: none;
+}
+
+.node-editor-titlebar-label {
+  font-size: var(--modal-header-font-size);
+  font-weight: 500;
+  color: var(--text-primary, #e6edf3);
+}
+
+.node-editor-titlebar-grip {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-secondary, #7d8590);
+  opacity: 0.6;
+}
+
+/* =============================================================================
+   TITLE FIELD - above the tabs, so renaming never costs a tab switch
+   ============================================================================= */
+
+.node-editor-title-field {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 14px 20px 12px;
+}
+
+.node-editor-title-input {
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.35;
+  padding: 6px 10px;
+  resize: none;
+}
+
+/* =============================================================================
+   TAB STRIP
+   ============================================================================= */
+
+.node-editor-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--border-primary, #30363d);
 }
 
-.node-editor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  cursor: move;
-  user-select: none;
-  font-size: 11px;
-  font-family: monospace;
+.node-editor-tab {
+  padding: 7px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
   color: var(--text-secondary, #7d8590);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.node-editor-tab:hover {
+  color: var(--text-primary, #e6edf3);
+}
+
+.node-editor-tab.active {
+  color: var(--accent-blue, #58a6ff);
+  border-bottom-color: var(--accent-blue, #58a6ff);
 }
 
 /* =============================================================================
-   MIDDLE SECTION - Scrollable, contains foldable sections
+   BODY - one panel visible at a time, scrolls within the fixed frame
    ============================================================================= */
 
-.node-editor-middle {
+.node-editor-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 8px 20px;
+  padding: 12px 20px;
+}
+
+.node-editor-panel {
+  display: none;
+}
+
+.node-editor-panel.active {
+  display: block;
+}
+
+.node-editor-group {
+  margin-top: 16px;
+}
+
+.node-editor-caption {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-blue, #58a6ff);
+}
+
+/* Read-only service data (Identity tab) */
+.node-editor-identity {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 18px;
+  row-gap: 10px;
+  font-size: 12px;
+}
+
+.node-editor-identity-label {
+  color: var(--text-secondary, #7d8590);
+  font-weight: 500;
+}
+
+.node-editor-identity-value {
+  font-family: monospace;
+  color: var(--text-primary, #e6edf3);
+  word-break: break-all;
 }
 
 /* =============================================================================
-   BOTTOM SECTION - Fixed metadata + buttons
+   FOOTER
    ============================================================================= */
 
-.node-editor-bottom {
+.node-editor-footer {
   flex-shrink: 0;
-  padding: 8px 20px 16px;
-  border-top: 1px solid var(--border-primary, #30363d);
-}
-
-.node-editor-meta {
-  font-size: 11px;
-  color: var(--text-secondary, #8b949e);
-  font-family: monospace;
-  margin-bottom: 10px;
-}
-
-.node-editor-action-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-primary, #30363d);
 }
 
-.node-editor-equation-actions,
-.node-editor-buttons {
+.node-editor-footer-group {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -124,52 +210,16 @@
   font-weight: 500;
 }
 
-/* =============================================================================
-   FOLDABLE SECTIONS
-   ============================================================================= */
-
-.node-editor-section {
-  margin-bottom: 4px;
-}
-
-.node-editor-section-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  user-select: none;
-  padding: 6px 0;
-}
-
-.node-editor-section-header:hover .node-editor-section-title {
+/* Uniform action button for the main dialog footer — no primary/secondary
+   hierarchy, since Save is reachable by shortcut and needs no shouting. */
+.node-editor-btn-neutral {
+  background-color: transparent;
+  border: 1px solid var(--border-primary, #30363d);
   color: var(--text-primary, #e6edf3);
 }
 
-.node-editor-section-toggle {
-  font-size: 8px;
-  width: 12px;
-  text-align: center;
-  color: var(--text-secondary, #7d8590);
-  transition: transform 0.15s;
-}
-
-.node-editor-section.collapsed .node-editor-section-toggle {
-  transform: rotate(-90deg);
-}
-
-.node-editor-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent-blue, #58a6ff);
-  transition: color 0.15s;
-}
-
-.node-editor-section-content {
-  padding-bottom: 4px;
-}
-
-.node-editor-section.collapsed .node-editor-section-content {
-  display: none;
+.node-editor-btn-neutral:hover:not(:disabled) {
+  border-color: var(--text-secondary, #7d8590);
 }
 
 /* =============================================================================
@@ -177,12 +227,12 @@
    ============================================================================= */
 
 .node-editor-field {
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .node-editor-label {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary, #7d8590);
@@ -245,12 +295,8 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 18px;
-  row-gap: 8px;
+  row-gap: 10px;
   padding-top: 2px;
-}
-
-.node-editor-default-layout-section {
-  margin-top: 10px;
 }
 
 .node-editor-number-row,
@@ -258,7 +304,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .node-editor-layout-cell {
@@ -266,7 +312,7 @@
   min-width: 0;
 }
 
-.node-editor-layout-controls .node-editor-color-label {
+.node-editor-layout-controls .node-editor-inline-label {
   min-width: 86px;
   text-align: left;
 }
@@ -298,7 +344,7 @@
   margin-bottom: 8px;
 }
 
-.node-editor-color-label {
+.node-editor-inline-label {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary, #7d8590);
@@ -330,12 +376,17 @@
   border-color: var(--text-secondary, #7d8590);
 }
 
-/* Combined color + opacity row (single line) */
-.node-editor-color-opacity-row {
+/* Inline control row: label + controls on one line (colour+opacity, scale, design) */
+.node-editor-inline-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 11px;
+}
+
+.node-editor-inline-row .node-editor-select {
+  flex: 1;
+  width: auto;
 }
 
 .node-editor-opacity-slider {

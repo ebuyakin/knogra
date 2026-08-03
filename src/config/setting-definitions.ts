@@ -151,6 +151,15 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
             step: 50
           },
           {
+            key: 'fold.bulkUnfoldDuration',
+            label: 'Bulk Unfold Duration',
+            description: 'Per-root grow duration for "Unfold all" (Shift+Z) (ms)',
+            type: 'number',
+            min: 50,
+            max: 2000,
+            step: 50
+          },
+          {
             key: 'fold.collapseEdgeFadeDelay',
             label: 'Collapse Edge Fade Delay',
             description: 'Delay after fading edges before collapse starts (ms)',
@@ -559,8 +568,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         description: 'How nodes are sequenced around a ring. "Preserve current angular order" keeps the clockwise order you arranged by hand — drag nodes into the order you want, then re-run.',
         type: 'select',
         options: [
-          { value: 'edge', label: 'Edge order (default)' },
-          { value: 'angular', label: 'Preserve current angular order' }
+          { value: 'edge', label: 'Edge order' },
+          { value: 'angular', label: 'Preserve current angular order (default)' }
         ]
       },
       {

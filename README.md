@@ -16,7 +16,7 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 
 **Option C — explore example graphs:** The **Library** section on the landing page lists available graphs. Click **Open** to load one into the app, or **Download** to save the `.knogra` file and import it later with `Ctrl+O`.
 
-**Keyboard shortcuts:** `Ctrl+S` export workspace · `Ctrl+O` import · `Z` fold/unfold node · `E` edit node · `F1` show all shortcuts
+**Keyboard shortcuts:** `Ctrl+S` export workspace · `Ctrl+O` import workspace · `Ctrl+N` new workspace · `F1` show all shortcuts
 
 **Your work is auto-saved** to the browser's IndexedDB. Use `Ctrl+S` to download a `.knogra` backup file anytime.
 

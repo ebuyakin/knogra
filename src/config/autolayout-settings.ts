@@ -19,9 +19,9 @@ export const AUTOLAYOUT_DEFAULTS = {
    *  half-diagonal footprint over-reserves space; values <1 pack rings and
    *  siblings tighter, >1 looser. */
   footprintScale: 1,
-  /** Sequencing of siblings around a ring: edge insertion order vs. the node's
-   *  current on-screen angular order (preserves a hand-arranged sequence). */
-  ringOrder: 'edge' as 'edge' | 'angular',
+  /** Sequencing of siblings around a ring: the node's current on-screen angular
+   *  order (preserves a hand-arranged sequence) vs. edge insertion order. */
+  ringOrder: 'angular' as 'edge' | 'angular',
   /** Scene rotation: angular step (degrees) applied per rotate command. */
   rotateStep: 15,
   /** Scene density: multiplicative step applied per spread/tighten command.

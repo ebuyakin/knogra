@@ -1,0 +1,63 @@
+/**
+ * Quick title editor - chromeless rename popover anchored to a node.
+ */
+
+.quick-title-editor {
+  position: absolute;
+  z-index: 1100;
+  box-sizing: border-box;
+  width: 260px;
+  padding: 8px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 6px;
+  background: var(--bg-secondary, #161b22);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* Connector triangle: a rotated square sharing the popover's fill and border. */
+.quick-title-editor::before {
+  content: '';
+  position: absolute;
+  left: var(--quick-title-connector-x, 50%);
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: var(--bg-secondary, #161b22);
+  border-left: 1px solid var(--border-primary, #30363d);
+  border-top: 1px solid var(--border-primary, #30363d);
+  transform: rotate(45deg);
+}
+
+.quick-title-editor-above::before {
+  top: auto;
+  bottom: -5px;
+  border-left: none;
+  border-top: none;
+  border-right: 1px solid var(--border-primary, #30363d);
+  border-bottom: 1px solid var(--border-primary, #30363d);
+}
+
+.quick-title-editor-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  background: var(--bg-primary, #0d1117);
+  color: var(--text-primary, #e6edf3);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.quick-title-editor-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.quick-title-editor-hint {
+  margin-top: 6px;
+  color: #f85149;
+  font-size: 10px;
+  line-height: 1.3;
+}

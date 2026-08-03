@@ -13,6 +13,7 @@ export const FOLD_DEFAULTS = {
   collapseDelayBetweenLayers: 0,
   collapseEdgeFadeDelay: 1500,  // Delay after fading out extra edges before collapse
   expandDuration: 600,
+  bulkUnfoldDuration: 200,  // Per-root grow duration for "Unfold all" (Shift+Z)
   expandEdgeFadeDelay: 300,  // Delay before fading in extra edges after expansion
   easingCollapse: 'ease-in' as const,
   easingExpand: 'ease-out' as const,

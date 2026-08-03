@@ -38,7 +38,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  min-height: var(--modal-header-height);
+  padding: 0 var(--modal-header-padding-x);
   border-bottom: 1px solid var(--border-primary, #30363d);
   background: var(--bg-secondary, #161b22);
   cursor: move;
@@ -47,7 +48,7 @@
 
 .settings-header h2 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--modal-header-font-size);
   font-weight: 500;
   color: var(--text-primary, #e6edf3);
 }
@@ -364,15 +365,17 @@
   border-color: var(--text-secondary, #8b949e);
 }
 
+/* Apply carries no visual emphasis over Cancel — same rule as the node editor's
+   footer, where the primary action is also reachable by shortcut. */
 .settings-btn-primary {
-  background: var(--accent-primary, #238636);
-  border: 1px solid var(--accent-primary, #238636);
-  color: white;
+  background: transparent;
+  border: 1px solid var(--border-primary, #30363d);
+  color: var(--text-primary, #e6edf3);
 }
 
 .settings-btn-primary:hover {
-  background: #2ea043;
-  border-color: #2ea043;
+  background: var(--bg-tertiary, #1c2128);
+  border-color: var(--text-secondary, #8b949e);
 }
 
 /* Scrollbar */

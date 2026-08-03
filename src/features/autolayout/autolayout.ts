@@ -328,7 +328,7 @@ export class AutoLayout {
    * Include-all-scene-edges (Shift+S) afterwards for cross-links. Edit mode only.
    *
    * @param centralNodeId The scene's central node (layout root).
-   * @param degree Neighbourhood radius in hops (1, 2, or 3).
+   * @param degree Neighbourhood radius in hops (1–4).
    */
   async growAndArrange(centralNodeId: NodeId | null, degree: number): Promise<void> {
     if (!isEditMode()) {
@@ -367,9 +367,17 @@ export class AutoLayout {
     const centralPosition = central.position();
 
     // Existing (pre-seed) visible nodes and their footprints for the union layout.
+    // currentPos feeds angular ring ordering: the nodes already on screen keep
+    // their hand-arranged clockwise sequence. Entrants are seeded at the centre
+    // and carry no currentPos, so they sort last within their parent (stable).
     const existingNodes: LayoutInputNode[] = this.#cy.nodes(':visible').map(node => {
       const box = node.boundingBox();
-      return { id: node.id() as NodeId, footprint: { width: box.w, height: box.h } };
+      const pos = node.position();
+      return {
+        id: node.id() as NodeId,
+        footprint: { width: box.w, height: box.h },
+        currentPos: { x: pos.x, y: pos.y },
+      };
     });
 
     const suspension = graphSaver.suspend('autolayout:grow');
@@ -398,6 +406,7 @@ export class AutoLayout {
           ringSpacing: getSetting('autolayout.ringSpacing'),
           siblingGap: getSetting('autolayout.siblingGap'),
           footprintScale: getSetting('autolayout.footprintScale'),
+          ringOrder: getSetting('autolayout.ringOrder'),
         },
       });
       if (relative.size === 0) return;
