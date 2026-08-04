@@ -29,6 +29,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'S', description: 'Add incident edges to scene' },
       { key: 'Shift+S', description: 'Add scene-only graph edges' },
       { key: 'M', description: 'Open node manager' },
+      { key: 'Double tap', description: 'On empty canvas — add a node there' },
     ]
   },
   {

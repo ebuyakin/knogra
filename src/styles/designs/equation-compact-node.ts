@@ -43,7 +43,7 @@ function buildGradientDef(
     return { def: '', fill: bgColor };
   }
 
-  const id = `grad-${idSuffix}-${Date.now()}`;
+  const id = `grad-${idSuffix}`;
   const stops = gradient.stops ?? [
     { offset: 0, color: bgColor },
     { offset: 1, color: bgAltColor }
@@ -84,7 +84,7 @@ function buildEffectsFilter(
     return { def: '', filter: '' };
   }
 
-  const id = `fx-${Date.now()}`;
+  const id = 'fx-0';
   const filters: string[] = [];
   if (hue !== 0) filters.push(`<feColorMatrix type="hueRotate" values="${hue}"/>`);
   if (saturation !== 1) filters.push(`<feColorMatrix type="saturate" values="${saturation}"/>`);

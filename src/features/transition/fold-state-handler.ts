@@ -103,7 +103,11 @@ export class FoldStateHandler {
       this.#cy.style().fromJson(updated).update();
     }
 
-    // Add edges for hidden nodes (both endpoints must exist in cy)
+    // Add edges for hidden nodes (both endpoints must exist in cy).
+    // Carry the scene's design/curve in element data — GraphSaver extracts
+    // these on the next sync, so bare graph data would wipe the scene's
+    // persisted edge override (mirrors arrival-animator's edge add).
+    const addedEdgeIds: EdgeId[] = [];
     for (const _nodeId of allHiddenIds) {
       const sceneEdgeIds = Object.keys(scene.edges) as EdgeId[];
       for (const edgeId of sceneEdgeIds) {
@@ -115,10 +119,29 @@ export class FoldStateHandler {
         if (srcExists && tgtExists) {
           this.#cy.add({
             group: 'edges',
-            data: { ...edgeData, id: edgeId, source: edgeData.sourceId, target: edgeData.targetId }
+            data: {
+              ...edgeData,
+              id: edgeId,
+              source: edgeData.sourceId,
+              target: edgeData.targetId,
+              design: scene.edges[edgeId]?.design,
+              curve: scene.edges[edgeId]?.curve
+            }
           });
+          addedEdgeIds.push(edgeId);
         }
       }
+    }
+
+    // Reconcile per-edge stylesheet rules for the re-added edges: write this
+    // scene's override or remove a stale rule left by a previously visited
+    // scene — otherwise a folded edge unfolds wearing another scene's style.
+    if (addedEdgeIds.length > 0) {
+      let stylesheet = (this.#cy.style() as any).json();
+      for (const edgeId of addedEdgeIds) {
+        stylesheet = StyleGenerator.applyEdgeOverrideToStylesheet(stylesheet, edgeId, scene.edges[edgeId], themeId);
+      }
+      this.#cy.style().fromJson(stylesheet).update();
     }
 
     // Hide folded nodes + their edges, add fold-root indicators

@@ -46,7 +46,7 @@ function buildGradientDef(
     return { def: '', fill: bgColor };
   }
 
-  const id = `grad-${idSuffix}-${Date.now()}`;
+  const id = `grad-${idSuffix}`;
   
   // Use custom stops or default to 2-stop gradient
   const stops = gradient.stops ?? [
@@ -102,7 +102,7 @@ function buildEffectsFilter(
     return { def: '', filter: '' };
   }
 
-  const id = `fx-${Date.now()}`;
+  const id = 'fx-0';
   const filters: string[] = [];
   
   if (hue !== 0) {

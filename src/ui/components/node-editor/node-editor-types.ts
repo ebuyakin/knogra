@@ -93,10 +93,11 @@ export interface DesignTabValues {
     background: string | undefined;
     backgroundAlt: string | undefined;
   };
+  /** Only the keys the user explicitly overrode; absent means "follow the theme". */
   opacities: {
-    text: number;
-    background: number;
-    backgroundAlt: number;
+    text: number | undefined;
+    background: number | undefined;
+    backgroundAlt: number | undefined;
   };
   /** Present only when the selected design is `default-node`. */
   defaultNodeLayout: DefaultNodeLayoutValues | null;

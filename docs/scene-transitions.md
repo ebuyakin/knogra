@@ -1,7 +1,7 @@
 # Scene Manipulation & Transition Specification
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-14  
+> **Last reviewed:** 2026-08-04  
 > **Authority:** Canonical source for scene manipulation, scene transitions, fold semantics, and related invariants.  
 > **Replaces:** [transition-sequence-spec.md](transition-sequence-spec.md), transition-related sections of [fold-unfold-design.md](fold-unfold-design.md)  
 > **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Background design](background-design.md)
@@ -341,10 +341,15 @@ Introduces elements new to the scene.
 2. Remove stowaway hidden nodes (survivors from previous scene)
 3. Add hidden nodes from `scene.foldedNodes` to Cytoscape at their positions
 4. Apply styles to hidden nodes
-5. Add edges for hidden nodes (both endpoints must exist)
-6. Set `display: none` on hidden nodes and their edges
-7. Add `.fold-root` class to fold roots
-8. Write `cy.scratch('foldedNodes', scene.foldedNodes)`
+5. Add edges for hidden nodes (both endpoints must exist), carrying the scene's `design`/`curve` in element data — bare graph data would let GraphSaver wipe the scene's persisted edge override on its next sync
+6. Reconcile per-edge stylesheet rules for the re-added edges: write this scene's override or remove a stale rule left by a previously visited scene
+7. Set `display: none` on hidden nodes and their edges
+8. Add `.fold-root` class to fold roots
+9. Write `cy.scratch('foldedNodes', scene.foldedNodes)`
+
+#### Post-Phase: Stylesheet Reconciliation
+
+After fold state is applied, `#executeToNode` prunes every per-edge override rule (`edge[id = "…"]`) not backed by an override in the target scene (`StyleGenerator.pruneStaleEdgeRules`). The morph path updates the stylesheet incrementally — without this, departing edges' rules survive the transition, leak another scene's bend/style onto edges re-included later, and accumulate across morphs. Removal-only, so rule order is preserved; folded edges keep their rules because folded edges remain in `scene.edges`. Arriving and tween edges are additionally reconciled in-flight (update-or-remove) by their animators.
 
 ### 4.3 Scene Auto-Creation
 

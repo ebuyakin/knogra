@@ -448,4 +448,27 @@ export class StyleGenerator {
       : this.removeEdgeFromStylesheet(stylesheet, edgeId);
   }
 
+  /**
+   * Drop every per-edge override rule that is not backed by an override in the
+   * given scene. Morph transitions update the stylesheet incrementally, so
+   * rules for departed edges would otherwise leak into later scenes (an edge
+   * re-included elsewhere picks up another scene's bend/style) and accumulate
+   * across transitions. Removal-only: rule order is preserved, and rules for
+   * folded edges survive because folded edges remain in `scene.edges`.
+   */
+  static pruneStaleEdgeRules(stylesheet: any[], scene: Scene): any[] {
+    return stylesheet.filter(rule => {
+      const edgeId = this.#edgeIdFromPerEdgeSelector(rule.selector);
+      if (!edgeId) return true; // not a per-edge override rule
+      return this.hasEdgeStyleOverride(scene.edges[edgeId]);
+    });
+  }
+
+  /** Parse the edge ID out of a per-edge rule selector (`edge[id = "..."]`), or null. */
+  static #edgeIdFromPerEdgeSelector(selector: unknown): EdgeId | null {
+    if (typeof selector !== 'string') return null;
+    const match = /^edge\[id = "(.+)"\]$/.exec(selector);
+    return match ? (match[1] as EdgeId) : null;
+  }
+
 }

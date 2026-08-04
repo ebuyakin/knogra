@@ -71,7 +71,7 @@ function buildGradientDef(
     return { def: '', fill: bgColor };
   }
 
-  const id = `grad-${Date.now()}`;
+  const id = 'grad-0';
   const stops = gradient.stops ?? [
     { offset: 0, color: bgColor },
     { offset: 1, color: bgAltColor }
@@ -112,7 +112,7 @@ function buildEffectsFilter(
     return { def: '', filter: '' };
   }
 
-  const id = `fx-${Date.now()}`;
+  const id = 'fx-0';
   const filters: string[] = [];
   if (hue !== 0) filters.push(`<feColorMatrix type="hueRotate" values="${hue}"/>`);
   if (saturation !== 1) filters.push(`<feColorMatrix type="saturate" values="${saturation}"/>`);
@@ -370,14 +370,14 @@ function renderSVG(
 
   // Vignette
   const vignette = (theme.node.background as { vignette?: { strength?: number; spread?: number; color?: string; colorOpacity?: number } }).vignette;
-  const vignettePrefix = `vignette-${Date.now()}`;
+  const vignettePrefix = 'vignette-0';
   const { defs: vignetteDefs, overlayIds } = buildVignetteGradients(vignette, vignettePrefix);
   const vignetteOverlays = overlayIds.length > 0
     ? overlayIds.map(id => `<rect x="0" y="0" width="${rectWidth}" height="${rectHeight}" fill="url(#${id})"/>`).join('\n          ')
     : '';
 
   // Clip path for vignette
-  const clipId = `clip-${Date.now()}`;
+  const clipId = 'clip-0';
 
   // Build text tspans (centered vertically and horizontally)
   const textBlockHeight = lines.length * lineHeight;

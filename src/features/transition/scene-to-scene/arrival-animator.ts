@@ -302,10 +302,11 @@ export class ArrivalAnimator {
   }
 
   /**
-   * Reapply per-edge custom style rules for arriving edges.
+   * Reconcile per-edge custom style rules for arriving edges.
    * Mirrors the open path: an edge with a scene-level style override needs its
-   * per-edge stylesheet rule regenerated after being added, otherwise it falls
-   * back to the edge-type/thematic style.
+   * per-edge stylesheet rule regenerated after being added; an edge without an
+   * override must have any stale rule from a previously visited scene removed,
+   * otherwise it arrives carrying another scene's bend/style.
    */
   #applyArrivingEdgeStyles(edgeIds: EdgeId[], scene: Scene): void {
     const themeId = scene.themeId || 'dark';
@@ -313,10 +314,12 @@ export class ArrivalAnimator {
     let changed = false;
     for (const edgeId of edgeIds) {
       const sceneEdge = scene.edges[edgeId];
-      if (!StyleGenerator.hasEdgeStyleOverride(sceneEdge)) continue;
-      const edgeStyle = StyleGenerator.generateEdgeStyleForId(edgeId, sceneEdge ?? null, themeId);
-      stylesheet = StyleGenerator.updateEdgeInStylesheet(stylesheet, edgeId, edgeStyle);
-      changed = true;
+      const next = StyleGenerator.applyEdgeOverrideToStylesheet(stylesheet, edgeId, sceneEdge, themeId);
+      // Update always rewrites the rule; removal only changes the array length.
+      if (StyleGenerator.hasEdgeStyleOverride(sceneEdge) || next.length !== stylesheet.length) {
+        changed = true;
+      }
+      stylesheet = next;
     }
     if (changed) {
       this.#cy.style().fromJson(stylesheet).update();

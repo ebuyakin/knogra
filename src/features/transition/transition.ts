@@ -692,8 +692,14 @@ export class Transition {
     
     // Rebuild central/selected rules in stylesheet with target scene's theme
     const stylesheet = (this.#cy.style() as any).json();
+    // Prune per-edge rules not backed by the target scene. Departing edges'
+    // elements are removed by the departure phase, but their per-edge rules
+    // would otherwise survive the morph, leak stale bends/styles into edges
+    // re-included later, and accumulate across transitions. Runs after ghost
+    // cleanup and FoldStateHandler, so only real, target-scene rules remain.
+    const prunedStylesheet = StyleGenerator.pruneStaleEdgeRules(stylesheet, targetScene);
     // Remove old central/selected rules
-    const filteredStylesheet = stylesheet.filter(
+    const filteredStylesheet = prunedStylesheet.filter(
       (r: { selector: string }) =>
         r.selector !== 'node[?centralNode]' &&
         r.selector !== 'node:selected' &&

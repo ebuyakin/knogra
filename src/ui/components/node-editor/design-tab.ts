@@ -141,15 +141,24 @@ export function createDesignTab(deps: DesignTabDeps): DesignTab {
           background: bgRow.getColor(),
           backgroundAlt: bgAltRow.getColor()
         },
+        // The theme default is the implicit value: reporting it as undefined
+        // keeps design params sparse and the node theme-responsive. Storing it
+        // explicitly would make the design differ across scenes and trigger
+        // ghost crossfades in transitions for visually identical nodes.
         opacities: {
-          text: textRow.getOpacity(),
-          background: bgRow.getOpacity(),
-          backgroundAlt: bgAltRow.getOpacity()
+          text: overrideOpacity(textRow.getOpacity(), themeText.opacity),
+          background: overrideOpacity(bgRow.getOpacity(), themeBg.opacity),
+          backgroundAlt: overrideOpacity(bgAltRow.getOpacity(), themeBgAlt.opacity)
         },
         defaultNodeLayout
       };
     }
   };
+}
+
+/** An opacity equal to the theme default is not an override. */
+function overrideOpacity(value: number, themeDefault: number): number | undefined {
+  return Math.abs(value - themeDefault) < 0.001 ? undefined : value;
 }
 
 /**

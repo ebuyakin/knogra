@@ -233,6 +233,13 @@ A shared helper (`applyEdgeOverrideToStylesheet`) was added to
 Both `edge-ops` (`#applyEdgeOverrideRule`) and `autolayout` (`#resetEdgeCurves`)
 call it. This avoids duplication and keeps the composition in the styles layer.
 
+*Update 2026-08-04:* the transition pipeline now uses the same composition —
+`ArrivalAnimator` (arriving edges), the shared-core tween loop, and
+`FoldStateHandler` (re-added hidden edges) reconcile per-edge rules instead of
+skipping no-override edges, and `StyleGenerator.pruneStaleEdgeRules` drops all
+per-edge rules not backed by the target scene at the end of every morph. See
+`scene-transitions.md` §4.2 (Post-Phase: Stylesheet Reconciliation).
+
 ### 8.4 `keyboard-handler.ts` — r shortcut scope changed
 
 The `r` shortcut in the edge-bend group previously called `resetEdgeStyleOverride`

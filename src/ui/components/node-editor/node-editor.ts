@@ -371,9 +371,12 @@ export class NodeEditor {
     }
   }
 
-  /** Full opacity is the implicit default, so it is stored as absence. */
-  #applyOpacity(target: Record<string, number>, key: string, value: number): void {
-    if (value < 1) {
+  /**
+   * The design tab reports an opacity only when it differs from the theme
+   * default; the default is stored as absence (mirrors #applyOverride).
+   */
+  #applyOpacity(target: Record<string, number>, key: string, value: number | undefined): void {
+    if (value !== undefined) {
       target[key] = value;
     } else {
       delete target[key];

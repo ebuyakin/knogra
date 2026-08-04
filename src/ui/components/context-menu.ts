@@ -114,6 +114,13 @@ export class ContextMenu {
       this.#openEdgeEditor(edgeId);
     });
 
+    // Double-click on empty canvas → create a free node there
+    this.#cy.on('dbltap', (event) => {
+      if (event.target !== this.#cy) return;
+      if (!isEditMode()) return;
+      this.#features.graph.addFreeNode(event.position);
+    });
+
     // Listen for right-click on canvas
     this.#cy.on('cxttap', (event) => {
       // Only handle if not on a node or edge
@@ -524,7 +531,7 @@ export class ContextMenu {
 
     const items: MenuItem[] = [
       {
-        label: 'Edit edge',
+        label: 'Edit edge (double tap)',
         enabled: editMode && !useSelectedEdgesAsPasteTargets,
         action: () => {
           // Get edge edit context from scene feature
@@ -627,7 +634,7 @@ export class ContextMenu {
 
     const items: MenuItem[] = [
       {
-        label: 'Add node here',
+        label: 'Add node here (double tap)',
         enabled: editMode,
         action: () => {
           // Convert screen position to graph coordinates

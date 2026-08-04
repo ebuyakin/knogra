@@ -2,6 +2,7 @@
 
 import cytoscape from 'cytoscape';
 import { initializeMathJax } from './utils/mathjax';
+import { DOUBLE_CLICK_INTERVAL_MS } from './config/interaction-settings';
 
 // Install diagnostics buffers as early as possible — they must be in place
 // before anything else logs or throws, otherwise early events are lost.
@@ -50,7 +51,7 @@ await initializeMathJax();
 const container = document.getElementById('cy');
 if (!container) throw new Error('Container #cy not found');
 
-const cy = cytoscape({ container, style: [], layout: { name: 'preset', fit: false } });
+const cy = cytoscape({ container, style: [], layout: { name: 'preset', fit: false }, multiClickDebounceTime: DOUBLE_CLICK_INTERVAL_MS });
 const backgroundRenderer = new BackgroundRenderer(container);
 
 // =============================================================================

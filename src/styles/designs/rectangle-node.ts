@@ -38,7 +38,7 @@ function buildGradientDef(
     return { def: '', fill: bgColor };
   }
 
-  const id = `grad-${Date.now()}`;
+  const id = 'grad-0';
   
   // Use custom stops or default to 2-stop gradient
   const stops = gradient.stops ?? [
@@ -96,7 +96,7 @@ function buildEffectsFilter(
     return { def: '', filter: '' };
   }
 
-  const id = `fx-${Date.now()}`;
+  const id = 'fx-0';
   const filters: string[] = [];
   
   // Hue rotation matrix
@@ -211,7 +211,7 @@ function renderSVG(
   
   // Build vignette gradients (edge darkening via 4 linear gradients)
   const vignette = (theme.node.background as { vignette?: { strength?: number; spread?: number; color?: string; colorOpacity?: number } }).vignette;
-  const vignettePrefix = `vignette-${Date.now()}`;
+  const vignettePrefix = 'vignette-0';
   const { defs: vignetteDefs, overlayIds } = buildVignetteGradients(vignette, vignettePrefix);
   
   // Build vignette overlay rects
@@ -234,7 +234,7 @@ function renderSVG(
   const centerY = rectHeight / 2;
   
   // Clip path for vignette overlays
-  const clipId = `clip-${Date.now()}`;
+  const clipId = 'clip-0';
   
   const svg = `
     <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">

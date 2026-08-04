@@ -261,10 +261,15 @@ export class SharedCoreAnimator {
       );
     }
 
-    // Update per-edge stylesheet rules for tween edges (new target style)
+    // Update per-edge stylesheet rules for tween edges: new target style when
+    // the target scene carries an override, otherwise remove any stale rule
+    // left over from a previously visited scene.
     for (const edgeId of analysis.edges.tween) {
       const targetSceneEdge = targetScene.edges?.[edgeId];
-      if (!StyleGenerator.hasEdgeStyleOverride(targetSceneEdge)) continue;
+      if (!StyleGenerator.hasEdgeStyleOverride(targetSceneEdge)) {
+        updatedStylesheet = StyleGenerator.removeEdgeFromStylesheet(updatedStylesheet, edgeId);
+        continue;
+      }
       const newStyle = this.#resolveEdgeTargetStyle(edgeId, targetScene);
       updatedStylesheet = StyleGenerator.updateEdgeInStylesheet(
         updatedStylesheet,
