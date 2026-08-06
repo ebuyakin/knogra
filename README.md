@@ -4,6 +4,8 @@
 
 Knogra is a browser-based knowledge graph editor where every concept gets its own focused view. Navigate between nodes with smooth spatial transitions, annotate with an AI assistant that understands your graph, and arrange layouts that reflect how you think — not just how the algorithm thinks.
 
+<img width="800" height="450" alt="knogra-demo" src="https://github.com/user-attachments/assets/0ce38a19-63a9-4b12-b405-8ed209199da3" />
+
 **[knogra.io](https://knogra.io)** — runs entirely in the browser, no account required.
 
 ---
