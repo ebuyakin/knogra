@@ -64,8 +64,11 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'Z', description: 'Toggle fold / unfold' },
       { key: 'Shift+Z', description: 'Unfold all folded nodes (one tier)' },
       { key: 'O / Shift+O', description: 'Rotate scene clockwise / counter-clockwise' },
-      { key: 'W / Shift+W', description: 'Tighten / spread scene spacing around central node' },
+      { key: 'W / Shift+W', description: 'Enlarge / shrink the nodes of the scene (positions stay put)' },
       { key: 'T / U / Y', description: 'Align selected nodes into a row / column / diagonal' },
+      { key: 'Shift+T / U / Y', description: 'Distribute selected nodes with even gaps (horizontal / vertical / diagonal)' },
+      { key: 'Shift+Q', description: 'Arrange selected nodes on a circle' },
+      { key: ', / .', description: 'Tighten / spread the selected nodes (distance, not size)' },
     ]
   },
   {

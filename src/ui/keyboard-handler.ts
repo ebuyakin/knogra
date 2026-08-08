@@ -570,7 +570,8 @@ export class KeyboardHandler {
       return;
     }
 
-    // W - Tighten the scene (pack) about the central node
+    // W - Enlarge the scene's nodes: positions pack about the central node while
+    // the viewport zooms in to match, so only apparent node size changes.
     if (key === 'w' && !event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
@@ -581,7 +582,7 @@ export class KeyboardHandler {
       return;
     }
 
-    // Shift+W - Spread the scene (de-crowd) about the central node
+    // Shift+W - Shrink the scene's nodes: the inverse of W.
     if (key === 'w' && event.shiftKey && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
@@ -600,6 +601,23 @@ export class KeyboardHandler {
       return;
     }
 
+    // Shift+Q - Arrange the selected nodes on a circle about their centroid
+    if (key === 'q' && event.shiftKey && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.arrange.run('circle');
+      return;
+    }
+
+    // , / . - Tighten / spread the selected nodes about their centroid.
+    // Distance between the nodes changes; their size does not (contrast W).
+    if ((key === ',' || key === '.') && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.arrange.run(key === ',' ? 'tighten' : 'spread');
+      return;
+    }
+
     // 1-4 - Pull in the degree-N neighbourhood, then auto-layout the scene.
     // Deliberately no Shift guard: on layouts where the digits are the shifted
     // characters (AZERTY), Shift+digit is the only way to type them.
@@ -614,27 +632,30 @@ export class KeyboardHandler {
       return;
     }
 
-    // T - Align selected node centres into a row (shared Y)
-    if (key === 't' && !event.shiftKey && !ctrl) {
+    // T / Shift+T - Align the selected node centres into a row (shared Y), or
+    // distribute them with even horizontal gaps (Y untouched).
+    if (key === 't' && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
-      this.#features.align.row();
+      this.#features.arrange.run(event.shiftKey ? 'distribute-horizontal' : 'align-row');
       return;
     }
 
-    // U - Align selected node centres into a column (shared X)
-    if (key === 'u' && !event.shiftKey && !ctrl) {
+    // U / Shift+U - Align into a column (shared X), or distribute with even
+    // vertical gaps (X untouched).
+    if (key === 'u' && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
-      this.#features.align.column();
+      this.#features.arrange.run(event.shiftKey ? 'distribute-vertical' : 'align-column');
       return;
     }
 
-    // Y - Align selected nodes onto the min-X → max-X diagonal line
-    if (key === 'y' && !event.shiftKey && !ctrl) {
+    // Y / Shift+Y - Align onto the min-X → max-X diagonal line, or distribute
+    // with even gaps along that line (perpendicular offsets untouched).
+    if (key === 'y' && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
-      this.#features.align.diagonal();
+      this.#features.arrange.run(event.shiftKey ? 'distribute-diagonal' : 'align-diagonal');
       return;
     }
 

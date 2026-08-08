@@ -40,7 +40,8 @@
 | [edge-types-architecture.md](edge-types-architecture.md) | Current | Workspace-specific edge types, theme-aware type styles, scene-local edge visibility, selected-edge affordances, and current AI context boundary. |
 | [edge-curve-style-unbundling.md](edge-curve-style-unbundling.md) | Current | Design rationale and implementation record for separating per-edge curve/layout from visual style. |
 | [mermaid-fan-layout.md](mermaid-fan-layout.md) | Current | Canonical model for the Mermaid-import fan layout and the shared scene-composition / adjacency layer used by every Mermaid-import layout. |
-| [autolayout-architecture.md](autolayout-architecture.md) | Current | Auto-layout feature structure, the pluggable scene-layout registry, and the radial outer-ring-spreading algorithm. |
+| [layout-architecture.md](layout-architecture.md) | Current | Canonical layout-domain terminology (§1.1), auto-layout feature structure, the pluggable scene-layout registry, and the radial outer-ring-spreading algorithm. Renamed from `autolayout-architecture.md`. |
+| [arrange-architecture.md](arrange-architecture.md) | Current | Arrange feature: selection-scoped geometric tools (align, distribute, circle, grid, tighten/spread), their contract, the tool registry, and the shared execution pipeline. |
 | [autolayout-grow-arrange.md](autolayout-grow-arrange.md) | Current | Grow & Arrange: pulling in the central node's degree-≤N neighbourhood, then arranging, with a seed-and-arrange animation. |
 | [telemetry-design.md](telemetry-design.md) | Current | Anonymous usage-counting design and privacy constraints. |
 | [landing-app-interaction.md](landing-app-interaction.md) | Current | User-facing landing/app scenarios and implementation status. |

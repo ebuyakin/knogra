@@ -1,9 +1,10 @@
-# Auto-layout Architecture
+# Layout Architecture
 
 > **Status:** Current — canonical
-> **Last reviewed:** 2026-08-04
-> **Authority:** Canonical for the **Auto-layout feature** (`src/features/autolayout/`): its module structure, the **pluggable scene-layout registry**, and the radial **outer-ring-spreading** algorithm. The membership-growing variant is specified in [autolayout-grow-arrange.md](autolayout-grow-arrange.md); this document covers the feature skeleton and the layout algorithms it dispatches to.
-> **Related:** [Documentation map](README.md), [Grow & Arrange](autolayout-grow-arrange.md), [Mermaid Fan Layout](mermaid-fan-layout.md) (a deliberately separate layout lineage — see §6), [Architecture](architecture.md)
+> **Last reviewed:** 2026-08-07
+> **Authority:** Canonical for the **layout domain**: the shared terminology (§1.1), the **Auto-layout feature** (`src/features/autolayout/`) with its module structure and **pluggable scene-layout registry**, and the radial **outer-ring-spreading** algorithm. The membership-growing variant is specified in [autolayout-grow-arrange.md](autolayout-grow-arrange.md); this document covers the feature skeleton and the layout algorithms it dispatches to.
+> **History:** Renamed from `autolayout-architecture.md` on 2026-08-07 when the terminology section was added — the document already covered scene transforms that are not auto-layouts, so its scope was the layout domain in all but name. Section numbers were preserved across the rename; external references to §4.2.1, §5, §6, §7 still resolve.
+> **Related:** [Documentation map](README.md), [Grow & Arrange](autolayout-grow-arrange.md), [Mermaid Fan Layout](mermaid-fan-layout.md) (a deliberately separate layout lineage — see §8), [Architecture](architecture.md)
 
 ## 1. Overview
 
@@ -12,9 +13,79 @@ Auto-layout re-arranges a scene's nodes into a regular shape rooted at the scene
 - **`apply(central)`** — re-arrange the nodes already present in the scene (pure motion; no membership change).
 - **`growAndArrange(central, degree)`** — pull in the central node's degree-≤N neighbourhood, then arrange the enlarged scene ([autolayout-grow-arrange.md](autolayout-grow-arrange.md)).
 - **`rotate(central, degrees)`** — rigidly rotate the visible scene about the central node by a fixed step (§6). Not a layout algorithm: a direct geometric transform that bypasses the registry.
-- **`scaleScene(central, factor)`** — change the scene's density about the central node by a fixed multiplicative step (§7). Also a direct geometric transform (a similarity, not a rotation) that bypasses the registry.
+- **`scaleScene(central, factor)`** — change the scene's apparent node size about the central node by a fixed multiplicative step (§7). Also a direct geometric transform (a similarity, not a rotation) that bypasses the registry.
 
 The first two follow the same pipeline: gather live node footprints and edges → **compute relative positions via a layout algorithm** → anchor on the central node → animate to the new positions while re-fitting the viewport. Only the middle step — the geometry — is pluggable; everything else (Cytoscape reads/writes, animation, viewport fit, edge-curve reset, persistence) is shared and layout-agnostic. `rotate` and `scaleScene` share only the animation and persistence tail (§5); being rigid/similar transforms they preserve manual edge curves and do not re-fit (§6, §7).
+
+### 1.1 Layout domain terminology
+
+Knogra has several commands that move nodes around, and their names had drifted into overlap — "spacing", "spread", "tighten", "align", "arrange" were each doing double duty. This section is the **decision record** (agreed 2026-08-07) that fixes the vocabulary for the UI, the code, and these docs.
+
+#### The naming rule
+
+> **UI labels name the perceived effect. Code and docs name the mechanism.**
+> Where the two differ, the doc comment states both explicitly.
+
+The clearest case is §7: the mechanism is "scale positions about a pivot and counter-zoom the viewport", but the *only* thing a user perceives is node glyphs getting bigger or smaller. So the code keeps `scaleScene` and the UI says **Enlarge / Shrink**.
+
+#### The families
+
+Commands are classified on two axes — **scope** (whole scene vs. current selection) and **nature** (topology-driven algorithm vs. pure geometric transform):
+
+| Family | Scope | Nature | Anchor | Members |
+|---|---|---|---|---|
+| **Auto-layout** | scene (visible nodes) | topology-driven **algorithm** | central node | Radial (§4); planned: equal-sector radial, scene-wide grid, layered. Plus **Grow & Arrange**, which also changes scene membership |
+| **View transform** | scene | positions + viewport; **no layout change** | central node | **Enlarge / Shrink** (§7) |
+| **Scene transform** | scene | rigid geometric **transform** | central node | **Rotate** (§6) |
+| **Arrange** | selection | geometric **transform**, pluggable tools | the selection's own centroid | **Align**, **Distribute**, **Circle**, **Grid**, **Tighten / Spread** |
+
+#### Term definitions
+
+- **Layout** — the umbrella term for this whole domain. Never used as a command name.
+- **Auto-layout** — *only* the algorithmic, scene-scoped, topology-aware family. If an operation does not read the graph's edges, it is not an auto-layout. This is why `rotate` and `scaleScene` live on `AutoLayout` for practical reasons but are documented as *transforms*, not layouts.
+- **Arrange** — the selection-scoped family of pure geometric tools. Reads node positions and footprints only; never edges. Anchors on the selection's own centroid, never on the central node — **centrality is a semantic property, not a geometric one**, so an author is free to arrange a scene as a tree, a circle, or anything else with the central node anywhere in it.
+- **Align** — keeps its narrow, literal meaning: **put node centres on a common line** (Row / Column / Diagonal). Nothing else is called "align".
+- **Distribute** — **equalise the gaps** between selected nodes along an axis or line: constant whitespace between adjacent bounding boxes, not equal centre spacing. The extreme nodes stay fixed and nothing moves perpendicular to the axis, so Align and Distribute compose. Standard term in every design tool; adopted deliberately rather than inventing one.
+- **Circle** — a **placement** tool, not an alignment: put the selected nodes on a circle centred on their centroid, at their mean current radius (floored so the ring always fits), preserving their current clockwise order. Grouped in the UI under *Shape*, beside Align rather than inside it.
+- **Grid** — the other *Shape* tool: snap the selection into an axis-aligned lattice of `⌈√n⌉` columns, cells assigned from the nodes' current rows and columns. Four nodes give the axis-aligned square that Circle cannot (Circle produces a *rotated* square, since it minimises travel). Spacing is per-axis, so the result is a rectangle that keeps the arrangement's proportions rather than a forced square. Menu-only — no shortcut yet.
+- **Tighten / Spread** — change the **distance between** selected nodes, by scaling their positions about their centroid (step `arrange.spacingStep`, default 1.15). Node size is unaffected.
+- **Enlarge / Shrink** — change the **apparent size** of every node in the scene. Positions on screen are unaffected. This is `scaleScene` (§7).
+
+#### Two collisions this resolves
+
+**Size vs. distance.** `W` / `Shift+W` were labelled "Tighten / Spread scene spacing", which named the mechanism and hid the effect — and it collided head-on with the planned selection-scoped spacing tool. Renaming them to **Enlarge / Shrink** leaves exactly one Tighten/Spread pair in the product, and the two commands now share no word:
+
+| | `W` / `Shift+W` | `,` / `.` |
+|---|---|---|
+| Label | **Enlarge / Shrink** | **Tighten / Spread** |
+| What visibly changes | node **size** | node **distance** |
+| What visibly stays | screen positions | node size |
+| Scope | whole scene | selection |
+
+Note the polarity, which is easy to get backwards: `W` passes `factor < 1`, contracting positions *and* zooming in — so glyphs **grow**. `Shift+W` does the opposite. See §7.
+
+**"Expand" is reserved.** *Expand* already means "pull a node's children into the scene" in Knogra (`expandNodeConnections`, the node-expansion placement spec). It must not be reused for a geometric operation — this is why the selection spacing tool is *Tighten / Spread* and not *Expand / Contract*.
+
+#### Keyboard namespace
+
+The global keymap is nearly exhausted: every unshifted letter `a`–`z` is bound, and several shifted letters are bound *implicitly* because their handler omits a `!event.shiftKey` guard (`Shift+D`, `Shift+E`, `Shift+M`, `Shift+P`, `Shift+V`, `Shift+X` all fall through to the unshifted action). Digits `1`–`4` mean "degree N" for Grow & Arrange and deliberately carry no shift guard (AZERTY layouts type digits shifted), `0` resets zoom, and `[` / `]` are path history.
+
+Layout-domain bindings:
+
+| Command | Key |
+|---|---|
+| Auto-layout scene | `Q` |
+| Grow & Arrange, degree N | `1`–`4` |
+| Rotate clockwise / counter-clockwise | `O` / `Shift+O` |
+| Enlarge / Shrink nodes | `W` / `Shift+W` |
+| Align row / column / diagonal | `T` / `U` / `Y` |
+| Distribute horizontally / vertically / diagonally | `Shift+T` / `Shift+U` / `Shift+Y` |
+| Circle | `Shift+Q` |
+| Tighten / Spread selection | `,` / `.` |
+
+Remaining free: `Shift+N` and the digits `5`–`9`.
+
+When the free keys run out, the agreed escape hatch is an **Arrange leader key** — one key entering a transient sub-mode with an on-screen hint bar, where single letters select the tool. Deliberately not built yet: it introduces modality and touches the already-oversized keyboard handler.
 
 ---
 
@@ -22,7 +93,6 @@ The first two follow the same pipeline: gather live node footprints and edges �
 
 ```
 src/features/autolayout/
-  autolayout.ts           public class AutoLayout — the only feature-api entry point
   autolayout.ts           public class AutoLayout — the only feature-api entry point
   fit.ts                  computeFitViewport — zoom/pan to frame a layout, capped at FIT_MAX_ZOOM (1.5)
   grow-arrange.ts         neighbourhood BFS + seed/grow-in for growAndArrange
@@ -33,7 +103,7 @@ src/features/autolayout/
     outer-ring-spreading.ts   the default radial algorithm (§4)
 ```
 
-Position tweening lives outside the feature in the shared `utils/cy/node-position-animator.ts` (`NodePositionAnimator` — tweens a node set to new positions and optionally re-frames the viewport, layout-agnostic), shared with the `align` feature per the no-cross-feature-imports rule.
+Position tweening lives outside the feature in the shared `utils/cy/node-position-animator.ts` (`NodePositionAnimator` — tweens a node set to new positions and optionally re-frames the viewport, layout-agnostic), shared with the selection-scoped alignment feature per the no-cross-feature-imports rule.
 
 **Boundaries (upheld):**
 
@@ -199,9 +269,16 @@ $$\begin{aligned} x' &= p_x + (x-p_x)\cos\theta - (y-p_y)\sin\theta \\ y' &= p_y
 
 It reuses **Animation** (`AutoLayoutAnimator`, positions only — no viewport target) and **Persistence** (suspend during the glide, one `forceSave` of the final orientation).
 
-## 7. Scene spacing (`scaleScene`)
+## 7. Apparent node size — Enlarge / Shrink (`scaleScene`)
 
-`scaleScene(central, factor)` changes how crowded the scene looks **without touching per-node `scale`** — that property stays reserved for intentional emphasis. Invoke via **Scene design ▸ Spacing ▸ Tighten / Spread** or the `W` / `Shift+W` shortcuts (`factor` = the inverse of `autolayout.densityStep` for `W`, and `autolayout.densityStep` itself, default 1.15, for `Shift+W`). Edit mode only; folded/hidden nodes keep their offsets, matching `rotate`.
+**User-facing name: Enlarge / Shrink nodes.** `scaleScene(central, factor)` changes how large the scene's nodes *look* **without touching per-node `scale`** — that property stays reserved for intentional emphasis. Invoke via **Scene design ▸ Node size ▸ Enlarge / Shrink** or the `W` / `Shift+W` shortcuts. Edit mode only; folded/hidden nodes keep their offsets, matching `rotate`.
+
+Per the naming rule (§1.1) the method name states the mechanism and the label states the effect. **Mind the polarity** — it is the opposite of the naive reading:
+
+| Command | `factor` | Positions | Viewport zoom | Perceived result |
+|---|---|---|---|---|
+| **Enlarge** (`W`) | `1 / densityStep` (< 1) | contract toward the pivot | `× densityStep` (in) | nodes look **bigger**, screen positions unchanged |
+| **Shrink** (`Shift+W`) | `densityStep` (> 1, default 1.15) | spread from the pivot | `÷ densityStep` (out) | nodes look **smaller**, screen positions unchanged |
 
 Like `rotate` it is **not** a layout algorithm — no spanning forest, no registry dispatch. It is a **similarity transform about the pivot** `p` (the central node's position), combined with an inverse viewport zoom about the *same on-screen point*:
 
@@ -210,20 +287,23 @@ Like `rotate` it is **not** a layout algorithm — no spanning forest, no regist
 
 $$\text{pan}' = \text{pan} + p \cdot (\text{zoom} - \text{zoom}/\text{factor})$$
 
-Because Cytoscape renders `screen = graph·zoom + pan`, this combination leaves **every** node's on-screen *centre* invariant — only the node glyphs shrink (spread) or grow (tighten), since their graph size is untouched. The scene de-crowds or packs *in place*, anchored on the central node wherever it sits (it need not be the geometric centre — that offset is often intentional).
+Because Cytoscape renders `screen = graph·zoom + pan`, this combination leaves **every** node's on-screen *centre* invariant — only the node glyphs grow (Enlarge) or shrink (Shrink), since their graph size is untouched. The result reads as a pure node-size change anchored on the central node wherever it sits (it need not be the geometric centre — that offset is often intentional).
+
+Under the hood the *spacing between nodes in graph space* does change, which is what makes room for the larger glyphs; but since the viewport compensates exactly, no user ever perceives it as a spacing change. That gap between mechanism and effect is precisely why the command is labelled by its effect.
 
 **Three deliberate departures from §5:**
 
-- **No edge-curve reset.** Edges are left untouched; Cytoscape re-renders each from its moved endpoints. Manual bezier bends (`control-point-distances`/`-weights`) simply become proportionally shallower (spread) or deeper (tighten) and stay hand-adjustable — the agreed behaviour.
+- **No edge-curve reset.** Edges are left untouched; Cytoscape re-renders each from its moved endpoints. Manual bezier bends (`control-point-distances`/`-weights`) simply become proportionally shallower or deeper and stay hand-adjustable — the agreed behaviour.
 - **No viewport re-fit** and **no `FIT_MAX_ZOOM` cap.** The zoom is stepped by exactly `1/factor` about the pivot (not `computeFitViewport`), which is what pins the scene in place.
 - **Exact reversibility.** Because the pivot is the fixed central node and the zoom is not clamped (the Cytoscape instance sets no `minZoom`/`maxZoom`), applying `1/factor` restores the prior positions *and* framing exactly (to floating-point epsilon). The opposite command is a true undo.
 
 It reuses **Animation** (`NodePositionAnimator` with a supplied `ViewportTarget` — the one place a non-`computeFitViewport` viewport is fed in) and **Persistence** (suspend during the glide, one `forceSave` of the final positions and viewport).
 
-**Known limitations (shared with `rotate`):** scene background images are not scaled, so spreading detaches nodes from memory-palace placements; and a subtree folded before a spread unfolds at its (moved) root's un-spread offset.
+**Known limitations (shared with `rotate`):** scene background images are not scaled, so shrinking nodes detaches them from memory-palace placements; and a subtree folded beforehand unfolds at its (moved) root's original offset.
 
 ## 8. Future directions
 
 - **More algorithms:** equal-sector radial, grid, layered/flow, force-directed — each a `SceneLayout` behind the registry.
+- **The Arrange family:** the selection-scoped tools named in §1.1 (Distribute, Circle, Tighten / Spread), built on a tool registry mirroring §3. To be specified in its own document when the family lands.
 - **Sub-strategy composition:** if radial variants proliferate, factor angle-allocation / ring-radius / placement into named, swappable policies. Not before real demand.
 - **Mermaid convergence:** the importer's layouts (`storage/mermaid/layout/`) are a **separate lineage** — they estimate footprints from title text before nodes exist, whereas auto-layout uses real rendered footprints. They are kept parallel on purpose; extract a shared geometry core only if they demonstrably converge.

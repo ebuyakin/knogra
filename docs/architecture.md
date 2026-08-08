@@ -1,7 +1,7 @@
 # Knogra Architecture
 
 > **Status:** Current  
-> **Last reviewed:** 2026-07-09  
+> **Last reviewed:** 2026-08-07  
 > **Authority:** Main authoritative architecture document for layers, dependency direction, module responsibilities, persistence ownership, and coding standards. For detailed scene, fold, visibility, and transition terminology, defer to [Scene Transitions](scene-transitions.md). For typed edge styling and scene-local edge type visibility, defer to [Edge Types Architecture](edge-types-architecture.md).  
 > **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Scene transitions](scene-transitions.md), [Edge Types Architecture](edge-types-architecture.md)
 
@@ -312,7 +312,7 @@ Used by 2+ features. Split by purity:
 | Pure | `utils/pure/` | No side effects, no Cytoscape access |
 | Cy-mutating | `utils/cy/` | Accept `cy` as parameter |
 
-Example: `utils/cy/node-position-animator.ts` tweens a node set to new positions (optionally re-framing the viewport) and is shared by `autolayout` and `align` — neither imports the other, honouring the no-cross-feature-imports rule (§4.2).
+Example: `utils/cy/node-position-animator.ts` tweens a node set to new positions (optionally re-framing the viewport) and is shared by `autolayout` and `arrange` — neither imports the other, honouring the no-cross-feature-imports rule (§4.2).
 
 **Dependency rules:**
 ```
@@ -338,8 +338,8 @@ Core Types only
 | **Transition** | `transition/transition.ts` | Animated scene-to-scene navigation |
 | **Path** | `path/path.ts` | Navigation history tracking and persistence |
 | **Quiz** | `quiz.ts` | Runtime recall mode: hides sampled node content and tracks reveal/self-grade state |
-| **AutoLayout** | `autolayout/autolayout.ts` | Scene-wide re-arrangement anchored on the central node: radial layout (pluggable algorithms), grow & arrange, rotate, spacing |
-| **Align** | `align/align.ts` | Selection-scoped node alignment: snaps selected node centres into a row, column, or diagonal line |
+| **AutoLayout** | `autolayout/autolayout.ts` | Scene-wide re-arrangement anchored on the central node: radial layout (pluggable algorithms), grow & arrange, rotate, and apparent node size (enlarge/shrink) |
+| **Arrange** | `arrange/arrange.ts` | Selection-scoped geometric tools anchored on the selection's own centroid: align, distribute, circle, grid, tighten/spread. Pluggable tool registry — see [arrange-architecture.md](arrange-architecture.md) |
 
 **FeatureAPI** (`feature-api.ts`) — Facade exposing all features. No business logic.
 

@@ -219,13 +219,18 @@ export class AutoLayout {
   }
 
   /**
-   * Change the scene's density about the central node without touching per-node
-   * `scale`. Every visible node's position scales by `factor` about the central
-   * node's current position (`factor > 1` spreads, `< 1` tightens), while the
-   * viewport zooms by `1/factor` about the same on-screen point. The net effect:
-   * every node stays put on screen and only the node glyphs shrink/grow, so the
-   * scene is de-crowded/packed in place, anchored on the central node (which may
-   * sit off the geometric centre by design).
+   * Change the apparent size of the scene's nodes about the central node —
+   * user-facing **Enlarge / Shrink** (`W` / `Shift+W`), without touching
+   * per-node `scale`. Every visible node's position scales by `factor` about
+   * the central node's current position, while the viewport zooms by `1/factor`
+   * about the same on-screen point. The net effect: every node stays put on
+   * screen and only the node glyphs grow/shrink.
+   *
+   * Mind the polarity — it is the inverse of the naive reading. `factor < 1`
+   * packs positions and zooms *in*, so the nodes look **bigger** (Enlarge);
+   * `factor > 1` looks **smaller** (Shrink). The method name states the
+   * mechanism, the command name states the effect (see layout-architecture.md
+   * §1.1).
    *
    * A pure similarity transform (not a layout algorithm): no registry dispatch,
    * no viewport re-fit, and edges are left untouched so their curves re-render
@@ -239,7 +244,7 @@ export class AutoLayout {
    * steps multiplied together.
    *
    * @param centralNodeId The scene's central node (scaling pivot).
-   * @param factor Multiplicative density step; >1 spreads, <1 tightens.
+   * @param factor Multiplicative step; <1 enlarges the nodes, >1 shrinks them.
    */
   async scaleScene(centralNodeId: NodeId | null, factor: number): Promise<void> {
     if (!isEditMode()) {
@@ -288,7 +293,7 @@ export class AutoLayout {
     if (targets.size === 0) return;
 
     // Zoom by the inverse about the central node's screen position: pin the
-    // pivot on screen so the scene de-crowds/packs in place. `pan' = pan +
+    // pivot on screen so only the apparent node size changes. `pan' = pan +
     // pivot·(z - z')` keeps `pivot·zoom + pan` invariant.
     const zoom = this.#cy.zoom();
     const pan = this.#cy.pan();

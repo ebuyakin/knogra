@@ -268,36 +268,7 @@ export class ContextMenu {
           }
         };
       })(),
-      (() => {
-        const alignCount = this.#cy.nodes(':selected').length;
-        return {
-          label: 'Align nodes',
-          enabled: editMode && alignCount >= 2,
-          children: [
-            {
-              label: 'Row (T)',
-              enabled: editMode,
-              action: () => {
-                this.#features.align.row();
-              }
-            },
-            {
-              label: 'Column (U)',
-              enabled: editMode,
-              action: () => {
-                this.#features.align.column();
-              }
-            },
-            {
-              label: 'Diagonal (Y)',
-              enabled: editMode && alignCount >= 3,
-              action: () => {
-                this.#features.align.diagonal();
-              }
-            }
-          ]
-        };
-      })(),
+      this.#buildArrangeMenu(editMode),
       {
         label: 'Scene',
         enabled: editMode,
@@ -699,10 +670,10 @@ export class ContextMenu {
             ]
           },
           {
-            label: 'Spacing',
+            label: 'Node size',
             children: [
               {
-                label: 'Tighten (W)',
+                label: 'Enlarge (W)',
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.scaleScene(
@@ -712,7 +683,7 @@ export class ContextMenu {
                 }
               },
               {
-                label: 'Spread (Shift+W)',
+                label: 'Shrink (Shift+W)',
                 enabled: editMode,
                 action: () => {
                   this.#features.autolayout.scaleScene(
@@ -723,32 +694,7 @@ export class ContextMenu {
               }
             ]
           },
-          {
-            label: 'Align nodes',
-            children: [
-              {
-                label: 'Row (T)',
-                enabled: editMode,
-                action: () => {
-                  this.#features.align.row();
-                }
-              },
-              {
-                label: 'Column (U)',
-                enabled: editMode,
-                action: () => {
-                  this.#features.align.column();
-                }
-              },
-              {
-                label: 'Diagonal (Y)',
-                enabled: editMode,
-                action: () => {
-                  this.#features.align.diagonal();
-                }
-              }
-            ]
-          },
+          this.#buildArrangeMenu(editMode),
           {
             label: 'Rotate',
             children: [
@@ -949,6 +895,39 @@ export class ContextMenu {
     return {
       label: nextMode === 'view' ? 'Disable edit (V)' : 'Enable edit (V)',
       action: () => setAppMode(nextMode)
+    };
+  }
+
+  /**
+   * Build the selection-scoped "Arrange nodes" submenu from the arrange tool
+   * registry, so a newly registered tool appears here with no UI change. Tools
+   * are listed in registry order with a divider between groups, and each entry
+   * is enabled only once the selection is large enough for that tool.
+   */
+  #buildArrangeMenu(editMode: boolean): MenuItem {
+    const arrange = this.#features.arrange;
+    const selectionSize = arrange.selectionSize();
+
+    const children: MenuItem[] = [];
+    let previousGroup: string | null = null;
+    for (const tool of arrange.tools()) {
+      if (previousGroup !== null && tool.group !== previousGroup) {
+        children.push({ label: '', separator: true });
+      }
+      previousGroup = tool.group;
+      children.push({
+        label: tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label,
+        enabled: editMode && selectionSize >= tool.minNodes,
+        action: () => {
+          arrange.run(tool.id);
+        }
+      });
+    }
+
+    return {
+      label: 'Arrange nodes',
+      enabled: editMode && selectionSize >= arrange.minimumSelection(),
+      children
     };
   }
 

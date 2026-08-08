@@ -583,8 +583,8 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
       },
       {
         key: 'autolayout.densityStep',
-        label: 'Density Step',
-        description: 'Multiplier the scene spreads/tightens per Spacing command; below 2, above 1. The opposite command exactly reverses it.',
+        label: 'Node Size Step',
+        description: 'Factor the nodes grow or shrink by per Enlarge/Shrink command; below 2, above 1. Node positions on screen stay put — only their apparent size changes. The opposite command exactly reverses it.',
         type: 'number',
         min: 1.01,
         max: 2,
@@ -624,6 +624,24 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         min: 0,
         max: 500,
         step: 5
+      }
+    ]
+  },
+
+  {
+    id: 'arrange',
+    label: 'Arrange',
+    icon: '◇',
+    description: 'Geometric tools that act on the selected nodes only, anchored on their own centre — align, circle, and spacing. Distinct from Auto-layout, which re-arranges the whole scene around its central node.',
+    settings: [
+      {
+        key: 'arrange.spacingStep',
+        label: 'Spacing Step',
+        description: 'Factor the distance between selected nodes changes by per Tighten/Spread command; below 2, above 1. Node size is unaffected. The opposite command exactly reverses it.',
+        type: 'number',
+        min: 1.01,
+        max: 2,
+        step: 0.01
       }
     ]
   },

@@ -51,11 +51,11 @@ Scale is `1.0`. This is *not* inherit-from-central. The rule is inlined in the f
 
 ## 3. The arrangement
 
-Identical geometry to plain auto-layout: the selected scene-layout algorithm (default radial — see [autolayout-architecture.md](autolayout-architecture.md)) runs over the **union** node/edge set (existing + entrants), rooted at `C`, anchored on `C`'s current position so the scene does not jump. The union's generative edges ensure every entrant has a BFS parent, so the recursive sector allocation places each entrant on the ring matching its hop-distance.
+Identical geometry to plain auto-layout: the selected scene-layout algorithm (default radial — see [layout-architecture.md](layout-architecture.md)) runs over the **union** node/edge set (existing + entrants), rooted at `C`, anchored on `C`'s current position so the scene does not jump. The union's generative edges ensure every entrant has a BFS parent, so the recursive sector allocation places each entrant on the ring matching its hop-distance.
 
 Edge curves of every repositioned/added edge are reset to the default automatic bezier, exactly as `apply` does.
 
-**Sibling order.** The union layout honours `autolayout.ringOrder` exactly as `apply` does (see [autolayout-architecture.md](autolayout-architecture.md) §4.2.1, default `angular`). Nodes already in the scene contribute their `currentPos`, so a hand-arranged clockwise sequence survives the grow, at every ring depth. Entrants are seeded at `C` and carry no position, so they sort last within their parent's wedge — they fill in after the existing siblings rather than displacing them.
+**Sibling order.** The union layout honours `autolayout.ringOrder` exactly as `apply` does (see [layout-architecture.md](layout-architecture.md) §4.2.1, default `angular`). Nodes already in the scene contribute their `currentPos`, so a hand-arranged clockwise sequence survives the grow, at every ring depth. Entrants are seeded at `C` and carry no position, so they sort last within their parent's wedge — they fill in after the existing siblings rather than displacing them.
 
 ---
 
@@ -111,8 +111,9 @@ src/features/autolayout/
 ```
 
 > Node position tweening now lives in the shared `utils/cy/node-position-animator.ts`
-> (`NodePositionAnimator`), moved out of the feature so `align` can reuse it; at the time
-> of this document it was the feature-local `autolayout-animator.ts`.
+> (`NodePositionAnimator`), moved out of the feature so the selection-scoped `arrange`
+> feature can reuse it; at the time of this document it was the feature-local
+> `autolayout-animator.ts`.
 
 **Dependency rules (upheld):**
 - No sibling-feature imports. The feature imports only within itself and **downstream**: `utils/`, `styles/`, `config/`, `storage/`, `core/`.

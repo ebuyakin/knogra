@@ -14,7 +14,7 @@ import { Transition } from './transition/transition';
 import { Path } from './path/path';
 import { Quiz } from './quiz';
 import { AutoLayout } from './autolayout/autolayout';
-import { Align } from './align/align';
+import { Arrange } from './arrange/arrange';
 
 export class FeatureAPI {
   scene: Scene;
@@ -26,7 +26,7 @@ export class FeatureAPI {
   path: Path;
   quiz: Quiz;
   autolayout: AutoLayout;
-  align: Align;
+  arrange: Arrange;
 
   constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
     this.scene = new Scene(cy);
@@ -38,6 +38,6 @@ export class FeatureAPI {
     this.path = new Path(cy);
     this.quiz = new Quiz(cy);
     this.autolayout = new AutoLayout(cy);
-    this.align = new Align(cy);
+    this.arrange = new Arrange(cy);
   }
 }

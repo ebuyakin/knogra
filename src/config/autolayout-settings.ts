@@ -24,10 +24,12 @@ export const AUTOLAYOUT_DEFAULTS = {
   ringOrder: 'angular' as 'edge' | 'angular',
   /** Scene rotation: angular step (degrees) applied per rotate command. */
   rotateStep: 15,
-  /** Scene density: multiplicative step applied per spread/tighten command.
-   *  Positions scale by this factor about the central node (and the viewport
-   *  zooms by its inverse), so a scene can be de-crowded or packed without
-   *  touching per-node `scale`. `1/densityStep` exactly reverses `densityStep`. */
+  /** Apparent node size: multiplicative step applied per Enlarge/Shrink command.
+   *  Effect — every node in the scene looks this much bigger (Enlarge) or
+   *  smaller (Shrink) while its on-screen position is unchanged. Mechanism —
+   *  positions scale about the central node and the viewport zooms by the
+   *  inverse, so no per-node `scale` is touched. `1/densityStep` exactly
+   *  reverses `densityStep`. Note the polarity: Enlarge passes `1/densityStep`. */
   densityStep: 1.15,
   animate: true,
   animationDuration: 600,
