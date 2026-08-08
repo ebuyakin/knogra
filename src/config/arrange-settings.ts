@@ -19,4 +19,12 @@ export const ARRANGE_DEFAULTS = {
    *  Not to be confused with `autolayout.densityStep`, which changes apparent
    *  node *size* across the whole scene and leaves distances on screen alone. */
   spacingStep: 1.15,
+
+  /** Selection rotation: angular step (degrees) applied per Rotate command,
+   *  turning the selected nodes rigidly about their own centroid.
+   *
+   *  Its own key rather than `autolayout.rotateStep`, which turns the whole
+   *  scene about its central node: the two commands differ in scope, and a
+   *  coarse scene rotation pairs naturally with a finer selection one. */
+  rotateStep: 15,
 };

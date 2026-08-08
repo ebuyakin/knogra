@@ -54,7 +54,7 @@ function diagonalTargets(nodes: ArrangeNode[]): Map<NodeId, Position> {
 
 export const alignRowTool: ArrangeTool = {
   id: 'align-row',
-  label: 'Align row',
+  label: 'Row',
   shortcut: 'T',
   group: 'align',
   minNodes: 2,
@@ -63,7 +63,7 @@ export const alignRowTool: ArrangeTool = {
 
 export const alignColumnTool: ArrangeTool = {
   id: 'align-column',
-  label: 'Align column',
+  label: 'Column',
   shortcut: 'U',
   group: 'align',
   minNodes: 2,
@@ -72,7 +72,7 @@ export const alignColumnTool: ArrangeTool = {
 
 export const alignDiagonalTool: ArrangeTool = {
   id: 'align-diagonal',
-  label: 'Align diagonal',
+  label: 'Diagonal',
   shortcut: 'Y',
   // Two nodes already define the line, so a diagonal needs a third to project.
   minNodes: 3,

@@ -19,14 +19,14 @@ This document describes the correct architecture for node styling in Knogra.
 | Property | Owner | Feature |
 |----------|-------|---------|
 | title, tags, properties | Node entity | `Node.update()` |
-| design, scale, position | Scene entity | `Scene.updateNodeStyle()` |
+| design, scale, position | Scene entity | `Scene.updateNodeStyle()`; scale also `Scene.scaleNodes()` |
 
 ## StyleGenerator Methods
 
 | Method | Purpose | When to Use |
 |--------|---------|-------------|
 | `generateSceneStylesheet()` | Full scene stylesheet generation | Kept for potential future use; not currently on the main scene-open path |
-| `addNodesToStylesheet()` | Add new nodes | `Scene.includeNode()`, `Graph.addNode()`, transitions |
+| `addNodesToStylesheet()` | Add new nodes | `Scene.includeNode()`, `Graph.addNode()`, transitions, `Scene.scaleNodes()` (batched multi-node rebuild) |
 | `updateNodeInStylesheet()` | Update existing node | `Scene.updateNodeStyle()` |
 | `buildCentralAndSelectedRules()` | Build central/selected selector rules | Scene open and transition stylesheet rebuilds |
 | `generateNodeStyle()` | Generate single style | Called internally by above methods |

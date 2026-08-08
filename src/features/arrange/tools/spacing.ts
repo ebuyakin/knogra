@@ -52,6 +52,7 @@ export const tightenTool: ArrangeTool = {
   shortcut: ',',
   group: 'spacing',
   minNodes: 2,
+  selfReversible: true,
   compute: (input: ArrangeInput) => spacingTargets(input, true),
 };
 
@@ -61,5 +62,6 @@ export const spreadTool: ArrangeTool = {
   shortcut: '.',
   group: 'spacing',
   minNodes: 2,
+  selfReversible: true,
   compute: (input: ArrangeInput) => spacingTargets(input, false),
 };

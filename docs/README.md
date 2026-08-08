@@ -1,7 +1,7 @@
 # Knogra Documentation Map
 
 > **Status:** Current index  
-> **Last reviewed:** 2026-07-27  
+> **Last reviewed:** 2026-08-08  
 > **Authority:** Use this file to orient within `docs/`. It classifies documents by current usefulness and points to the canonical sources when older documents overlap.
 
 ## Status Legend
@@ -41,13 +41,14 @@
 | [edge-curve-style-unbundling.md](edge-curve-style-unbundling.md) | Current | Design rationale and implementation record for separating per-edge curve/layout from visual style. |
 | [mermaid-fan-layout.md](mermaid-fan-layout.md) | Current | Canonical model for the Mermaid-import fan layout and the shared scene-composition / adjacency layer used by every Mermaid-import layout. |
 | [layout-architecture.md](layout-architecture.md) | Current | Canonical layout-domain terminology (§1.1), auto-layout feature structure, the pluggable scene-layout registry, and the radial outer-ring-spreading algorithm. Renamed from `autolayout-architecture.md`. |
-| [arrange-architecture.md](arrange-architecture.md) | Current | Arrange feature: selection-scoped geometric tools (align, distribute, circle, grid, tighten/spread), their contract, the tool registry, and the shared execution pipeline. |
+| [arrange-architecture.md](arrange-architecture.md) | Current | Arrange feature: selection-scoped geometric tools (align, distribute, circle, grid — axis-aligned and diagonal, rotate, tighten/spread), their contract, the tool registry, the shared execution pipeline, and the one-shot undo. |
 | [autolayout-grow-arrange.md](autolayout-grow-arrange.md) | Current | Grow & Arrange: pulling in the central node's degree-≤N neighbourhood, then arranging, with a seed-and-arrange animation. |
 | [telemetry-design.md](telemetry-design.md) | Current | Anonymous usage-counting design and privacy constraints. |
 | [landing-app-interaction.md](landing-app-interaction.md) | Current | User-facing landing/app scenarios and implementation status. |
 | [chat-image-retrieval.md](chat-image-retrieval.md) | Draft | Proposed design for retrieving real images into the per-node chat; not yet implemented. |
 | [node-placement.md](node-placement.md) | Current | Canonical rules for placing a **single** node added to or included in a scene (add child/parent, shelf create/include, node manager): reference resolution, between-spokes direction, nearest clearing radius, and the `node.spacing` multiplier. Multi-node expansion defers to [node-expansion-spec.md](node-expansion-spec.md). |
 | [node-expansion-spec.md](node-expansion-spec.md) | Draft | Working spec for the node-expansion placement algorithm (multi-node "include children/parents/neighbours"). Doc status predates the implementation in `donut-placement.ts` — verify before relying on it. |
+| [context-menu-structure-draft.md](context-menu-structure-draft.md) | Historical | Menu IA draft from the 2026-06 reorganization; the shipped structure has since evolved. Current menu structure is read directly from the builders in `src/ui/context-menu/`. |
 
 ## Visual Systems
 

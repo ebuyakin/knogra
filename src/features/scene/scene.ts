@@ -223,6 +223,14 @@ export class Scene {
     return this.#nodeOps.updateNodeStyle(nodeId, updates);
   }
 
+  /**
+   * Enlarge / shrink nodes by a multiplicative step, clamped for the group so
+   * relative sizes are preserved. See SceneNodeOps.scaleNodes.
+   */
+  async scaleNodes(nodeIds: NodeId[], factor: number): Promise<void> {
+    return this.#nodeOps.scaleNodes(nodeIds, factor);
+  }
+
   planTaggedStyleApplication(params: TagStyleParams): TagStylePlan {
     return this.#nodeOps.planTaggedStyleApplication(params);
   }

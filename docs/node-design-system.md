@@ -91,12 +91,25 @@ Each node in a scene can override specific visual properties. Stored in `Scene.n
 
 | Field | Type | Notes |
 |---|---|---|
-| `scale` | number | Size multiplier (1.0 = default). Stored at `Scene.nodes[id].scale` |
+| `scale` | number | Size multiplier (1.0 = default), range 0.2–3.0 (`NODE_SCALE_MIN` / `NODE_SCALE_MAX` in `config/node-settings.ts`). Stored at `Scene.nodes[id].scale` — **per scene**, so the same node can be sized differently in each |
 | `fontSize` | number | Per-node font size |
 | `minWidth` | number | Per-node minimum width |
 | `size` | number | Circle radius / rectangle width |
 | `aspectRatio` | number | Target width:height ratio (default-node only, default 16/9) |
 | `fixedAspect` | boolean | Enforce exact aspect ratio (default-node only, default false) |
+
+#### Editing `scale`
+
+Two paths, both writing `cyNode.data('scale')` and persisting via GraphSaver's `data` listener:
+
+- **Node editor slider** — absolute value for one node, via `Scene.updateNodeStyle(id, { scale })`.
+- **`>` / `<` shortcut** — multiplicative step (`node.scaleStep`, default 1.1) applied to **all selected nodes**, via `Scene.scaleNodes(ids, factor)`. Positions do not change, so nodes grow in place and may overlap — the same behaviour as dragging the slider.
+
+The shortcut clamps **for the selection as a whole**, not per node: the largest step keeping every node inside the range is applied to all of them, so the group stops when its first member reaches a limit. This preserves relative sizes (the reason the step is a ratio rather than an increment) and makes the command exactly self-inverse, which is why it needs no undo. Per-node clamping would flatten deliberate size differences at the boundary, irreversibly. A node already outside the range — legacy or imported data — is a no-op in the offending direction rather than being snapped back.
+
+Repeated presses are coalesced through an in-flight guard with a multiplicative accumulator, mirroring `AutoLayout.scaleScene`; without it, overlapping async stylesheet rebuilds would lose each other's updates.
+
+Not to be confused with the scene-scoped **Enlarge / Shrink** (`W` / `Shift+W`), which changes *apparent* size for every node without touching `scale` — see [layout-architecture.md](layout-architecture.md) §1.1.
 
 ### Default Node Sizing Algorithm
 

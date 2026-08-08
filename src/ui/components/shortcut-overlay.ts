@@ -49,17 +49,20 @@ export class ShortcutOverlay {
     hint.textContent = 'Most commands are also available via right-click context menu.';
     dialog.appendChild(hint);
 
-    // Content — two explicit columns so sections stack without grid-row gaps
+    // Content — three columns, each holding the categories that declare it.
     const content = document.createElement('div');
     content.className = 'shortcut-content';
 
-    const leftCol = document.createElement('div');
-    leftCol.className = 'shortcut-col';
-    const rightCol = document.createElement('div');
-    rightCol.className = 'shortcut-col';
+    const columns = new Map<number, HTMLDivElement>();
+    for (const category of SHORTCUT_CATEGORIES) {
+      let column = columns.get(category.column);
+      if (!column) {
+        column = document.createElement('div');
+        column.className = 'shortcut-col';
+        columns.set(category.column, column);
+        content.appendChild(column);
+      }
 
-    SHORTCUT_CATEGORIES.forEach((category, i) => {
-      const col = i % 2 === 0 ? leftCol : rightCol;
       const section = document.createElement('div');
       section.className = 'shortcut-section';
 
@@ -84,11 +87,8 @@ export class ShortcutOverlay {
         section.appendChild(row);
       }
 
-      col.appendChild(section);
-    });
-
-    content.appendChild(leftCol);
-    content.appendChild(rightCol);
+      column.appendChild(section);
+    }
 
     dialog.appendChild(content);
     overlay.appendChild(dialog);

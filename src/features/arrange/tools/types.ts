@@ -25,14 +25,17 @@ export type ArrangeToolId =
   | 'distribute-diagonal'
   | 'circle'
   | 'grid'
+  | 'grid-diagonal'
+  | 'rotate-cw'
+  | 'rotate-ccw'
   | 'tighten'
   | 'spread';
 
 /**
- * Menu grouping. Tools of one group are listed together and separated from the
- * next group by a divider, so the UI never hard-codes the tool list.
+ * Menu grouping. Tools of one group are listed together under a group heading,
+ * so the UI never hard-codes the tool list.
  */
-export type ArrangeGroup = 'align' | 'distribute' | 'shape' | 'spacing';
+export type ArrangeGroup = 'align' | 'distribute' | 'shape' | 'rotate' | 'spacing';
 
 /** One selected node, as an arrange tool sees it. Geometry only. */
 export interface ArrangeNode {
@@ -56,6 +59,9 @@ export interface ArrangeParams {
   /** Multiplicative distance step for Tighten/Spread, already raised to the
    *  number of coalesced presses. */
   spacingStep?: number;
+  /** Unsigned rotation step in degrees, already multiplied by the number of
+   *  coalesced presses. Each rotate tool applies its own direction. */
+  rotationDegrees?: number;
 }
 
 export interface ArrangeInput {
@@ -72,12 +78,23 @@ export type ArrangeComputeFn = (input: ArrangeInput) => Map<NodeId, Position>;
 
 export interface ArrangeTool {
   id: ArrangeToolId;
-  /** Display label, without the shortcut hint. */
+  /**
+   * Display label, without the shortcut hint. Read under its group heading
+   * ("Align" › "Row"), so it names the axis or shape, not the operation.
+   */
   label: string;
   /** Keyboard shortcut, shown as a hint in menus. Omitted for menu-only tools. */
   shortcut?: string;
   group: ArrangeGroup;
   /** Below this many selected nodes the tool is disabled and does nothing. */
   minNodes: number;
+  /**
+   * Set when an opposite command exactly reverses this tool, so the user can
+   * already walk the change back with one keystroke. Such tools do not arm the
+   * one-shot undo (`Arrange.undo`) — a position snapshot would be a second,
+   * redundant way to achieve the same thing. Absent is the safe default: a new
+   * tool gets undo unless it deliberately opts out.
+   */
+  selfReversible?: true;
   compute: ArrangeComputeFn;
 }

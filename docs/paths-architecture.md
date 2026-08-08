@@ -519,7 +519,7 @@ Path (feature, owns the mode)
    │                       deleteEdge early-return  (ENFORCEMENT — deletion, §14.6)
    │
    ├──▶ PathPanel ........ numbering, exit control, Path button active state
-   ├──▶ ContextMenu ...... greys out "Go to node's scene (G)", delete items
+   ├──▶ ContextMenu ...... greys out "Go to scene (G)", delete items
    └──▶ NodeManager ...... greys out open-scene, delete, and clear-scenes actions
                            (AFFORDANCES — honesty, not enforcement)
 ```
@@ -545,7 +545,7 @@ explicit UI offer rather than a gesture.
 | Entry point | Behaviour in path mode |
 |---|---|
 | Double-tap node | Silent no-op |
-| Context menu → "Go to node's scene (G)" | Greyed out |
+| Context menu → "Go to scene (G)" | Greyed out |
 | Keyboard `G` / `Shift+G` | Silent no-op |
 | Node Manager → open scene | Greyed out |
 | Context menu → delete node / delete edge | Greyed out (§14.6) |

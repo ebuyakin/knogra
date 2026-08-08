@@ -11,9 +11,13 @@ import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
 import { StyleGenerator } from '../../styles/style-generator';
 import { getSetting } from '../../config';
+import { NODE_SCALE_MAX, NODE_SCALE_MIN } from '../../config/node-settings';
 import { isDebug } from '../../config/debug-flags';
 import { placeSingleNode, type SizedObstacle } from '../utils/pure/position-expansion';
 import { computeTagStylePlan, type TagStyleParams, type TagStylePlan } from './tag-style-plan';
+
+/** Multiplicative steps below this distance from 1 are treated as no-ops. */
+const SCALE_EPSILON = 1e-6;
 
 /**
  * Context needed to open NodeEditor for a specific node
@@ -38,6 +42,10 @@ export class SceneNodeOps {
   #collapseNode: (nodeId: NodeId) => Promise<void>;
   /** Provided by Scene — returns central node of current scene */
   #getCentralNodeId: () => NodeId | null;
+
+  /** Scale: a run is in flight; further steps accumulate multiplicatively. */
+  #scaleInFlight = false;
+  #pendingScaleFactor = 1;
 
   constructor(
     cy: Core,
@@ -268,6 +276,102 @@ export class SceneNodeOps {
   }
 
   /**
+   * Enlarge / shrink the given nodes by a multiplicative step — user-facing
+   * `>` / `<`. Only each node's scene-scoped `scale` changes; positions are
+   * untouched, so nodes grow in place and may overlap their neighbours,
+   * exactly as when the node editor's slider is dragged.
+   *
+   * **The factor is clamped for the selection as a whole, not per node.** The
+   * largest step that keeps every node inside [NODE_SCALE_MIN, NODE_SCALE_MAX]
+   * is applied to all of them, so the group stops when its first member reaches
+   * a limit. This preserves relative sizes — the reason the step is a ratio in
+   * the first place — and keeps the command exactly self-inverse, so `<` undoes
+   * `>` and no undo mechanism is needed. Per-node clamping would instead
+   * flatten deliberate size differences at the boundary, irreversibly.
+   *
+   * A node already outside the range (legacy or imported data) yields a no-op
+   * in the offending direction rather than being snapped back into range.
+   *
+   * Repeated presses are coalesced exactly as in `AutoLayout.scaleScene`: a run
+   * in flight absorbs further steps into a multiplicative accumulator. Without
+   * it, overlapping calls would each read-modify-write the same stylesheet and
+   * lose each other's updates.
+   *
+   * @param nodeIds Nodes to resize; ids absent from the scene are skipped.
+   * @param factor Multiplicative step; >1 enlarges, <1 shrinks.
+   */
+  async scaleNodes(nodeIds: NodeId[], factor: number): Promise<void> {
+    if (!isEditMode()) {
+      console.warn('Cannot scale nodes in View mode');
+      return;
+    }
+    if (nodeIds.length === 0 || factor <= 0 || Math.abs(factor - 1) <= SCALE_EPSILON) return;
+
+    if (this.#scaleInFlight) {
+      this.#pendingScaleFactor *= factor;
+      if (isDebug('d_scene')) console.log(`Scene: Node scale coalesced: ×${this.#pendingScaleFactor} pending`);
+      return;
+    }
+
+    this.#scaleInFlight = true;
+    try {
+      let step = factor;
+      while (Math.abs(step - 1) > SCALE_EPSILON) {
+        await this.#scaleNodesOnce(nodeIds, step);
+        step = this.#pendingScaleFactor;
+        this.#pendingScaleFactor = 1;
+      }
+    } finally {
+      this.#scaleInFlight = false;
+      this.#pendingScaleFactor = 1;
+    }
+  }
+
+  /** One scale step: group clamp, then a single batched stylesheet rebuild. */
+  async #scaleNodesOnce(nodeIds: NodeId[], factor: number): Promise<void> {
+    const targets: { cyNode: NodeSingular; scale: number }[] = [];
+    for (const nodeId of nodeIds) {
+      const cyNode = this.#cy.getElementById(nodeId);
+      if (cyNode.length === 0) continue;
+      targets.push({ cyNode, scale: cyNode.data('scale') ?? 1.0 });
+    }
+    if (targets.length === 0) return;
+
+    const effective = clampGroupScaleFactor(targets.map(target => target.scale), factor);
+    if (Math.abs(effective - 1) <= SCALE_EPSILON) return;
+
+    const nodesToStyle = targets.map(({ cyNode, scale }) => {
+      const nodeId = cyNode.id() as NodeId;
+      const newScale = Math.round(scale * effective * 100) / 100;
+      cyNode.data('scale', newScale);
+      return {
+        nodeId,
+        nodeData: {
+          id: nodeId,
+          title: cyNode.data('title') ?? '',
+          tags: cyNode.data('tags') ?? [],
+          properties: cyNode.data('properties') ?? {}
+        } as Node,
+        design: cyNode.data('design'),
+        scale: newScale
+      };
+    });
+
+    const stylesheet = (this.#cy.style() as any).json();
+    const updatedStylesheet = await StyleGenerator.addNodesToStylesheet(
+      stylesheet,
+      nodesToStyle,
+      this.#getThemeId()
+    );
+    this.#cy.style().fromJson(updatedStylesheet).update();
+
+    // Drop any inline width/height so the regenerated rule takes effect.
+    for (const { cyNode } of targets) cyNode.removeStyle('width height');
+
+    if (isDebug('d_scene')) console.log(`Scene: Scaled ${targets.length} node(s) by ×${effective}`);
+  }
+
+  /**
    * Compute the plan for a tag-targeted style application (read-only).
    * Used by the paste-style dialog for its live preview count.
    */
@@ -427,4 +531,19 @@ export class SceneNodeOps {
     if (isDebug('d_scene')) console.log(`Scene: Created new edge ${placementRef} → ${nodeId}`);
     return 1;
   }
+}
+
+/**
+ * Largest step in the requested direction that keeps every scale within the
+ * supported range — the group clamp behind `scaleNodes`.
+ *
+ * Never reverses direction: a group already at (or beyond) a limit returns 1,
+ * a no-op, rather than being dragged back toward the range. That also makes
+ * degenerate input (a zero scale from corrupt data) harmless.
+ */
+function clampGroupScaleFactor(scales: number[], factor: number): number {
+  if (factor > 1) {
+    return Math.max(1, Math.min(factor, NODE_SCALE_MAX / Math.max(...scales)));
+  }
+  return Math.min(1, Math.max(factor, NODE_SCALE_MIN / Math.min(...scales)));
 }

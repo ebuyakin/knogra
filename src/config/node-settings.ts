@@ -6,6 +6,15 @@
 import type { DesignId } from '../core/main-types';
 
 /**
+ * Supported range for a node's scene-scoped `scale`. Shared by the node
+ * editor's slider and the `<` / `>` shortcut so both agree on the limits.
+ * Fixed bounds rather than settings: they delimit what the design system can
+ * render legibly, not a matter of taste.
+ */
+export const NODE_SCALE_MIN = 0.2;
+export const NODE_SCALE_MAX = 3.0;
+
+/**
  * Node settings defaults
  */
 export const NODE_DEFAULTS = {
@@ -35,4 +44,12 @@ export const NODE_DEFAULTS = {
    * See docs/node-placement.md §4.
    */
   spacing: 1.0,
+
+  /**
+   * Multiplicative step for the Enlarge / Shrink shortcut (`>` / `<`), applied
+   * to the selected nodes' `scale`. A ratio rather than an increment so the
+   * step is perceptually uniform and exactly self-inverse, and so a selection
+   * of differently sized nodes keeps its relative sizes.
+   */
+  scaleStep: 1.1,
 };

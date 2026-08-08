@@ -259,8 +259,10 @@ export class KeyboardHandler {
       return;
     }
 
-    // F2 - Quick rename of the selected node
-    if (key === 'f2' && !ctrl) {
+    // ; / F2 - Quick rename of the selected node.
+    // `;` is the primary binding (home row on QWERTY, unshifted on AZERTY, no
+    // browser meaning); F2 is kept for Windows rename muscle memory.
+    if ((key === ';' || key === 'f2') && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
       this.#quickRenameSelectedNode();
@@ -548,25 +550,25 @@ export class KeyboardHandler {
       return;
     }
 
-    // O - Rotate scene clockwise about the central node
-    if (key === 'o' && !event.shiftKey && !ctrl) {
+    // O / Shift+O - Rotate clockwise / counter-clockwise.
+    // Scoped by the selection: with two or more nodes selected the selection
+    // turns rigidly about its own centroid; otherwise the whole scene turns
+    // about its central node. Same rule of thumb as every arrange tool — to
+    // keep a node out of the rotation, don't select it.
+    if (key === 'o' && !ctrl) {
       event.preventDefault();
       if (!isEditMode()) return;
-      this.#features.autolayout.rotate(
-        this.#features.scene.getCentralNodeId(),
-        getSetting('autolayout.rotateStep')
-      );
-      return;
-    }
-
-    // Shift+O - Rotate scene counter-clockwise about the central node
-    if (key === 'o' && event.shiftKey && !ctrl) {
-      event.preventDefault();
-      if (!isEditMode()) return;
-      this.#features.autolayout.rotate(
-        this.#features.scene.getCentralNodeId(),
-        -getSetting('autolayout.rotateStep')
-      );
+      const rotatingSelection = this.#features.arrange.selectionSize() >= 2;
+      if (rotatingSelection) {
+        this.#features.arrange.run(event.shiftKey ? 'rotate-ccw' : 'rotate-cw');
+      } else {
+        this.#features.autolayout.rotate(
+          this.#features.scene.getCentralNodeId(),
+          event.shiftKey
+            ? -getSetting('autolayout.rotateStep')
+            : getSetting('autolayout.rotateStep')
+        );
+      }
       return;
     }
 
@@ -618,6 +620,23 @@ export class KeyboardHandler {
       return;
     }
 
+    // < / > - Shrink / enlarge the selected nodes themselves: their `scale`
+    // changes, positions do not (contrast , / . and W). No fallback when
+    // nothing is selected — the scene-wide gesture is W / Shift+W.
+    //
+    // Deliberately no Shift guard: these are the shifted characters on US
+    // layouts but unshifted on most ISO layouts, where `<` sits on its own key.
+    // Matching the character rather than the chord keeps both working.
+    if ((key === '<' || key === '>') && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      const selectedIds = this.#cy.$('node:selected').map(node => node.id() as NodeId);
+      if (selectedIds.length === 0) return;
+      const step = getSetting('node.scaleStep');
+      await this.#features.scene.scaleNodes(selectedIds, key === '>' ? step : 1 / step);
+      return;
+    }
+
     // 1-4 - Pull in the degree-N neighbourhood, then auto-layout the scene.
     // Deliberately no Shift guard: on layouts where the digits are the shifted
     // characters (AZERTY), Shift+digit is the only way to type them.
@@ -656,6 +675,18 @@ export class KeyboardHandler {
       event.preventDefault();
       if (!isEditMode()) return;
       this.#features.arrange.run(event.shiftKey ? 'distribute-diagonal' : 'align-diagonal');
+      return;
+    }
+
+    // 8 / 9 - Grid / diagonal grid on the selection. **Undocumented on purpose**:
+    // absent from F1 and from the menu labels, which still present both tools as
+    // menu-only. A temporary authoring convenience for building demo graphs,
+    // parked on two of the free digits until the arrange leader key replaces it
+    // (docs/arrange-architecture.md §7). No Shift guard, matching the digits above.
+    if ((key === '8' || key === '9') && !ctrl) {
+      event.preventDefault();
+      if (!isEditMode()) return;
+      this.#features.arrange.run(key === '8' ? 'grid' : 'grid-diagonal');
       return;
     }
 

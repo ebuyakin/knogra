@@ -1,8 +1,8 @@
 # Context Menu Structure Draft
 
-> **Status:** Temporary working draft  
-> **Last updated:** 2026-06-21  
-> **Purpose:** Shared draft for iterating on Node, Edge, and Canvas context menu organization before implementation.
+> **Status:** Historical  
+> **Last updated:** 2026-08-08  
+> **Purpose:** IA draft used for the 2026-06 context menu reorganization. The shipped structure has since evolved (Scene design / Zoom submenus, Arrange, Quiz, Auto-layout degrees). The current menu structure is read directly from the per-surface builders in `src/ui/context-menu/` (`node-menu.ts`, `edge-menu.ts`, `canvas-menu.ts`).
 
 ## Design Principles
 

@@ -15,7 +15,7 @@ import { NodeManager } from './node-manager';
 import { BackgroundEditor } from './background-editor';
 import { ThemeEditor } from './theme-editor';
 import { QuizPanel } from './quiz-panel';
-import { ContextMenu } from './context-menu';
+import { ContextMenu } from '../context-menu/context-menu';
 import { PasteStyleDialog } from './paste-style-dialog';
 import { AnchorLinkTooltip } from './anchor-link-tooltip';
 import { QuickTitleEditor } from './quick-title-editor';
@@ -66,23 +66,22 @@ export class UIComponentAPI {
     this.pasteStyleDialog = new PasteStyleDialog(features);
 
     // Create context menu (depends on editors)
-    this.contextMenu = new ContextMenu(
+    this.contextMenu = new ContextMenu({
       cy,
       container,
       features,
-      this.edgeCreationMode,
-      this.nodeEditor,
-      this.edgeEditor,
-      this.edgeTypeManager,
-      this.edgeTypeVisibilityModal,
-      this.nodePicker,
-      this.nodeManager,
-      this.backgroundEditor,
-      this.themeEditor,
-      this.quizPanel,
-      this.anchorLinkTooltip,
-      this.pasteStyleDialog
-    );
+      edgeCreationMode: this.edgeCreationMode,
+      nodeEditor: this.nodeEditor,
+      edgeEditor: this.edgeEditor,
+      edgeTypeManager: this.edgeTypeManager,
+      edgeTypeVisibilityModal: this.edgeTypeVisibilityModal,
+      nodeManager: this.nodeManager,
+      backgroundEditor: this.backgroundEditor,
+      themeEditor: this.themeEditor,
+      quizPanel: this.quizPanel,
+      anchorLinkTooltip: this.anchorLinkTooltip,
+      pasteStyleDialog: this.pasteStyleDialog
+    });
 
     // Create badge managers
     this.badgeManager = new ConnectionBadgeManager(cy, container);

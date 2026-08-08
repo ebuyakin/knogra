@@ -1,7 +1,7 @@
 # Layout Architecture
 
 > **Status:** Current — canonical
-> **Last reviewed:** 2026-08-07
+> **Last reviewed:** 2026-08-08
 > **Authority:** Canonical for the **layout domain**: the shared terminology (§1.1), the **Auto-layout feature** (`src/features/autolayout/`) with its module structure and **pluggable scene-layout registry**, and the radial **outer-ring-spreading** algorithm. The membership-growing variant is specified in [autolayout-grow-arrange.md](autolayout-grow-arrange.md); this document covers the feature skeleton and the layout algorithms it dispatches to.
 > **History:** Renamed from `autolayout-architecture.md` on 2026-08-07 when the terminology section was added — the document already covered scene transforms that are not auto-layouts, so its scope was the layout domain in all but name. Section numbers were preserved across the rename; external references to §4.2.1, §5, §6, §7 still resolve.
 > **Related:** [Documentation map](README.md), [Grow & Arrange](autolayout-grow-arrange.md), [Mermaid Fan Layout](mermaid-fan-layout.md) (a deliberately separate layout lineage — see §8), [Architecture](architecture.md)
@@ -37,7 +37,7 @@ Commands are classified on two axes — **scope** (whole scene vs. current selec
 | **Auto-layout** | scene (visible nodes) | topology-driven **algorithm** | central node | Radial (§4); planned: equal-sector radial, scene-wide grid, layered. Plus **Grow & Arrange**, which also changes scene membership |
 | **View transform** | scene | positions + viewport; **no layout change** | central node | **Enlarge / Shrink** (§7) |
 | **Scene transform** | scene | rigid geometric **transform** | central node | **Rotate** (§6) |
-| **Arrange** | selection | geometric **transform**, pluggable tools | the selection's own centroid | **Align**, **Distribute**, **Circle**, **Grid**, **Tighten / Spread** |
+| **Arrange** | selection | geometric **transform**, pluggable tools | the selection's own centroid | **Align**, **Distribute**, **Circle**, **Grid** (axis-aligned / diagonal), **Rotate**, **Tighten / Spread** |
 
 #### Term definitions
 
@@ -47,20 +47,25 @@ Commands are classified on two axes — **scope** (whole scene vs. current selec
 - **Align** — keeps its narrow, literal meaning: **put node centres on a common line** (Row / Column / Diagonal). Nothing else is called "align".
 - **Distribute** — **equalise the gaps** between selected nodes along an axis or line: constant whitespace between adjacent bounding boxes, not equal centre spacing. The extreme nodes stay fixed and nothing moves perpendicular to the axis, so Align and Distribute compose. Standard term in every design tool; adopted deliberately rather than inventing one.
 - **Circle** — a **placement** tool, not an alignment: put the selected nodes on a circle centred on their centroid, at their mean current radius (floored so the ring always fits), preserving their current clockwise order. Grouped in the UI under *Shape*, beside Align rather than inside it.
-- **Grid** — the other *Shape* tool: snap the selection into an axis-aligned lattice of `⌈√n⌉` columns, cells assigned from the nodes' current rows and columns. Four nodes give the axis-aligned square that Circle cannot (Circle produces a *rotated* square, since it minimises travel). Spacing is per-axis, so the result is a rectangle that keeps the arrangement's proportions rather than a forced square. Menu-only — no shortcut yet.
+- **Grid** — the other *Shape* tool: snap the selection into a lattice of `⌈√n⌉` columns, cells assigned from the nodes' current rows and columns. Four nodes give the fixed-orientation square that Circle cannot (Circle produces a *rotated* square, since it minimises travel). Spacing is per-axis, so the result is a rectangle that keeps the arrangement's proportions rather than a forced square. Comes in **axis-aligned** and **diagonal** variants — the latter is the same lattice in a 45°-rotated frame, so four nodes land North / East / South / West. Menu-only — no shortcuts.
+- **Rotate** — the one name shared by two families, at two scopes: turn the **selection** rigidly about its centroid (arrange tool, step `arrange.rotateStep`), or turn the **whole scene** about its central node (`rotate`, step `autolayout.rotateStep`, §6). The shared name is honest — it is the same gesture — and the shared shortcut resolves by selection size.
 - **Tighten / Spread** — change the **distance between** selected nodes, by scaling their positions about their centroid (step `arrange.spacingStep`, default 1.15). Node size is unaffected.
-- **Enlarge / Shrink** — change the **apparent size** of every node in the scene. Positions on screen are unaffected. This is `scaleScene` (§7).
+- **Enlarge / Shrink** — the second name shared across two scopes, and the one case where the two mechanisms genuinely differ. At **scene** scope it changes the **apparent size** of every node, leaving screen positions and the stored `scale` untouched — a view transform (`scaleScene`, §7). At **selection** scope it changes the nodes' **actual** per-scene `scale`, leaving graph positions untouched (`SceneNodeOps.scaleNodes`, step `node.scaleStep`). Sharing the name follows the naming rule above: whatever the mechanism, what the user perceives is the same — *these nodes got bigger*. **The selection-scoped command is not a layout command** — it moves nothing — and lives outside this domain in the scene/node-style slice; it is defined here only so the size vocabulary stays complete and the keyboard inventory below stays honest. See [node-design-system.md](node-design-system.md).
 
 #### Two collisions this resolves
 
-**Size vs. distance.** `W` / `Shift+W` were labelled "Tighten / Spread scene spacing", which named the mechanism and hid the effect — and it collided head-on with the planned selection-scoped spacing tool. Renaming them to **Enlarge / Shrink** leaves exactly one Tighten/Spread pair in the product, and the two commands now share no word:
+**Size vs. distance.** `W` / `Shift+W` were labelled "Tighten / Spread scene spacing", which named the mechanism and hid the effect — and it collided head-on with the planned selection-scoped spacing tool. Renaming them to **Enlarge / Shrink** leaves exactly one Tighten/Spread pair in the product, and the two commands now share no word. `>` / `<` joined later as the selection-scoped size command; it takes the Enlarge / Shrink name deliberately (see the term definition above) and is included here because these three are the commands users confuse:
 
-| | `W` / `Shift+W` | `,` / `.` |
-|---|---|---|
-| Label | **Enlarge / Shrink** | **Tighten / Spread** |
-| What visibly changes | node **size** | node **distance** |
-| What visibly stays | screen positions | node size |
-| Scope | whole scene | selection |
+| | `W` / `Shift+W` | `>` / `<` | `,` / `.` |
+|---|---|---|---|
+| Label | **Enlarge / Shrink** | **Enlarge / Shrink** | **Tighten / Spread** |
+| What visibly changes | node **size** — all, together | node **size** — selected only | node **distance** |
+| What visibly stays | screen positions | positions; other nodes' size | node size |
+| Scope | whole scene | selection | selection |
+| What is written | positions + viewport zoom | `Scene.nodes[id].scale` | positions |
+| Domain | layout (§7) | node style | arrange |
+
+The first two are told apart by *relativity*: `W` scales everything together, so nothing changes relative to anything else; `>` changes the selected nodes relative to their neighbours.
 
 Note the polarity, which is easy to get backwards: `W` passes `factor < 1`, contracting positions *and* zooming in — so glyphs **grow**. `Shift+W` does the opposite. See §7.
 
@@ -70,16 +75,19 @@ Note the polarity, which is easy to get backwards: `W` passes `factor < 1`, cont
 
 The global keymap is nearly exhausted: every unshifted letter `a`–`z` is bound, and several shifted letters are bound *implicitly* because their handler omits a `!event.shiftKey` guard (`Shift+D`, `Shift+E`, `Shift+M`, `Shift+P`, `Shift+V`, `Shift+X` all fall through to the unshifted action). Digits `1`–`4` mean "degree N" for Grow & Arrange and deliberately carry no shift guard (AZERTY layouts type digits shifted), `0` resets zoom, and `[` / `]` are path history.
 
+Punctuation is now load-bearing too, and it carries the same layout caveat as the digits: `<` / `>` are **shifted** characters on US QWERTY but **unshifted** on most ISO layouts, where `<` sits on its own key left of `Z`. Bindings on them must match the produced character and never guard on `event.shiftKey`, or they break outside the US layout. (`,` / `.` and `<` / `>` therefore cannot collide in either direction.)
+
 Layout-domain bindings:
 
 | Command | Key |
 |---|---|
 | Auto-layout scene | `Q` |
 | Grow & Arrange, degree N | `1`–`4` |
-| Rotate clockwise / counter-clockwise | `O` / `Shift+O` |
-| Enlarge / Shrink nodes | `W` / `Shift+W` |
+| Rotate clockwise / counter-clockwise | `O` / `Shift+O` — the **selection** when ≥2 nodes are selected, otherwise the **scene** |
+| Enlarge / Shrink nodes (scene, apparent size) | `W` / `Shift+W` |
+| Enlarge / Shrink nodes (selection, actual `scale`) | `>` / `<` — *node style, not a layout command; listed for namespace completeness* |
 | Align row / column / diagonal | `T` / `U` / `Y` |
-| Distribute horizontally / vertically / diagonally | `Shift+T` / `Shift+U` / `Shift+Y` |
+| Distribute row / column / diagonal | `Shift+T` / `Shift+U` / `Shift+Y` |
 | Circle | `Shift+Q` |
 | Tighten / Spread selection | `,` / `.` |
 
@@ -254,7 +262,7 @@ These run in `AutoLayout` for the re-arrangement capabilities (`apply`, `growAnd
 
 ## 6. Scene rotation (`rotate`)
 
-`rotate(central, degrees)` rigidly rotates every **visible** scene node about the central node's *current* position by a fixed angular step (setting `autolayout.rotateStep`, default 15°; positive = clockwise on screen). Invoke via **Scene design ▸ Rotate ▸ Clockwise / Counter-clockwise** or the `O` / `Shift+O` shortcuts (±step). Edit mode only; folded/hidden nodes keep their offsets, matching `apply`.
+`rotate(central, degrees)` rigidly rotates every **visible** scene node about the central node's *current* position by a fixed angular step (setting `autolayout.rotateStep`, default 15°; positive = clockwise on screen). Invoke via **Scene design ▸ Rotate ▸ Clockwise / Counter-clockwise**, or the `O` / `Shift+O` shortcuts (±step) **when fewer than two nodes are selected** — with a selection those keys rotate the selection instead, via the arrange tool of the same name ([arrange-architecture.md](arrange-architecture.md) §6.4). Edit mode only; folded/hidden nodes keep their offsets, matching `apply`.
 
 It is **not** a layout algorithm — no spanning forest, no registry dispatch. It is a direct affine transform about the pivot `p` (the central node's position), for step `θ` in radians:
 
@@ -290,6 +298,8 @@ $$\text{pan}' = \text{pan} + p \cdot (\text{zoom} - \text{zoom}/\text{factor})$$
 Because Cytoscape renders `screen = graph·zoom + pan`, this combination leaves **every** node's on-screen *centre* invariant — only the node glyphs grow (Enlarge) or shrink (Shrink), since their graph size is untouched. The result reads as a pure node-size change anchored on the central node wherever it sits (it need not be the geometric centre — that offset is often intentional).
 
 Under the hood the *spacing between nodes in graph space* does change, which is what makes room for the larger glyphs; but since the viewport compensates exactly, no user ever perceives it as a spacing change. That gap between mechanism and effect is precisely why the command is labelled by its effect.
+
+Because the stored per-node `scale` is never touched, this is a **view** transform: nothing about the nodes themselves changes, and no node changes size *relative to another*. To make particular nodes bigger than their neighbours, use the selection-scoped Enlarge / Shrink (`>` / `<`, §1.1), which writes `Scene.nodes[id].scale` instead.
 
 **Three deliberate departures from §5:**
 

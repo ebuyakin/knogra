@@ -84,6 +84,15 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
             min: 1.05,
             max: 3,
             step: 0.05
+          },
+          {
+            key: 'node.scaleStep',
+            label: 'Node scale step',
+            description: 'Multiplier for the < / > shortcut that shrinks or enlarges the selected nodes. The selection scales as a group and stops when the first node reaches the size limit.',
+            type: 'number',
+            min: 1.02,
+            max: 2,
+            step: 0.05
           }
         ]
       },
@@ -632,7 +641,7 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
     id: 'arrange',
     label: 'Arrange',
     icon: '◇',
-    description: 'Geometric tools that act on the selected nodes only, anchored on their own centre — align, circle, and spacing. Distinct from Auto-layout, which re-arranges the whole scene around its central node.',
+    description: 'Geometric tools that act on the selected nodes only, anchored on their own centre — align, circle, rotate, and spacing. Distinct from Auto-layout, which re-arranges the whole scene around its central node.',
     settings: [
       {
         key: 'arrange.spacingStep',
@@ -642,6 +651,15 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         min: 1.01,
         max: 2,
         step: 0.01
+      },
+      {
+        key: 'arrange.rotateStep',
+        label: 'Rotate Step',
+        description: 'Angle (degrees) the selected nodes turn by per Rotate command, about their own centre. Separate from the scene Rotate Step, which turns the whole scene about its central node.',
+        type: 'number',
+        min: 1,
+        max: 180,
+        step: 1
       }
     ]
   },

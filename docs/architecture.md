@@ -1,7 +1,7 @@
 # Knogra Architecture
 
 > **Status:** Current  
-> **Last reviewed:** 2026-08-07  
+> **Last reviewed:** 2026-08-08  
 > **Authority:** Main authoritative architecture document for layers, dependency direction, module responsibilities, persistence ownership, and coding standards. For detailed scene, fold, visibility, and transition terminology, defer to [Scene Transitions](scene-transitions.md). For typed edge styling and scene-local edge type visibility, defer to [Edge Types Architecture](edge-types-architecture.md).  
 > **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Scene transitions](scene-transitions.md), [Edge Types Architecture](edge-types-architecture.md)
 
@@ -339,7 +339,7 @@ Core Types only
 | **Path** | `path/path.ts` | Navigation history tracking and persistence |
 | **Quiz** | `quiz.ts` | Runtime recall mode: hides sampled node content and tracks reveal/self-grade state |
 | **AutoLayout** | `autolayout/autolayout.ts` | Scene-wide re-arrangement anchored on the central node: radial layout (pluggable algorithms), grow & arrange, rotate, and apparent node size (enlarge/shrink) |
-| **Arrange** | `arrange/arrange.ts` | Selection-scoped geometric tools anchored on the selection's own centroid: align, distribute, circle, grid, tighten/spread. Pluggable tool registry — see [arrange-architecture.md](arrange-architecture.md) |
+| **Arrange** | `arrange/arrange.ts` | Selection-scoped geometric tools anchored on the selection's own centroid: align, distribute, circle, grid (axis-aligned and diagonal), rotate, tighten/spread, plus a one-shot undo of the last arrangement. Pluggable tool registry — see [arrange-architecture.md](arrange-architecture.md) |
 
 **FeatureAPI** (`feature-api.ts`) — Facade exposing all features. No business logic.
 
@@ -414,9 +414,8 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 
 | Component | Purpose |
 |-----------|---------|
-| `context-menu.ts` | Right-click menus |
 | `node-editor/` | Edit node modal — tabbed shell plus one module per tab |
-| `quick-title-editor.ts` | Anchored popover for quick node rename (`F2`) |
+| `quick-title-editor.ts` | Anchored popover for quick node rename (`;` / `F2`) |
 | `edge-editor.ts` | Edit edge modal |
 | `edge-type-manager.ts` | Workspace edge type registry and type-level style editor |
 | `edge-type-visibility-modal.ts` | Scene-local **Edges visibility** controls |
@@ -436,6 +435,21 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 
 `path-manager.ts` persists through the Path feature (UI → Features → Storage) and is the
 reference for how the remaining cases should be reworked.
+
+#### Context Menu (`ui/context-menu/`)
+
+Right-click menus for node, edge, and canvas — the app's primary command surface, organized as
+its own subsystem rather than a single component.
+
+| File | Purpose |
+|------|---------|
+| `context-menu.ts` | Public face: Cytoscape `cxttap`/`dbltap` wiring, menu lifecycle (close on click/escape/blur) |
+| `menu-renderer.ts` | `MenuItem` type and generic DOM rendering: positioning, submenu hover, window activation on open |
+| `menu-context.ts` | `MenuDependencies` bundle, `StyleClipboard` (copy/paste style state), shared items (mode toggle, Arrange submenu) |
+| `node-menu.ts` / `edge-menu.ts` / `canvas-menu.ts` | Per-surface builders — pure functions `(deps, …) => MenuItem[]`, no DOM or event wiring |
+| `editor-openers.ts` | Node/edge editor opening, shared by double-tap wiring and menu actions |
+
+Menu content changes are localized: each right-click surface has exactly one builder file.
 
 #### Panels (`ui/panels/`)
 

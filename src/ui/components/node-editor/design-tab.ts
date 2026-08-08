@@ -6,6 +6,7 @@
  */
 
 import type { DesignId } from '../../../core/main-types';
+import { NODE_SCALE_MAX, NODE_SCALE_MIN } from '../../../config/node-settings';
 import { AVAILABLE_DESIGNS } from '../../../styles/designs/design-registry';
 import { getTheme } from '../../../styles/themes';
 import {
@@ -28,9 +29,6 @@ const DEFAULT_NODE_FONT_SIZE = 14;
 const DEFAULT_NODE_MIN_WIDTH = 100;
 const DEFAULT_NODE_ASPECT_RATIO = 16 / 9;
 const DEFAULT_NODE_DESIGN_ID = 'default-node';
-
-const SCALE_MIN = 0.2;
-const SCALE_MAX = 3.0;
 
 export interface DesignTabDeps {
   design: { id: DesignId; params: Record<string, unknown> };
@@ -200,16 +198,16 @@ function createScaleRow(value: number): { container: HTMLDivElement; input: HTML
   const numberInput = document.createElement('input');
   numberInput.type = 'number';
   numberInput.className = 'node-editor-scale-input';
-  numberInput.min = String(SCALE_MIN);
-  numberInput.max = String(SCALE_MAX);
+  numberInput.min = String(NODE_SCALE_MIN);
+  numberInput.max = String(NODE_SCALE_MAX);
   numberInput.step = '0.05';
   numberInput.value = value.toFixed(2);
 
   const slider = document.createElement('input');
   slider.type = 'range';
   slider.className = 'node-editor-opacity-slider';
-  slider.min = String(SCALE_MIN);
-  slider.max = String(SCALE_MAX);
+  slider.min = String(NODE_SCALE_MIN);
+  slider.max = String(NODE_SCALE_MAX);
   slider.step = '0.05';
   slider.value = String(value);
 
@@ -218,7 +216,7 @@ function createScaleRow(value: number): { container: HTMLDivElement; input: HTML
   });
   numberInput.addEventListener('input', () => {
     const parsed = parseFloat(numberInput.value);
-    if (!isNaN(parsed) && parsed >= SCALE_MIN && parsed <= SCALE_MAX) {
+    if (!isNaN(parsed) && parsed >= NODE_SCALE_MIN && parsed <= NODE_SCALE_MAX) {
       slider.value = String(parsed);
     }
   });

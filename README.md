@@ -35,7 +35,7 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 ## Features
 
 - **Scenes & transitions** — each node gets a focused view; navigate between them with fluid animations
-- **Layout tools** — radial auto-layout for a whole scene, plus align, distribute, circle, grid, and spacing tools for any selection
+- **Layout tools** — radial auto-layout for a whole scene, plus align, distribute, circle, grid, diamond, rotate, and spacing tools for any selection
 - **AI assistant** — context-aware chat per node; suggests new concepts and connections (BYOK — Gemini, OpenRouter)
 - **Quiz mode** — hide node labels in the graph and self-grade recall while navigating scenes
 - **Design system** — 20+ node designs, multiple themes, background images with color grading

@@ -203,6 +203,14 @@ Updates scene-level design and scale.
 2. `StyleGenerator.updateNodeInStylesheet()` updates per-node rule
 3. **GraphSaver** persists updated scene
 
+**`SceneNodeOps.scaleNodes(nodeIds, factor)`**  
+Multiplies the scale of several nodes at once (`>` / `<`). Clamped for the group, not per node, so relative sizes survive; see [node-design-system.md](node-design-system.md).
+
+1. Clamps `factor` to the largest step keeping every node in range
+2. Updates `cyNode.data('scale')` for each node
+3. `StyleGenerator.addNodesToStylesheet()` rebuilds all affected rules in one pass
+4. **GraphSaver** persists updated scene
+
 **`Node.update(nodeId, { title?, tags?, properties? })`**  
 Updates node content (graph-level, affects all scenes).
 

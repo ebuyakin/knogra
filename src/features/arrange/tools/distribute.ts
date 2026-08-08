@@ -131,7 +131,7 @@ const MIN_NODES = 3;
 
 export const distributeHorizontalTool: ArrangeTool = {
   id: 'distribute-horizontal',
-  label: 'Distribute horizontally',
+  label: 'Row',
   shortcut: 'Shift+T',
   group: 'distribute',
   minNodes: MIN_NODES,
@@ -140,7 +140,7 @@ export const distributeHorizontalTool: ArrangeTool = {
 
 export const distributeVerticalTool: ArrangeTool = {
   id: 'distribute-vertical',
-  label: 'Distribute vertically',
+  label: 'Column',
   shortcut: 'Shift+U',
   group: 'distribute',
   minNodes: MIN_NODES,
@@ -149,7 +149,7 @@ export const distributeVerticalTool: ArrangeTool = {
 
 export const distributeDiagonalTool: ArrangeTool = {
   id: 'distribute-diagonal',
-  label: 'Distribute diagonally',
+  label: 'Diagonal',
   shortcut: 'Shift+Y',
   group: 'distribute',
   minNodes: MIN_NODES,

@@ -14,9 +14,19 @@
 import { alignColumnTool, alignDiagonalTool, alignRowTool } from './align';
 import { distributeDiagonalTool, distributeHorizontalTool, distributeVerticalTool } from './distribute';
 import { circleTool } from './circle';
-import { gridTool } from './grid';
+import { gridDiagonalTool, gridTool } from './grid';
+import { rotateClockwiseTool, rotateCounterClockwiseTool } from './rotate';
 import { spreadTool, tightenTool } from './spacing';
-import type { ArrangeTool, ArrangeToolId } from './types';
+import type { ArrangeGroup, ArrangeTool, ArrangeToolId } from './types';
+
+/** Caption shown above each group in generated menus. */
+export const ARRANGE_GROUP_LABELS: Record<ArrangeGroup, string> = {
+  align: 'Align',
+  distribute: 'Distribute',
+  shape: 'Shape',
+  rotate: 'Rotate',
+  spacing: 'Spacing',
+};
 
 /**
  * Declaration order is display order: `Object.values` preserves insertion order
@@ -32,6 +42,9 @@ const TOOLS: Record<ArrangeToolId, ArrangeTool> = {
   'distribute-diagonal': distributeDiagonalTool,
   'circle': circleTool,
   'grid': gridTool,
+  'grid-diagonal': gridDiagonalTool,
+  'rotate-cw': rotateClockwiseTool,
+  'rotate-ccw': rotateCounterClockwiseTool,
   'tighten': tightenTool,
   'spread': spreadTool,
 };
