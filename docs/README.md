@@ -32,7 +32,9 @@
 |---|---|---|
 | [architecture.md](architecture.md) | Current | Main authoritative architecture document; scene/fold terminology should defer to [scene-transitions.md](scene-transitions.md) where overlapping. |
 | [scene-transitions.md](scene-transitions.md) | Current | Canonical source for scene manipulation, transitions, fold semantics, and related invariants. |
-| [workspace-architecture.md](workspace-architecture.md) | Current | Workspace export/import model. |
+| [workspace-architecture.md](workspace-architecture.md) | Current | Canonical for saving, opening, and creating workspaces: file format (workspace JSON, plus the legacy `.knogra` ZIP which is read forever), transfer, storage keys, and startup. The Markdown document is out of scope. |
+| [markdown-architecture.md](markdown-architecture.md) | Draft | Agreed specification, not implemented. Canonical for the Knogra Markdown document and its three operations — Build (document → new graph), Update (document → open graph, content only), and Export — with the id-based identity model. |
+| [export-import-redesign-plan.md](export-import-redesign-plan.md) | Temporary | Working plan for the two interchange workstreams: sequencing, steps, risks, open issues. Delete when both ship. Not normative. |
 | [paths-architecture.md](paths-architecture.md) | Current | Paths feature model and implementation history. Part II covers navigation modes (history/path), the path manager, and the full-path generator. |
 | [chat-panel-architecture.md](chat-panel-architecture.md) | Current | Chat, notes, tutorial timeline, and chat storage model. |
 | [ai-assistant-vision.md](ai-assistant-vision.md) | Current | AI assistant behavior, architecture, graph-action flow, and preconfigured Scene/Node/Suggest/Connect command model. |

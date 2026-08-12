@@ -1,7 +1,7 @@
 import type { EdgeStyleSlotId } from '../../core/main-types';
 import { getDefaultEdgeStyleSlotId, getEdgeStyleSlotIds } from '../../config/edge-type-settings';
 import type { ParsedMermaidGraph } from './flowchart';
-import { getMermaidSceneSlice, MERMAID_SCENE_LIMITS } from './scene-slice';
+import { getMermaidSceneSlice, MERMAID_SCENE_DENSITY_THRESHOLDS } from './scene-slice';
 import { buildEdgeSceneFlags, normalizeMermaidEdgeLabel, sanitizeMermaidEdgeLabel, type MermaidEdgeLabelMapping } from './edge-mapping';
 import { getMermaidImportLayoutSettings, type MermaidImportLayoutSettings } from './import-settings-store';
 import { showMermaidLayoutOptionsDialog, layoutHasOptions } from './import-options-dialog';
@@ -407,19 +407,19 @@ export function showMermaidImportSelectionDialog(
       try {
         const slice = getMermaidSceneSlice(parsed, getSelectedAnchorId(), getDepth(), allLevelsInput.checked, buildEdgeSceneFlags(parsed.edges, getEdgeLabelMappings()));
         const countText = `${slice.nodeCount} node${slice.nodeCount === 1 ? '' : 's'}, ${slice.edgeCount} edge${slice.edgeCount === 1 ? '' : 's'}`;
-        if (slice.overLimit) {
-          sceneSizeStatus.textContent = `Starting scene: ${countText}. Limit is ${MERMAID_SCENE_LIMITS.maxNodes} nodes / ${MERMAID_SCENE_LIMITS.maxEdges} edges. Reduce depth or choose another origin.`;
-          sceneSizeStatus.style.borderColor = '#f85149';
-          sceneSizeStatus.style.color = '#ffb4ab';
-          importButton.disabled = true;
-          importButton.style.opacity = '0.5';
-          importButton.style.cursor = 'not-allowed';
-          return;
+
+        // Density is advisory: a deliberately dense whole-graph scene is a valid
+        // choice, so the warning never disables Import.
+        if (slice.isDense) {
+          sceneSizeStatus.textContent = `Starting scene: ${countText}. Above ${MERMAID_SCENE_DENSITY_THRESHOLDS.nodes} nodes / ${MERMAID_SCENE_DENSITY_THRESHOLDS.edges} edges a scene may look crowded and render slowly. You can still import it.`;
+          sceneSizeStatus.style.borderColor = '#d29922';
+          sceneSizeStatus.style.color = '#e3b341';
+        } else {
+          sceneSizeStatus.textContent = `Starting scene: ${countText}.`;
+          sceneSizeStatus.style.borderColor = '#30363d';
+          sceneSizeStatus.style.color = '#8b949e';
         }
 
-        sceneSizeStatus.textContent = `Starting scene: ${countText}.`;
-        sceneSizeStatus.style.borderColor = '#30363d';
-        sceneSizeStatus.style.color = '#8b949e';
         importButton.disabled = false;
         importButton.style.opacity = '1';
         importButton.style.cursor = 'pointer';

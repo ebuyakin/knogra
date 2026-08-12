@@ -46,11 +46,18 @@ export const SETTINGS_KEY = 'knogra.settings'; // User preferences (consolidated
 export const SHELF_KEY = 'knogra.shelf';       // AI suggestions
 
 // Mermaid-import authoring preferences. Deliberately isolated from SETTINGS_KEY
-// so publisher-only layout knobs never travel inside an exported .knogra
-// workspace (settings.json) nor get overwritten on import.
+// so publisher-only layout knobs never travel inside a saved workspace file
+// (the `settings` member) nor get overwritten when one is opened.
 export const MERMAID_IMPORT_KEY = 'knogra.mermaid.import';
 
 // sessionStorage keys — deliberately not persisted across browser sessions.
 // Active Node Editor tab: sticky within a work session (a design pass keeps
 // landing on Design), reset to the default in a fresh tab.
 export const NODE_EDITOR_TAB_KEY = 'knogra.nodeEditor.tab';
+
+// Workspace file envelope — see docs/workspace-architecture.md §5.2.
+// `WORKSPACE_FORMAT` is what identifies a workspace file: the reader matches on
+// it rather than on the extension, so a renamed file still opens and a foreign
+// JSON is rejected with a clear message instead of a parse crash.
+export const WORKSPACE_FORMAT = 'knogra-workspace';
+export const WORKSPACE_VERSION = '2.0';

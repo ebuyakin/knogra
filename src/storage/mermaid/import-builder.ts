@@ -160,7 +160,6 @@ export function createImportedGraph(parsed: ParsedMermaidGraph, selection: Merma
     const slice = useFan
       ? getMermaidFanSceneSlice(parsed, centralMermaidId, fanParentByMermaidId!, depth, edgeSceneFlags, secondLevelThreshold)
       : getMermaidSceneSlice(parsed, centralMermaidId, depth, allLevels, edgeSceneFlags, secondLevelThreshold);
-    if (slice.overLimit) return null;
 
     const sceneNodes = parsed.nodes.filter(node => slice.nodeIds.has(node.mermaidId));
     const sceneEdges = edgeRecords.filter((_record, index) => slice.edgeIndexes.has(index));

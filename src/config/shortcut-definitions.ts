@@ -82,8 +82,8 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     title: 'Workspace',
     column: 3,
     shortcuts: [
-      { key: 'Ctrl+S', description: 'Export workspace' },
-      { key: 'Ctrl+O', description: 'Import workspace' },
+      { key: 'Ctrl+S', description: 'Save workspace to file' },
+      { key: 'Ctrl+O', description: 'Open workspace from file' },
       { key: 'Ctrl+N', description: 'New workspace' },
     ]
   },

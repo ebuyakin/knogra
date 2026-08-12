@@ -88,7 +88,7 @@ function confirmMermaidImport(hasExistingData: boolean): Promise<MermaidImportOp
       ${hasExistingData ? `
       <label style="display:flex; align-items:center; gap:8px; margin-bottom:20px; cursor:pointer;">
         <input type="checkbox" id="mi-export" style="accent-color:#58a6ff;">
-        Export current workspace to a .knogra file first (recommended)
+        Save current workspace to a file first (recommended)
       </label>` : ''}
       <div style="display:flex; justify-content:flex-end; gap:8px;">
         <button id="mi-cancel" style="padding:6px 16px; border-radius:6px; border:1px solid #30363d;

@@ -35,7 +35,7 @@ interface AppState {
   pathIndex?: number;
   /**
    * CSS-pixel size of the Cytoscape container at export time — the screen the
-   * shared `.knogra` file was authored on. Used on import to offer a
+   * shared workspace file was authored on. Used on open to offer a
    * proportional "scale to fit" of every scene's zoom when the importing screen
    * differs. Captured in `exportWorkspace`; consumed in `importWorkspace`.
    */

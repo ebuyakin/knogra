@@ -54,15 +54,15 @@ export function buildCanvasMenu(deps: MenuDependencies, position: MenuPosition):
       label: 'Workspace',
       children: [
         {
-          label: 'New (⌘N)',
+          label: 'New… (⌘N)',
           action: () => { newWorkspace(); }
         },
         {
-          label: 'Import (⌘O)',
+          label: 'Open from file… (⌘O)',
           action: () => showImportDialog()
         },
         {
-          label: 'Export (⌘S)',
+          label: 'Save to file… (⌘S)',
           action: () => { exportWorkspace(); }
         },
         {

@@ -1,12 +1,14 @@
 /**
  * Workspace Manager
- * Handles export/import of complete workspace (.knogra files)
- * 
+ * Handles saving and opening a complete workspace as a single JSON file.
+ *
  * Works directly with storage layers (localStorage, IndexedDB)
  * Does not depend on store classes (graphStore, chatStore)
+ *
+ * See docs/workspace-architecture.md — the file format lives in
+ * `workspace/envelope.ts`, legacy `.knogra` reading in `workspace/legacy-zip.ts`.
  */
 
-import JSZip from 'jszip';
 import { ping } from '../utils/telemetry';
 
 import {
@@ -29,7 +31,6 @@ import {
   importThemes,
   readLocalApiKeys,
   stripConversationImages,
-  type GraphData,
 } from './workspace/transfer';
 import {
   hasMeaningfulWorkspaceData,
@@ -40,26 +41,18 @@ import {
   showValidationErrorDialog,
 } from './workspace/dialogs';
 import { validateGraphData } from './workspace/validate';
+import {
+  buildEnvelope,
+  detectWorkspaceFormat,
+  parseEnvelope,
+  serializeEnvelope,
+  workspaceFileName,
+  WorkspaceFormatError,
+  type WorkspaceMembers,
+} from './workspace/envelope';
+import { readLegacyZip } from './workspace/legacy-zip';
 import { AppStateManager } from './app-state';
 import { seedInitialGraph } from './seed-workspace';
-import { APP_VERSION } from '../config/storage-config';
-
-// ============================================================================
-// TYPES
-// ============================================================================
-
-interface WorkspaceManifest {
-  version: string;
-  appVersion: string;
-  createdAt: string;
-  name: string;
-}
-
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-const WORKSPACE_VERSION = '1.0';
 
 // ============================================================================
 // HELPERS
@@ -122,42 +115,26 @@ function scaleImportedScenesZoom(scenes: unknown[], factor: number): void {
 // ============================================================================
 
 /**
- * Export current workspace to .knogra file
- * Collects all data and triggers browser download
+ * Save the current workspace to a JSON file and trigger a browser download.
+ *
+ * Two abort points, in this order: the integrity warning, then the in-note
+ * image chooser. Both run before anything is produced, so cancelling leaves no
+ * partial file.
  */
 export async function exportWorkspace(): Promise<void> {
-  const zip = new JSZip();
-  
-  // 1. Create manifest
-  const manifest: WorkspaceManifest = {
-    version: WORKSPACE_VERSION,
-    appVersion: APP_VERSION,
-    createdAt: new Date().toISOString(),
-    name: await generateWorkspaceName()
-  };
-  zip.file('manifest.json', JSON.stringify(manifest, null, 2));
-  
-  // 2. Export graph data from IndexedDB
   const graph = await exportGraphData();
 
   // Warn if the current workspace has integrity issues.
-  // User can cancel export or proceed with a known-corrupted backup.
+  // User can cancel or proceed with a known-corrupted backup.
   const validation = validateGraphData(graph);
   if (!validation.valid) {
     const proceed = await showValidationErrorDialog(validation.errors, 'export');
     if (!proceed) return;
   }
 
-  zip.file('graph.json', JSON.stringify(graph, null, 2));
-  
-  // 3. Export settings from localStorage
-  const settings = exportSettings();
-  zip.file('settings.json', JSON.stringify(settings, null, 2));
-  
-  // 4. Export chat conversations from IndexedDB.
   // When the workspace holds in-note images, let the user choose which
   // categories' bytes to embed (found images default to links-only for a
-  // lighter file). Cancelling the dialog aborts the export.
+  // lighter file). Cancelling the dialog aborts the save.
   let conversations = await exportConversations();
   const imageCounts = countInNoteImages(conversations);
   if (imageCounts.uploaded > 0 || imageCounts.retrieved > 0) {
@@ -165,40 +142,31 @@ export async function exportWorkspace(): Promise<void> {
     if (!inclusion) return;
     conversations = stripConversationImages(conversations, inclusion);
   }
-  zip.file('chat-history.json', JSON.stringify(conversations, null, 2));
-  
-  // 5. Export background images from IndexedDB
-  const images = await exportBackgroundImages();
-  zip.file('background-images.json', JSON.stringify(images, null, 2));
-  
-  // 6. Export shelf from localStorage
-  const shelf = exportShelf();
-  zip.file('shelf.json', JSON.stringify(shelf, null, 2));
-  
-  // 7. Export saved paths from IndexedDB
-  const paths = await exportPaths();
-  zip.file('paths.json', JSON.stringify(paths, null, 2));
-  
-  // 8. Export app state from localStorage.
-  // Record the current container size first so the file carries the authoring
-  // screen dimensions (used by import to offer a proportional scale-to-fit).
+
+  // Record the current container size BEFORE reading app state, so the file
+  // carries the authoring screen dimensions (used on open to offer a
+  // proportional scale-to-fit).
   const container = getCyContainerSize();
   if (container) AppStateManager.saveAuthoringContainerSize(container.w, container.h);
-  // Path-mode session is deliberately excluded: it describes the exporting
-  // session, not the workspace. Shipping it would drop whoever imports the file
-  // into someone else's tour at someone else's cursor position — and because
-  // paths import with their original ids, the reference often resolves, so the
-  // validation in Path.restoreSession() would not catch it.
-  const appState = AppStateManager.getExportableAppState();
-  zip.file('app-state.json', JSON.stringify(appState, null, 2));
-  
-  // 9. Export custom themes from IndexedDB
-  const themes = await exportThemes();
-  zip.file('themes.json', JSON.stringify(themes, null, 2));
-  
-  // Generate ZIP and trigger download
-  const blob = await zip.generateAsync({ type: 'blob' });
-  downloadBlob(blob, `${manifest.name}.knogra`);
+
+  const envelope = buildEnvelope(await generateWorkspaceName(), {
+    graph,
+    settings: exportSettings(),
+    chat: conversations,
+    backgroundImages: await exportBackgroundImages(),
+    shelf: exportShelf(),
+    paths: await exportPaths(),
+    // Path-mode session is deliberately excluded: it describes the saving
+    // session, not the workspace. Shipping it would drop whoever opens the file
+    // into someone else's tour at someone else's cursor position — and because
+    // paths are written back with their original ids, the reference often
+    // resolves, so the validation in Path.restoreSession() would not catch it.
+    appState: AppStateManager.getExportableAppState(),
+    themes: await exportThemes(),
+  });
+
+  const blob = new Blob([serializeEnvelope(envelope)], { type: 'application/json' });
+  downloadBlob(blob, workspaceFileName(envelope.manifest.name));
   ping('workspace_exported');
 }
 
@@ -228,11 +196,11 @@ function downloadBlob(blob: Blob, filename: string): void {
  * init steps (e.g. chat panel) write side-effect rows that would make a
  * naive `hasMeaningfulWorkspaceData()` call return a false positive.
  *
- * @param url        The .knogra file URL to fetch.
- * @param showDialog If true, show the standard import confirmation dialog
- *                   (with "export first" option). If false, import silently.
+ * @param url        The workspace file URL to fetch.
+ * @param showDialog If true, show the standard confirmation dialog
+ *                   (with "save first" option). If false, open silently.
  *
- * @returns `true` if the import succeeded and `window.location.reload()` has
+ * @returns `true` if the workspace opened and `window.location.reload()` has
  *          been called (caller should halt further init to avoid mutating state
  *          before the browser navigates). `false` on user cancel or any failure.
  */
@@ -247,8 +215,10 @@ export async function importFromUrl(url: string, options: { showDialog: boolean 
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
-    const filename = url.split('/').pop() ?? 'graph.knogra';
-    const file = new File([blob], filename, { type: 'application/zip' });
+    // The name and MIME are cosmetic — the reader identifies the file by
+    // content (§5.3), so a legacy `.knogra` and a workspace JSON both work.
+    const filename = url.split('/').pop() ?? 'workspace.json';
+    const file = new File([blob], filename);
     return await importWorkspace(file);
   } catch (e) {
     console.error('[importFromUrl] Failed to fetch graph:', e);
@@ -272,10 +242,11 @@ export async function showImportDialog(): Promise<void> {
     await exportWorkspace();
   }
 
-  // Now open file picker — user has already confirmed intent.
+  // Now open file picker — user has already confirmed intent. Legacy `.knogra`
+  // stays in the accept list: those files open forever (§5.1).
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.knogra';
+  input.accept = '.json,.knogra';
   input.onchange = async () => {
     const file = input.files?.[0];
     if (!file) return;
@@ -285,65 +256,40 @@ export async function showImportDialog(): Promise<void> {
 }
 
 /**
- * Import workspace from .knogra file
- * Replaces all current data and reloads
+ * Bytes read to identify a file. 64 is ample: the marker is either `PK` at
+ * offset 0, or the first `{` past an optional BOM and any leading whitespace.
+ */
+const HEAD_SNIFF_BYTES = 64;
+
+/**
+ * Read a workspace file into its members, identifying it by content rather than
+ * by extension (§5.3) — so a renamed file still opens, and a Markdown document
+ * dropped on the opener produces a clear message rather than a parse crash.
+ */
+async function readWorkspaceFile(file: File): Promise<WorkspaceMembers> {
+  const head = new Uint8Array(await file.slice(0, HEAD_SNIFF_BYTES).arrayBuffer());
+
+  switch (detectWorkspaceFormat(head)) {
+    case 'legacy-zip':
+      return readLegacyZip(file);
+    case 'workspace-json':
+      return parseEnvelope(await file.text());
+    default:
+      throw new WorkspaceFormatError('This is not a Knogra workspace file.');
+  }
+}
+
+/**
+ * Open a workspace file, replacing all current data, then reload.
  */
 export async function importWorkspace(file: File): Promise<boolean> {
   try {
-    const zip = await JSZip.loadAsync(file);
-    
-    // 1. Read and validate manifest
-    const manifestFile = zip.file('manifest.json');
-    if (!manifestFile) {
-      alert('Invalid workspace file: missing manifest');
-      return false;
-    }
-    // Validate manifest exists (version checking can be added later)
-    await manifestFile.async('string');
-    
-    // 2. Read all data files
-    const graphFile = zip.file('graph.json');
-    const settingsFile = zip.file('settings.json');
-    const chatFile = zip.file('chat-history.json');
-    const imagesFile = zip.file('background-images.json');
-    const shelfFile = zip.file('shelf.json');
-    const pathsFile = zip.file('paths.json');
-    const appStateFile = zip.file('app-state.json');
-    const themesFile = zip.file('themes.json');
-    
-    const graph: GraphData = graphFile 
-      ? JSON.parse(await graphFile.async('string'))
-      : { nodes: [], edges: [], scenes: [] };
-    
-    const settings: Record<string, unknown> = settingsFile
-      ? JSON.parse(await settingsFile.async('string'))
-      : {};
-    
-    let conversations: unknown[] = chatFile
-      ? JSON.parse(await chatFile.async('string'))
-      : [];
-    
-    const images: unknown[] = imagesFile
-      ? JSON.parse(await imagesFile.async('string'))
-      : [];
-    
-    const shelf: Record<string, unknown> = shelfFile
-      ? JSON.parse(await shelfFile.async('string'))
-      : {};
-    
-    const paths: unknown[] = pathsFile
-      ? JSON.parse(await pathsFile.async('string'))
-      : [];
-    
-    const appState: Record<string, unknown> = appStateFile
-      ? JSON.parse(await appStateFile.async('string'))
-      : {};
-    
-    const themes: unknown[] = themesFile
-      ? JSON.parse(await themesFile.async('string'))
-      : [];
-    
-    // 3. Validate graph integrity. If issues found, warn the user and let them
+    // 1. Read and identify the file — either format yields the same members.
+    const members = await readWorkspaceFile(file);
+    const { graph, settings, backgroundImages, shelf, paths, appState, themes } = members;
+    let conversations = members.chat;
+
+    // 2. Validate graph integrity. If issues found, warn the user and let them
     //    decide — validation is informational, not a hard block.
     const validation = validateGraphData(graph);
     if (!validation.valid) {
@@ -351,7 +297,7 @@ export async function importWorkspace(file: File): Promise<boolean> {
       if (!proceed) return false;
     }
 
-    // 3b. Scale-to-fit: if the graph was authored on a meaningfully different
+    // 2b. Scale-to-fit: if the graph was authored on a meaningfully different
     //     screen than this one, offer to proportionally rescale every scene's
     //     zoom so the first impression matches the author's. Applied to the
     //     in-memory scenes BEFORE they are written, so the post-reload render is
@@ -364,9 +310,9 @@ export async function importWorkspace(file: File): Promise<boolean> {
       if (accepted) scaleImportedScenesZoom(graph.scenes, scaleFactor);
     }
 
-    // 3c. In-note images: when the file carries them, let the user choose which
+    // 2c. In-note images: when the file carries them, let the user choose which
     //     categories to keep. Found images kept as links heal to offline later
-    //     per the storage setting. Cancelling aborts the import.
+    //     per the storage setting. Cancelling aborts.
     const importImageCounts = countInNoteImages(conversations);
     if (importImageCounts.uploaded > 0 || importImageCounts.retrieved > 0) {
       const inclusion = await showImageTransferDialog('import', importImageCounts);
@@ -374,7 +320,7 @@ export async function importWorkspace(file: File): Promise<boolean> {
       conversations = stripConversationImages(conversations, inclusion);
     }
 
-    // 4. Capture local API keys BEFORE clearing — clearAllData() wipes localStorage
+    // 3. Capture local API keys BEFORE clearing — clearAllData() wipes localStorage
     //    so they must be read first and restored after settings import.
     const localApiKeys = readLocalApiKeys();
 
@@ -382,7 +328,7 @@ export async function importWorkspace(file: File): Promise<boolean> {
     await clearAllData();
     
     // 5. Import graph data to IndexedDB
-    await importGraphData(graph, images);
+    await importGraphData(graph, backgroundImages);
     
     // 6. Import settings to localStorage (restores preserved API keys)
     importSettings(settings, localApiKeys);
@@ -410,8 +356,10 @@ export async function importWorkspace(file: File): Promise<boolean> {
     
     return true;
   } catch (error) {
-    console.error('Failed to import workspace:', error);
-    alert('Failed to import workspace. The file may be corrupted.');
+    console.error('Failed to open workspace:', error);
+    alert(error instanceof WorkspaceFormatError
+      ? error.message
+      : 'Could not open the workspace file. It may be corrupted, or not a Knogra workspace.');
     return false;
   }
 }

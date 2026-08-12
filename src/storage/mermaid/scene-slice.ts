@@ -1,9 +1,14 @@
 import type { ParsedMermaidGraph } from './flowchart';
 import type { EdgeSceneFlags } from './edge-mapping';
 
-export const MERMAID_SCENE_LIMITS = {
-  maxNodes: 100,
-  maxEdges: 500,
+/**
+ * Advisory density thresholds. A scene above these still imports — the counts
+ * only drive a warning in the import dialog, because a deliberately dense
+ * whole-graph scene is a legitimate authoring choice.
+ */
+export const MERMAID_SCENE_DENSITY_THRESHOLDS = {
+  nodes: 100,
+  edges: 500,
 } as const;
 
 export interface MermaidSceneSlice {
@@ -11,9 +16,8 @@ export interface MermaidSceneSlice {
   edgeIndexes: Set<number>;
   nodeCount: number;
   edgeCount: number;
-  overNodeLimit: boolean;
-  overEdgeLimit: boolean;
-  overLimit: boolean;
+  /** Advisory only: the scene is above a density threshold. Never blocks import. */
+  isDense: boolean;
 }
 
 export function getMermaidSceneSlice(
@@ -72,20 +76,18 @@ export function getMermaidSceneSlice(
 
   const edgeIndexes = collectSceneEdgeIndexes(parsed, nodeIds, parentByMermaidId, edgeFlags);
 
-  const nodeCount = nodeIds.size;
-  const edgeCount = edgeIndexes.size;
-  const overNodeLimit = nodeCount > MERMAID_SCENE_LIMITS.maxNodes;
-  const overEdgeLimit = edgeCount > MERMAID_SCENE_LIMITS.maxEdges;
-
   return {
     nodeIds,
     edgeIndexes,
-    nodeCount,
-    edgeCount,
-    overNodeLimit,
-    overEdgeLimit,
-    overLimit: overNodeLimit || overEdgeLimit,
+    nodeCount: nodeIds.size,
+    edgeCount: edgeIndexes.size,
+    isDense: isDenseScene(nodeIds.size, edgeIndexes.size),
   };
+}
+
+function isDenseScene(nodeCount: number, edgeCount: number): boolean {
+  return nodeCount > MERMAID_SCENE_DENSITY_THRESHOLDS.nodes
+    || edgeCount > MERMAID_SCENE_DENSITY_THRESHOLDS.edges;
 }
 
 /**
@@ -251,18 +253,11 @@ export function getMermaidFanSceneSlice(
 
   const edgeIndexes = collectSceneEdgeIndexes(parsed, nodeIds, parentByMermaidId, edgeFlags);
 
-  const nodeCount = nodeIds.size;
-  const edgeCount = edgeIndexes.size;
-  const overNodeLimit = nodeCount > MERMAID_SCENE_LIMITS.maxNodes;
-  const overEdgeLimit = edgeCount > MERMAID_SCENE_LIMITS.maxEdges;
-
   return {
     nodeIds,
     edgeIndexes,
-    nodeCount,
-    edgeCount,
-    overNodeLimit,
-    overEdgeLimit,
-    overLimit: overNodeLimit || overEdgeLimit,
+    nodeCount: nodeIds.size,
+    edgeCount: edgeIndexes.size,
+    isDense: isDenseScene(nodeIds.size, edgeIndexes.size),
   };
 }

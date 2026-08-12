@@ -61,7 +61,14 @@ These are peer features with distinct responsibilities.
 **Path** — A sequence of scenes produced by user navigation. It may exist in memory during a session or be persisted for later replay.
 
 ### Workspace
-**Workspace** — Complete application state bundle exported as a `.knogra` file. Includes graph data, settings, chat history, saved paths, custom themes, and app state.
+**Workspace** — Complete application state held in IndexedDB and localStorage: graph data, settings, chat history, saved paths, custom themes, shelf, and app state. A workspace is not a file; it is the live contents of browser storage.
+
+### Interchange Artefacts
+Two files carry data in and out of a workspace. They are unrelated formats with unrelated jobs, and no operation reads both.
+
+**Workspace file** — A lossless snapshot of a workspace, saved and opened as a whole. Nothing is matched, merged, or interpreted. Canonical doc: [Workspace architecture](workspace-architecture.md).
+
+**Knogra Markdown document** — A lossy, human- and AI-readable projection of a graph: an optional Mermaid diagram plus prose sections. Used to author a graph and to refresh its content. Carries no positions, scenes, designs or themes, and is never a backup. Canonical doc: [Markdown architecture](markdown-architecture.md).
 
 ### Shelf
 **Shelf** — Collection of AI-suggested nodes waiting to be placed on the graph. Managed by NodeShelf, displayed by SuggestionPanel.
@@ -74,6 +81,8 @@ To distinguish between graph operations and scene operations:
 | **Graph** (database) | Add, Delete, Create, Update | `addNode()`, `deleteEdge()` |
 | **Scene** (view) | Include, Exclude, Expand, Collapse, Show, Hide | `includeNode()`, `excludeEdge()` |
 | **Fold** (visibility) | Fold, Unfold | `foldNode()`, `unfoldNode()` |
+| **Interchange** (files) | Save, Open — workspace file | `exportWorkspace()`, `importWorkspace()` |
+| **Interchange** (files) | Build, Update, Export — Markdown document | *Build* creates a graph from a document; *Update* applies a document's content to the open graph |
 
 **Note:** Operations can be bundled — e.g., `addChild()` creates a node in the database AND includes it in the current scene.
 

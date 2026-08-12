@@ -10,9 +10,14 @@ import type { DesignId } from '../core/main-types';
  * editor's slider and the `<` / `>` shortcut so both agree on the limits.
  * Fixed bounds rather than settings: they delimit what the design system can
  * render legibly, not a matter of taste.
+ *
+ * Scale stretches the design's rendered SVG (see `StyleGenerator`), it does not
+ * re-render it, so the upper end trades sharpness for size: text softens as the
+ * bitmap is upsampled, and the theme/selection `border-width` stays constant in
+ * pixels rather than growing with the node.
  */
 export const NODE_SCALE_MIN = 0.2;
-export const NODE_SCALE_MAX = 3.0;
+export const NODE_SCALE_MAX = 5.0;
 
 /**
  * Node settings defaults

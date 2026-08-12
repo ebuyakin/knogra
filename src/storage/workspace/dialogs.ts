@@ -103,21 +103,21 @@ export function showImportWorkspaceDialog(hasExistingData: boolean): Promise<Imp
     `;
 
     dialog.innerHTML = `
-      <h3 style="margin:0 0 12px; font-size:16px; font-weight:600;">Import Workspace</h3>
+      <h3 style="margin:0 0 12px; font-size:16px; font-weight:600;">Open workspace from file</h3>
       <p style="margin:0 0 16px; color:#8b949e; line-height:1.5;">
-        This will replace your current workspace with the imported one.
-        ${hasExistingData ? 'Your current data will be lost unless you export it first.' : 'Continue?'}
+        This replaces everything currently in this browser — graph, scenes, chat,
+        images, paths and themes.
       </p>
       ${hasExistingData ? `
       <label style="display:flex; align-items:center; gap:8px; margin-bottom:20px; cursor:pointer;">
         <input type="checkbox" id="iw-export" checked style="accent-color:#58a6ff;">
-        Export workspace to a file first (recommended)
+        Save current workspace to a file first (recommended)
       </label>` : ''}
       <div style="display:flex; justify-content:flex-end; gap:8px;">
         <button id="iw-cancel" style="padding:6px 16px; border-radius:6px; border:1px solid #30363d;
           background:none; color:#c9d1d9; cursor:pointer; font-size:13px;">Cancel</button>
         <button id="iw-ok" style="padding:6px 16px; border-radius:6px; border:none;
-          background:#58a6ff; color:#fff; cursor:pointer; font-size:13px; font-weight:600;">Import</button>
+          background:#58a6ff; color:#fff; cursor:pointer; font-size:13px; font-weight:600;">Open</button>
       </div>
     `;
 
@@ -225,10 +225,10 @@ export function showValidationErrorDialog(errors: string[], mode: 'import' | 'ex
   const isExport = mode === 'export';
   const title = 'Integrity errors detected';
   const subtitle = isExport
-    ? `${errors.length} issue${errors.length !== 1 ? 's' : ''} found in the current workspace. You can still export it as a backup, but fix these before sharing.`
-    : `${errors.length} issue${errors.length !== 1 ? 's' : ''} found in the workspace file. You can still import it, but some scenes may not render correctly.`;
+    ? `${errors.length} issue${errors.length !== 1 ? 's' : ''} found in the current workspace. You can still save it, but fix these before sharing.`
+    : `${errors.length} issue${errors.length !== 1 ? 's' : ''} found in the workspace file. You can still open it, but some scenes may not render correctly.`;
 
-  const proceedLabel = isExport ? 'Export anyway' : 'Import anyway';
+  const proceedLabel = isExport ? 'Save anyway' : 'Open anyway';
 
   return new Promise(resolve => {
     const cyContainer = document.getElementById('cy');
@@ -366,18 +366,18 @@ export function showImageTransferDialog(
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;
 
-    const title = isExport ? 'Export Images' : 'Import Images';
+    const title = 'Images in notes';
     const intro = isExport
       ? 'This workspace has images in notes. Choose what to include in the file.'
       : 'This file has images in notes. Choose what to bring in.';
-    const confirmLabel = isExport ? 'Export' : 'Import';
+    const confirmLabel = isExport ? 'Save' : 'Open';
 
     const uploadedDesc = isExport
-      ? 'If checked, the images you added from disk are exported. If unchecked, they are omitted — they have no link, so they cannot be restored later.'
-      : 'If checked, the images added from disk are imported. If unchecked, they are dropped — they have no link, so they cannot be restored later.';
+      ? 'If checked, the images you added from disk are written to the file. If unchecked, they are omitted — they have no link, so they cannot be restored later.'
+      : 'If checked, the images added from disk are brought in. If unchecked, they are dropped — they have no link, so they cannot be restored later.';
     const retrievedDesc = isExport
-      ? 'If unchecked, only the links are exported and re-downloaded later (smaller file). If checked, the stored image files are embedded — usable offline from the start, but a larger file.'
-      : 'If unchecked, only the links are imported and re-downloaded later per your offline setting. If checked, the stored image files are imported — usable offline from the start, but a heavier workspace.';
+      ? 'If unchecked, only the links are written and re-downloaded later (smaller file). If checked, the stored image files are embedded — usable offline from the start, but a larger file.'
+      : 'If unchecked, only the links are brought in and re-downloaded later per your offline setting. If checked, the stored image files are brought in — usable offline from the start, but a heavier workspace.';
 
     const row = (id: string, label: string, count: number, desc: string, checked: boolean): string => `
       <label style="display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; cursor:pointer;">
@@ -466,7 +466,7 @@ export function showNewWorkspaceDialog(): Promise<NewWorkspaceOptions | null> {
       </p>
       <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; cursor:pointer;">
         <input type="checkbox" id="nw-export" checked style="accent-color:#58a6ff;">
-        Export workspace to a file first (recommended)
+        Save current workspace to a file first (recommended)
       </label>
       <label style="display:flex; align-items:center; gap:8px; margin-bottom:20px; cursor:pointer;">
         <input type="checkbox" id="nw-settings" checked style="accent-color:#58a6ff;">
