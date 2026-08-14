@@ -391,7 +391,7 @@ Themes can define default visual settings for new background images, ensuring co
 ColorTheme.imageDefaults?: ImageVisualAppearance
 ```
 
-When a user adds an image to a scene, these defaults are applied automatically. Defined in `src/styles/themes.ts`.
+When a user adds an image to a scene, these defaults are applied automatically. Defined in `src/styles/themes/default-theme.ts`, and overridden per-theme by the light palettes.
 
 ---
 

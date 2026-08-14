@@ -59,6 +59,12 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   source?: MessageSource;
+  /**
+   * The id this message was known by in the Markdown document it came from.
+   * Written when a document creates the note, so re-running that document
+   * replaces the note instead of adding a second copy.
+   */
+  externalId?: string;
   /** Image attachments (note uploads or retrieved images) */
   attachments?: ChatImageAttachment[];
 }

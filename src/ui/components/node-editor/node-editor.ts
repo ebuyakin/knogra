@@ -312,6 +312,9 @@ export class NodeEditor {
     advanced: AdvancedTabValues,
     content: ContentTabValues
   ): Record<string, unknown> {
+    // `advanced.properties` is the raw JSON the user typed plus the system
+    // properties the Advanced tab hid and carried through; `equation` and
+    // `comment` come back from the tab that owns them.
     const properties = { ...advanced.properties };
     if (content.equation.trim()) properties.equation = content.equation.trim();
     if (content.comment.trim()) properties.comment = content.comment.trim();

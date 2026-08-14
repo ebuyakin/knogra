@@ -12,6 +12,8 @@
 import { ping } from '../utils/telemetry';
 
 import {
+  adoptImportedFileNaming,
+  claimExportBaseName,
   clearAllData,
   countInNoteImages,
   exportBackgroundImages,
@@ -30,6 +32,7 @@ import {
   importShelf,
   importThemes,
   readLocalApiKeys,
+  resetFileNaming,
   stripConversationImages,
 } from './workspace/transfer';
 import {
@@ -46,7 +49,6 @@ import {
   detectWorkspaceFormat,
   parseEnvelope,
   serializeEnvelope,
-  workspaceFileName,
   WorkspaceFormatError,
   type WorkspaceMembers,
 } from './workspace/envelope';
@@ -149,6 +151,14 @@ export async function exportWorkspace(): Promise<void> {
   const container = getCyContainerSize();
   if (container) AppStateManager.saveAuthoringContainerSize(container.w, container.h);
 
+  // Claim the file name BEFORE snapshotting settings, and after every abort
+  // point. Both halves matter: claiming advances the version counter, which
+  // lives in settings and so has to be current when the snapshot is taken —
+  // otherwise the file would tell a future import to reuse its own number.
+  // Aborting earlier leaves the counter untouched, so a cancelled save consumes
+  // nothing.
+  const baseName = await claimExportBaseName();
+
   const envelope = buildEnvelope(await generateWorkspaceName(), {
     graph,
     settings: exportSettings(),
@@ -166,7 +176,7 @@ export async function exportWorkspace(): Promise<void> {
   });
 
   const blob = new Blob([serializeEnvelope(envelope)], { type: 'application/json' });
-  downloadBlob(blob, workspaceFileName(envelope.manifest.name));
+  downloadBlob(blob, `${baseName}.json`);
   ping('workspace_exported');
 }
 
@@ -332,6 +342,10 @@ export async function importWorkspace(file: File): Promise<boolean> {
     
     // 6. Import settings to localStorage (restores preserved API keys)
     importSettings(settings, localApiKeys);
+
+    // 6b. Adopt the file identity the workspace carries, so saving it again
+    //     continues its version sequence instead of starting a new one.
+    adoptImportedFileNaming(settings);
     
     // 7. Import conversations to IndexedDB
     await importConversations(conversations);
@@ -384,6 +398,12 @@ export async function newWorkspace(): Promise<void> {
 
   // Clear all data, optionally preserving settings and custom themes
   await clearAllData(keepSettings);
+
+  // File naming is workspace identity, not a preference, so it goes even when
+  // settings are kept — otherwise the new graph would be saved under the old
+  // graph's name and continue its numbering. Skipped when settings were wiped,
+  // which already restored the defaults.
+  if (keepSettings) resetFileNaming();
 
   // Reset app state for the new workspace. clearAppState() drops any leftover
   // appMode (e.g. 'view' from a previous workspace) so the next load defaults

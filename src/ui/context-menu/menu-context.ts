@@ -21,7 +21,7 @@ import type { EdgeTypeManager } from '../components/edge-type-manager';
 import type { EdgeTypeVisibilityModal } from '../components/edge-type-visibility-modal';
 import type { NodeManager } from '../components/node-manager';
 import type { BackgroundEditor } from '../components/background-editor';
-import type { ThemeEditor } from '../components/theme-editor';
+import type { ThemePicker } from '../components/theme-picker';
 import type { QuizPanel } from '../components/quiz-panel';
 import type { AnchorLinkTooltip } from '../components/anchor-link-tooltip';
 import type { PasteStyleDialog } from '../components/paste-style-dialog';
@@ -43,7 +43,7 @@ export interface MenuDependencies {
   edgeTypeVisibilityModal: EdgeTypeVisibilityModal;
   nodeManager: NodeManager;
   backgroundEditor: BackgroundEditor;
-  themeEditor: ThemeEditor;
+  themePicker: ThemePicker;
   quizPanel: QuizPanel;
   anchorLinkTooltip: AnchorLinkTooltip;
   pasteStyleDialog: PasteStyleDialog;

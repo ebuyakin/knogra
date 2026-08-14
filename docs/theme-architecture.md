@@ -1,7 +1,7 @@
 # Theme & Style Architecture
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-14  
+> **Last reviewed:** 2026-08-14  
 > **Authority:** Canonical source for theme cascade, scene theme behavior, and style generation.  
 > **Related:** [Documentation map](README.md), [Node design system](node-design-system.md), [Background design](background-design.md)
 
@@ -70,11 +70,14 @@ Visual parameters resolve through 4 levels. Higher levels override lower.
 
 **Location:** `src/config/node-settings.ts`
 
-App-wide defaults. Currently contains shadow fallback values (`node.shadow*`), but these are effectively unused — all built-in themes define shadow explicitly, so theme values always take priority.
+App-wide node defaults (design selection, inheritance, scale bounds). This level holds
+**no visual style values**: an earlier version carried `node.shadow*` fallbacks, but those keys
+were removed once `DEFAULT_THEME` began defining shadow itself. For every visual parameter the
+cascade therefore starts at Level 2.
 
 ### Level 2: Per-Theme (scene-wide)
 
-**Location:** `src/styles/themes.ts` → `ColorTheme`
+**Location:** `src/core/style-types.ts` → `ColorTheme`
 
 Each scene has a `themeId`. The theme defines the visual baseline for every node and edge in that scene.
 
@@ -110,37 +113,77 @@ Individual node overrides via `ColorOverrides` and `VisualEffects`. See `node-de
 ### Resolution Chain
 
 ```
-Per-Node Override → Theme Default → (Global Settings fallback)
+Per-Node Override → Theme Default
 ```
 
 Example for background color:
 1. `node.designParams.colorOverrides.background` → if set, use it
 2. Else `theme.node.background.color`
 
-Example for shadow:
-1. `theme.node.shadow` → if defined, use it
-2. Else fall back to global `node.shadow*` settings
+Shadow has no per-node override and no global fallback: `theme.node.shadow` is the only source.
+`DEFAULT_THEME` defines it, and every theme is deep-merged over `DEFAULT_THEME`, so it is always
+present. All six designs read it through `styles/designs/shadow-utils.ts`, which also derives the
+SVG padding from it — meaning shadow parameters change node *dimensions*, not just appearance.
 
 ---
 
 ## Built-in Themes
 
-10 built-in themes, all hardcoded in `src/styles/themes.ts`. Each is deep-merged over `DEFAULT_THEME` so only differences need to be specified.
+16 built-in themes — 12 dark, 4 light. Each is deep-merged over `DEFAULT_THEME` so only differences need to be specified.
+
+The subsystem is split by responsibility, mirroring `src/styles/designs/`:
+
+| File | Owns |
+|---|---|
+| `src/config/theme-manifest.ts` | `THEME_MANIFEST` — id, display label and order of the built-in set |
+| `src/styles/themes/index.ts` | Registry: merge cascade, custom-theme builder, `getTheme()` / `getAvailableThemes()` / `isBuiltInTheme()` |
+| `src/styles/themes/default-theme.ts` | `DEFAULT_THEME` etalon, the `BuiltInTheme` override type, edge-style helpers |
+| `src/styles/themes/dark-palettes.ts` | The 12 dark palettes |
+| `src/styles/themes/light-palettes.ts` | The 4 light palettes |
+
+**`THEME_MANIFEST` is the single source of id, label and order.** Palettes carry colour and an id — no `name` — and the registry applies the label from the manifest on lookup. The settings dropdown derives its options from the manifest, and `getAvailableThemes()` iterates it. Adding a theme is one manifest entry plus one literal in the matching palette file; there is no second list to keep in step and no ordering to synchronise.
+
+The manifest lives in `config/` for the same reason as `design-manifest.ts`: setting definitions need the id/label list without importing the styles runtime. The palette files import types only, so colour data has no runtime dependencies.
+
+### Dark
 
 | ID | Name | Canvas | Shadow | Border | Notes |
 |---|---|---|---|---|---|
 | `default` | Black & White | `#0d1117` | on | off | Neutral dark, used as base |
-| `dark` | Dark | `#0a1628` | on | off | Blue-tinted dark |
-| `light` | Light | `#f0f3f6` | on | off | Light backgrounds, dark text |
-| `high-contrast` | High Contrast | `#000000` | on | off | Accessibility, bright borders |
-| `warm-dark` | Warm Dark | `#1a120b` | on | off | Amber/rust tones |
-| `ocean` | Ocean | `#0a1a1e` | on | off | Teal/cyan |
-| `midnight-purple` | Midnight Purple | `#100a1e` | **off** | **on** (1px) | Flat 2D look |
-| `forest` | Forest | `#0c1a10` | on | off | Green/gold |
 | `slate` | Slate | `#14161a` | on | off | Grey/blue-grey |
+| `high-contrast` | High Contrast | `#1b1a1a` | on | on | Accessibility, bright borders |
+| `dark` | Dark | `#0a1628` | on | off | Blue-tinted dark |
+| `ocean` | Ocean | `#0a1a1e` | on | off | Teal/cyan |
+| `forest` | Forest | `#0c1a10` | on | off | Green/gold |
+| `warm-dark` | Warm Dark | `#392615` | on | off | Saturated mid-tone amber/rust |
+| `espresso` | Espresso | `#17110f` | on | off | Low-chroma coffee brown, copper/sage |
 | `ember` | Ember | `#1a0c0a` | on | off | Red/orange |
+| `wine` | Wine | `#180a12` | on | off | Deep plum/rose, gold selection |
+| `midnight-purple` | Midnight Purple | `#100a1e` | **off** | **on** (1px) | Flat 2D look |
+| `nebula` | Nebula | `#0b0d18` | on | off | Indigo with polychrome cyan/magenta/lime accents |
 
-All themes include canvas vignette for smooth edge-to-corner darkening.
+### Light
+
+| ID | Name | Canvas | Shadow | Border | Notes |
+|---|---|---|---|---|---|
+| `light` | Light | `#f0f3f6` | on (default) | off | Cool grey. Predates the light-theme rules below and is left as-is |
+| `paper` | Paper | `#f6f1e7` | soft tinted | on (1px) | Warm cream/sepia, burnt orange + olive |
+| `meadow` | Meadow | `#eef4ec` | soft tinted | on (1px) | Soft sage, emerald + ochre |
+| `iris` | Iris | `#f0edf8` | soft tinted | on (1px) | Pale violet, violet + gold |
+
+All themes include a canvas vignette for smooth edge-to-corner shading.
+
+### Light-theme rules
+
+The dark recipe inverts badly on paper, so light themes depart from it in three ways:
+
+- **Nodes are cards, not washes.** Dark themes run `node.background.opacity` at 0.5–0.6 so the canvas glow reads through. At that opacity on a light canvas a node all but disappears, so lights use 0.85 plus a 1px tinted border.
+- **Shadows are soft and tinted.** The default `opacity: 0.7` black shadow reads as dirt on paper; lights use ~0.15 in a hue drawn from the palette.
+- **`imageDefaults` are corrected.** The default `brightness: 0.5` stops background images overpowering a dark canvas; on a light one it dims them into mud. Lights override to `brightness: 1.05`, `opacity: 0.45`, `saturation: 0.85`.
+
+`light` predates these rules and deliberately still violates all three, so workspaces already using it do not change under their authors.
+
+> **Known limitation:** the app's chrome — panels, modals, menus — is styled by static CSS with no theme → CSS-variable bridge, so it stays dark under every theme. Light themes therefore mean a light canvas inside dark chrome.
 
 ---
 
@@ -154,9 +197,31 @@ All themes include canvas vignette for smooth edge-to-corner darkening.
 
 ## Custom Themes
 
-### Storage
+### The settings-driven `custom` theme — retired, reserved
 
-Custom themes are persisted in IndexedDB via `src/storage/theme-store.ts`:
+A single user-configurable theme once existed, built by `buildCustomTheme()` from ~24
+`customTheme.*` settings overlaid on a chosen base theme. **It is no longer offered.**
+`getAvailableThemes()` does not list it and the Settings page no longer exposes its fields.
+
+It was withdrawn because it was a fourth authoring mechanism alongside the 16 built-in themes and
+the per-node and per-edge overrides, while supporting only **one instance globally** — every scene
+set to `custom` necessarily shared the same colours, since the theme's content lived in settings
+rather than in the scene.
+
+**What is deliberately retained**, and must stay:
+
+- `buildCustomTheme()` and the `themeId === 'custom'` branch in `getTheme()`
+- the `customTheme.*` keys in `src/config/custom-theme-settings.ts`, which still persist and still
+  travel with the workspace via `exportSettings()`
+
+A scene — local or in an imported workspace — that references `'custom'` therefore still resolves
+to the appearance its author chose instead of silently dropping to `DEFAULT_THEME`. Treat this as
+reserved rather than dead: if a per-scene custom theme is ever wanted, `theme-store.ts` (below) is
+the mechanism to build it on, not this one.
+
+### Stored themes (IndexedDB)
+
+Named user themes are persisted via `src/storage/theme-store.ts`:
 
 | Method | Purpose |
 |---|---|
@@ -166,10 +231,17 @@ Custom themes are persisted in IndexedDB via `src/storage/theme-store.ts`:
 | `themeStore.deleteTheme(id)` | Remove a custom theme |
 
 The store auto-initializes at module import time — no explicit `loadCustomThemes()` call needed.
+Stored themes are included in the workspace export.
+
+**No UI reaches this layer.** Nothing creates, edits or selects a stored theme, and
+`getAvailableThemes()` does not list them. The persistence is complete and unused — this is the
+natural foundation for any future multi-theme authoring feature.
 
 ### Resolution
 
-`getTheme(themeId)` in `src/styles/themes.ts` checks custom store first, then built-in themes, then falls back to `DEFAULT_THEME`. Custom themes are deep-merged over `DEFAULT_THEME` so partial definitions are valid.
+`getTheme(themeId)` in `src/styles/themes/index.ts` resolves `'custom'` first, then the stored
+themes, then built-in themes, then falls back to `DEFAULT_THEME`. Stored themes are deep-merged
+over `DEFAULT_THEME` so partial definitions are valid.
 
 ---
 
@@ -222,10 +294,15 @@ graph.addFreeNode() / scene.includeNode()
 ### Theme Change
 
 ```
-User selects theme in Theme Editor
+User selects theme in the Theme Picker
   → scene.themeId updated in graphStore
   → transition.openScene(sceneId) → full re-render with new theme
 ```
+
+The picker is a **picker, not an editor**: it selects a theme and reports the choice, and its
+right-hand pane is a read-only inspector of the selected theme's resolved parameters. Theme
+authoring lives in the palette files. Do not reintroduce editable inputs there without deciding
+first where the edits would be stored — see *Custom Themes* above.
 
 ---
 
@@ -240,7 +317,7 @@ User selects theme in Theme Editor
 | `graph.ts` | ✅ | ❌ | Passes themeId to StyleGenerator |
 | `scene.ts` | ✅ | ❌ | Passes themeId to StyleGenerator |
 | `transition.ts` | ✅ | ❌ | Passes scene to StyleGenerator |
-| `theme-editor.ts` | ✅ | ✅ | UI needs both |
+| `theme-picker.ts` | ❌ | ✅ | Reads themes only; the caller writes `scene.themeId` |
 
 ---
 
@@ -250,11 +327,15 @@ User selects theme in Theme Editor
 |---|---|
 | `src/core/style-types.ts` | All visual type definitions |
 | `src/core/main-types.ts` | Re-exports style types (barrel), type system index |
-| `src/styles/themes.ts` | Built-in themes, `getTheme()`, `getAvailableThemes()` |
-| `src/storage/theme-store.ts` | Custom theme persistence (IndexedDB) |
+| `src/styles/themes/index.ts` | Registry: `getTheme()`, `getAvailableThemes()`, merge, custom builder |
+| `src/styles/themes/*-palettes.ts` | Built-in theme colour data |
+| `src/config/theme-manifest.ts` | Theme ids, labels and order |
+| `src/storage/theme-store.ts` | Stored theme persistence (IndexedDB), currently no UI |
 | `src/styles/style-generator.ts` | Cytoscape stylesheet builder, border rules |
+| `src/styles/edge-visual-resolver.ts` | Edge style cascade; `resolveEdgeStyleSlot()` for the three theme edge styles |
 | `src/styles/designs/shadow-utils.ts` | Shadow config, padding, SVG filter builder |
-| `src/ui/components/theme-editor.ts` | Theme editor modal |
+| `src/ui/components/theme-picker.ts` | Scene theme picker modal (read-only inspector) |
+| `src/ui/components/theme-preview.ts` | Static theme sample rendered by the picker |
 
 ---
 

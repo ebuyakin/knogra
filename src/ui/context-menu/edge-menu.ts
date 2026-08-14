@@ -6,7 +6,7 @@
 
 import type { MenuItem } from './menu-renderer';
 import type { MenuDependencies, StyleClipboard } from './menu-context';
-import { openEdgeEditor } from './editor-openers';
+import { openEdgeEditor } from '../components/editor-openers';
 import { isEditMode } from '../../storage/app-mode';
 import { pickVisualParams } from '../../styles/edge-visual-resolver';
 

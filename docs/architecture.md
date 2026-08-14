@@ -20,7 +20,7 @@ UI → Features → Cytoscape → GraphSaver → Database
 
 Cytoscape is the core component responsible for manipulation and presentation of scenes. The current/real-time state of the scene is tracked by Cytoscape (not by any other state management system). Cytoscape is the **source of truth** for graph state.
 
-Some operations are not Cytoscape-derived scene mutations and therefore write through explicit storage services instead of GraphSaver: workspace import/export, custom themes, Mermaid import/export, background image library updates, saved paths, chat notes, app mode, and cross-scene deletion cleanup. These exceptions must stay named and intentional.
+Some operations are not Cytoscape-derived scene mutations and therefore write through explicit storage services instead of GraphSaver: workspace save/open, custom themes, Markdown build/update/export, background image library updates, saved paths, chat notes, app mode, and cross-scene deletion cleanup. These exceptions must stay named and intentional.
 
 **Dependency maps:** Dependency-cruiser reports live under `.ws/deps/outputs/`. The default architecture-orientation report is `.ws/deps/outputs/toprepo/toprepo-list.txt`, generated from `.ws/deps/toprepo.txt` with two-level expansion. The generator `.ws/deps/generate-deps.js` is configurable: use `+N`, `+X`, exclusions, and anchors to produce broader or narrower views of the whole codebase or a specific subsystem. When this architecture document changes in a way that affects layer boundaries, dependency direction, or module ownership, regenerate the relevant dependency map and compare it against this document.
 
@@ -129,7 +129,7 @@ graph TD
         PathStore[PathStore]
         ChatStore[ChatStore]
         ThemeStore[ThemeStore]
-        Mermaid[Mermaid]
+        Mermaid[Markdown]
         Workspace[Workspace]
     end
 
@@ -205,7 +205,7 @@ Application settings and user preferences.
 **GraphStore** (`graph-store.ts`)
 - IndexedDB-backed cache of nodes, edges, edge types, scenes, and background images
 - Read by Features, UI, Background, Styles, diagnostics, and storage workflows
-- Written by GraphSaver for Cytoscape-derived scene persistence; explicit storage workflows handle seeding, workspace import, Mermaid import, deletion cleanup, background image library changes, theme changes, and scene auto-creation
+- Written by GraphSaver for Cytoscape-derived scene persistence; explicit storage workflows handle seeding, workspace open, Markdown build and update, deletion cleanup, background image library changes, theme changes, and scene auto-creation
 
 **GraphSaver** (`graph-saver.ts`)
 - Listens to Cytoscape events and debounced-saves scene state to GraphStore
@@ -234,9 +234,11 @@ Application settings and user preferences.
 **ThemeStore** (`theme-store.ts`)
 - Separate persistence for custom themes merged into `styles/themes.ts`
 
-**Mermaid** (`storage/mermaid/`)
-- Graph-only interchange path for Mermaid flowcharts; parses the source, slices it into scenes, and lays each scene out (radial, flow, or fan) before replacing graph data without preserving the rest of the workspace
-- Import options cover configurable edge-type scene inclusion and branch/leaf tagging; the scene-composition and fan-continuity model lives in [mermaid-fan-layout.md](mermaid-fan-layout.md)
+**Markdown** (`storage/markdown.ts` + `storage/markdown/`)
+- Owns the Knogra Markdown document and the three operations on it: **Build** (document → new graph, replacing the workspace), **Update** (document content → the open graph, structure untouched), and **Export** (open graph → document)
+- `document/` parses and serializes the artefact — an optional Mermaid diagram plus the `Knogra …` content sections; `build/` slices the diagram into scenes and lays each out (radial, flow, or fan); `update/` resolves ids, plans, and applies
+- Identity is by id only: `node.properties.externalId` and `ChatMessage.externalId` record what a document called an element, which is what makes Update possible. Update suspends GraphSaver and reloads rather than mirroring into live Cytoscape
+- Build options cover configurable edge-type scene inclusion and branch/leaf tagging; the scene-composition and fan-continuity model lives in [mermaid-fan-layout.md](mermaid-fan-layout.md). Canonical doc: [Markdown architecture](markdown-architecture.md)
 
 #### Workspace
 
@@ -433,7 +435,8 @@ UI owns DOM rendering, dialogs, menus, keyboard handling, and ergonomic interact
 | `scene-picker.ts` | Scene selection dialog |
 | `path-manager.ts` | Saved path manager — list, walk, edit, generate (parts in `path-manager/`) |
 | `background-editor.ts` | Background image picker/editor ⚠️ |
-| `theme-editor.ts` | Custom theme editor |
+| `theme-picker.ts` | Scene theme picker — selects a theme, inspects its parameters read-only |
+| `theme-preview.ts` | Static theme sample rendered by the picker |
 | `quiz-panel.ts` | Floating quiz controls for runtime recall mode |
 | `settings-modal.ts` | Application settings |
 | `connection-badge.ts` | Connection count badges |
@@ -564,7 +567,7 @@ Core
 | **UI** | May use Cytoscape for ephemeral interaction state such as selection, rendered positions, temporary input blocking, and overlay positioning. Domain mutations should go through Features or explicit storage services. |
 | **UI** | Domain mutations should go through Features or explicit storage services; direct store writes are technical debt unless the UI component is itself the storage workflow surface |
 | **Features** | Cytoscape-derived scene mutations should flow through Cytoscape and GraphSaver |
-| **Features** | Direct GraphStore writes are allowed only for named non-Cytoscape operations: scene auto-creation, theme/background persistence, graph deletion cleanup, workspace/Mermaid import, seeding, and diagnostics/validation workflows |
+| **Features** | Direct GraphStore writes are allowed only for named non-Cytoscape operations: scene auto-creation, theme/background persistence, graph deletion cleanup, workspace open and Markdown build/update, seeding, and diagnostics/validation workflows |
 | **Features** | Independent of each other (no cross-feature imports) |
 | **Features** | Config is read-only (use `getSetting()`) |
 | **Background** | Canvas rendering only; scene membership and graph mutations stay outside the renderer |
@@ -644,7 +647,7 @@ Explicit store method or workspace transfer helper
 IndexedDB / localStorage persistence
 ```
 
-Examples: workspace import/export, Mermaid graph import/export, custom themes, saved paths, chat notes, background image library, app mode, seed workspace, and cross-scene deletion cleanup.
+Examples: workspace save/open, Markdown build/update/export, custom themes, saved paths, chat notes, background image library, app mode, seed workspace, and cross-scene deletion cleanup.
 
 ### 5.2 Read Path (Queries)
 
@@ -724,7 +727,7 @@ Reload page to reinitialize app
 
 ### Why Direct Storage Workflows Exist
 - Not all persisted state originates from Cytoscape events
-- Workspace import/export, Mermaid interchange, paths, chat notes, themes, background image library, and app mode have their own storage contracts
+- Workspace save/open, Markdown interchange, paths, chat notes, themes, background image library, and app mode have their own storage contracts
 - Keeping those as explicit workflows is clearer than forcing unrelated data through Cytoscape
 - The tradeoff is stricter discipline: direct writes must be named, local, and reviewed as architecture exceptions
 

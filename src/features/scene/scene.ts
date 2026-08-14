@@ -21,17 +21,20 @@ import { resolveSceneEdgeVisualState } from '../../styles/edge-visual-resolver';
 import { collapseNodesCascading, excludeNeighboursCascading } from './collapse-animator';
 import { expandNodeConnections, type ExpandMode } from './expand-animator';
 import { resolveScenePan } from '../utils/cy/viewport-utils';
+import type { Direction } from '../utils/pure/directional-search';
 
 // scene sub-modules
 import { SceneNodeOps } from './node-ops';
 import { SceneEdgeOps } from './edge-ops';
 import { FoldManager } from './fold-manager';
+import { moveSelectionDirectional } from './navigation';
 import type { TagStyleParams, TagStylePlan } from './tag-style-plan';
 
 // re-export types for external consumers
 export type { NodeEditContext } from './node-ops';
 export type { EdgeEditContext } from './edge-ops';
 export type { TagStyleParams, TagStylePlan } from './tag-style-plan';
+export type { Direction } from '../utils/pure/directional-search';
 
 export interface EdgeTypeVisibilityEntry {
   typeId: EdgeTypeId;
@@ -590,6 +593,17 @@ export class Scene {
       { center: { eles: node } },
       { duration, easing: 'ease-out' }
     );
+  }
+
+  /**
+   * Move the selection to the nearest node in the given direction, optionally
+   * panning the viewport to follow it. Returns the newly selected node, or null
+   * when the selection did not move.
+   */
+  navigateDirectional(direction: Direction, options: { center?: boolean } = {}): NodeId | null {
+    const nodeId = moveSelectionDirectional(this.#cy, direction);
+    if (nodeId !== null && options.center) this.centerOnNode(nodeId);
+    return nodeId;
   }
 
   /**

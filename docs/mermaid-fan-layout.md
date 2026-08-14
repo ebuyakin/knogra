@@ -117,7 +117,7 @@ Net effect of the gap: only **2‑2** satisfies the FCI today. **2‑1** over‑
 
 ## 8. Implementation plan
 
-Two changes, each independently testable. Both live under `src/storage/mermaid/`.
+Two changes, each independently testable. Both live under `src/storage/markdown/`.
 
 ### Step 1 — Honour sub depth in the slice
 **File:** `scene-slice.ts` (`getMermaidFanSceneSlice`), **caller:** `import-builder.ts`.

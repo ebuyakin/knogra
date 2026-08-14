@@ -48,14 +48,6 @@ export class MenuRenderer {
    * Show a menu at the given rendered position
    */
   show(items: MenuItem[], position: MenuPosition): void {
-    // Activate the window. On macOS a right-click into a background window
-    // is delivered without activating it — the menu would render but get no
-    // hover events, and the first left-click would be consumed as the
-    // activation click. Called from the right-click gesture, focus() makes
-    // the window key so the menu is immediately hoverable and clickable.
-    // No-op on platforms where clicks always activate the window.
-    window.focus();
-
     // Close existing menu
     this.close();
 

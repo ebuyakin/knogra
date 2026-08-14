@@ -1,0 +1,140 @@
+/**
+ * Editor openers — open the node/edge editors for a given element.
+ * Shared by the context menu (right-click and double-tap) and the keyboard
+ * shortcuts, so the open-with-context logic exists once.
+ *
+ * Each opener declares the narrowest set of dependencies it needs, so any
+ * caller holding a superset — `MenuDependencies`, the keyboard handler's own
+ * fields — satisfies it without an adapter.
+ */
+
+import type { NodeId } from '../../core/main-types';
+import type { FeatureAPI } from '../../features/feature-api';
+import type { NodeEditor, NodeEditorContext } from './node-editor/node-editor';
+import type { EdgeEditor } from './edge-editor';
+import type { QuickTitleEditor } from './quick-title-editor';
+import { isEditMode } from '../../storage/app-mode';
+import { generateEquationFromPrompt } from '../../ai/equation-generator';
+
+export interface NodeEditorDeps {
+  container: HTMLElement;
+  features: FeatureAPI;
+  nodeEditor: NodeEditor;
+}
+
+export interface EdgeEditorDeps {
+  features: FeatureAPI;
+  edgeEditor: EdgeEditor;
+}
+
+export interface QuickRenameDeps extends NodeEditorDeps {
+  quickTitleEditor: QuickTitleEditor;
+}
+
+/**
+ * Open the full node editor.
+ *
+ * `titleOverride` carries text typed in the quick rename popover into the full
+ * editor, so escalating from it never loses the edit in progress.
+ */
+export function openNodeEditor(deps: NodeEditorDeps, nodeId: NodeId, titleOverride?: string): void {
+  if (!isEditMode()) return;
+
+  const editContext = deps.features.scene.getNodeEditContext(nodeId);
+
+  if (!editContext) {
+    console.warn(`Node ${nodeId} not found in scene`);
+    return;
+  }
+
+  const context: NodeEditorContext = {
+    sceneId: editContext.sceneId,
+    themeId: editContext.themeId,
+    scale: editContext.scale,
+    position: editContext.position,
+    viewportPosition: editContext.viewportPosition,
+    containerRect: deps.container.getBoundingClientRect()
+  };
+
+  const nodeData = titleOverride === undefined
+    ? editContext.nodeData
+    : { ...editContext.nodeData, title: titleOverride };
+
+  deps.nodeEditor.show(
+    nodeId,
+    nodeData,
+    editContext.design,
+    context,
+    async (id, contentUpdates, designUpdates, scaleUpdate) => {
+      await deps.features.node.update(id, contentUpdates);
+      await deps.features.scene.updateNodeStyle(id, {
+        design: designUpdates,
+        scale: scaleUpdate
+      });
+    },
+    async (request) => {
+      return generateEquationFromPrompt(request);
+    },
+    (title) => deps.features.graph.findNodeByTitle(title, nodeId)
+  );
+}
+
+export function openEdgeEditor(deps: EdgeEditorDeps, edgeId: string): void {
+  if (!isEditMode()) return;
+
+  const context = deps.features.scene.getEdgeEditContext(edgeId);
+  if (!context) {
+    console.warn(`Edge ${edgeId} not found in scene`);
+    return;
+  }
+
+  deps.edgeEditor.show(
+    edgeId,
+    context.editableStyleParams,
+    context,
+    (id, payload) => {
+      deps.features.edge.update(id, { typeId: payload.typeId });
+      if (payload.visualParams !== undefined) {
+        // Save edge visual style via scene feature
+        deps.features.scene.updateEdgeStyle(id, payload.visualParams);
+      }
+      if (payload.curveParams !== undefined) {
+        // Save edge curve/layout via scene feature
+        deps.features.scene.updateEdgeCurve(id, payload.curveParams);
+      }
+    }
+  );
+}
+
+/**
+ * Rename a node through the anchored quick popover.
+ *
+ * Multi-line titles (markdown imports) cannot be represented in the popover's
+ * single-line input, so they escalate straight to the full editor rather than
+ * being silently flattened.
+ */
+export function openQuickRename(deps: QuickRenameDeps, nodeId: NodeId): void {
+  const editContext = deps.features.scene.getNodeEditContext(nodeId);
+  if (!editContext) return;
+
+  const currentTitle = editContext.nodeData.title;
+  if (currentTitle.includes('\n')) {
+    openNodeEditor(deps, nodeId);
+    return;
+  }
+
+  deps.quickTitleEditor.show(nodeId, currentTitle, {
+    onSave: async (title) => {
+      await deps.features.node.update(nodeId, { title });
+      // The rendered label is baked into the node's generated stylesheet entry,
+      // so the style must be regenerated for the new title to reach the canvas.
+      // Design and scale are passed unchanged — this is a pure refresh.
+      await deps.features.scene.updateNodeStyle(nodeId, {
+        design: editContext.design,
+        scale: editContext.scale
+      });
+    },
+    hasConflict: (title) => deps.features.graph.findNodeByTitle(title, nodeId) !== null,
+    onEscalate: (typedTitle) => openNodeEditor(deps, nodeId, typedTitle)
+  });
+}

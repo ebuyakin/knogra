@@ -7,7 +7,7 @@
 > [Workspace architecture](workspace-architecture.md) (Part 1) and
 > [Markdown architecture](markdown-architecture.md) (Part 2). Nothing here overrides them.
 >
-> **Last updated:** 2026-08-11
+> **Last updated:** 2026-08-12
 
 ## Order
 
@@ -28,7 +28,7 @@ is the only thing in flight. Part 2 is larger and lands on stable ground afterwa
 | 2 | Export switches to JSON | Save produces `<name>-knogra.json`; no ZIP is written |
 | 3 | Import gains content sniffing; ZIP reader moves to `legacy-zip.ts` verbatim | Save → Open round-trips losslessly, and a v1.5 `.knogra` still opens |
 | 4 | User-visible copy + `input.accept` | Accept list is `.json,.knogra`; every string in Appendix A is applied; copy follows workspace-architecture §3.1 |
-| 5 | Cross-repo rollout | The landing page opens a published graph in its new format. **Deferred — ships with Part 2**, since the two release together and the app must be live first either way |
+| 5 | Cross-repo rollout | The landing page opens a published graph in its new format. **Deferred — ships with Part 2 as step L5**, since the two release together and the app must be live first either way |
 
 ## Risks
 
@@ -128,15 +128,22 @@ console-testable against a real workspace via `window.debugger` before any UI ex
 
 | # | Step | Done when |
 |---|---|---|
-| L0 | Identity primitive: `externalId` on nodes and `ChatMessage`; the system-property list, with the advanced tab stripping it and `#composeProperties` re-attaching it | The field survives a store round-trip, is invisible in the node editor, **and still exists after opening that editor and pressing Save** |
-| L0b | Folder rename `mermaid/` → `markdown/` | Mechanical, lands alone, type-check between |
-| L1 | `document/` — parse + serialize, note keys, ai-chat keys, heading registration, diagram-optional | A real workspace serializes to a document and parses back to equivalent data |
+| L0 | Identity primitive: `externalId` on nodes and `ChatMessage`; the system-property list in `config/`, with the advanced tab stripping it and `#composeProperties` re-attaching it | The field survives a store round-trip, is invisible in the node editor, **and still exists after opening that editor and pressing Save** |
+| L0b | Folder rename `mermaid/` → `markdown/`, `mermaid.ts` → `markdown.ts` beside it | Mechanical, lands alone, type-check between |
+| L1 | `document/` — parse + serialize, note keys (two colons + token test), ai-chat keys, heading registration, diagram-optional | A real workspace serializes to a document and parses back to equivalent data, **and every pre-existing document still parses unchanged** |
 | L2 | `planUpdate(…) → UpdatePlan`, including the notes guard | Correct counts per section and correct unmatched entries, with no write path connected |
-| L3 | Appliers: Build changes, Update apply, dev-only relabel helper | Build stamps `externalId` and `source: 'note'`; an Update applies and survives a reload |
-| L4 | UI: export section chooser, Update settings + preview, View-mode refusal, menu renames | Every path reachable from the canvas menu; Update refuses in View mode from the command itself |
+| L3 | Appliers: Build changes (both `externalId` stamps, `source: 'note'`, no-diagram refusal), Update apply | Build stamps node **and** note ids; re-running the same authored document as an Update matches every note it created |
+| L4 | UI: export section chooser, the single Update dialog, View-mode refusal, `Workspace ▸ Markdown` submenu, Build dialog copy | Every path reachable from the canvas menu; Update refuses in View mode from the command itself; ticking a section in the Update dialog recomputes its count |
+| L5 | Cross-repo rollout (carried over from Part 1) | The landing page opens a published graph in the JSON format. Hard ordering below |
 
 L0's done-when is the whole point of L0: without it every later layer is built on an id that
 erases itself.
+
+L5 spans three repos and inherits Part 1's ordering: **app live first** (reads both workspace
+formats), **then** `knogra-graphs/catalog.json` may point `file:` at `.json`, and **in the same
+step** `knogra-site/src/scripts/graph-open.ts` (hardcodes `+ '.knogra'` for the download filename)
+and `knogra/README.md` (two `.knogra` mentions, the JSZip row, the "Mermaid import / export" feature
+line, and the `Ctrl+S` / `Ctrl+O` wording). Reversing 1 and 2 breaks every cached app build.
 
 ## Explicitly untouched
 
@@ -162,7 +169,8 @@ Stated so nobody expands the blast radius mid-implementation:
 | `externalId` deleted by a node-editor Save | **High** — defeats the identity model silently | markdown §6.3, L0 |
 | Debounced save clobbers applied content before reload | **High** | markdown §5.7 |
 | Round-trippable section empty on every new graph (notes stamped `tutorial`) | **High** | markdown §5.1 |
-| Existing graphs cannot bootstrap their prose | Medium | markdown §6.4 relabel helper |
+| Build discards the document's note ids, so the first Update after a Build matches nothing and trips the §6.5 guard | **High** | markdown §5.1, L3 |
+| Note-key grammar rejects or misreads pre-existing documents | **High** | markdown §4.3, L1 |
 | Update run in View mode | Medium | markdown §5.5 |
 | User lands on the wrong scene after the reload | Medium | markdown §5.7 |
 | Irreversible content loss with no undo | Medium | markdown §5.5 save-first |
@@ -170,16 +178,63 @@ Stated so nobody expands the blast radius mid-implementation:
 | New heading not registered as a terminator, leaking into the diagram body | Low | markdown §4.3 |
 | The rename touches many import paths at once | Low | L0b lands alone |
 
+## Resolved
+
+All settled 2026-08-12, in a spec review before any Part 2 code. Normative text is in
+[markdown-architecture.md](markdown-architecture.md); this is the record of what changed and why.
+
+**Two defects found by reading the spec against the code.**
+
+*Mandatory note ids contradicted the compatibility promise.* §4.3 required `<nodeId>:<noteId>:`
+while §7 and §9 promised old documents still Build — and every existing document writes `<id>:
+body`. The rule is now positional with a token test: the text between the first and second colon is
+a note id **only** if it matches `[A-Za-z0-9_-]+` with no surrounding whitespace. The space after
+the colon in every legacy entry is what disqualifies the candidate, so old bodies survive whole,
+colons and all. `N1:intro: text` names a note; `N1: Note: this matters` does not. The residual
+misread — no space *and* a body opening with a bare word and colon — was accepted. Two alternatives
+were rejected: mandatory-and-drop-legacy-notes (throws away prose the current importer reads fine),
+and "a note id only when alone on its line" (forbids one-line notes, which the user wants for
+greppability).
+
+*Build discarded the note ids it was handed.* §6.3 wrote `ChatMessage.externalId` only when Update
+created a note, so the natural loop — author a document, Build, keep editing that file — failed on
+its first Update: nothing resolved, and the §6.5 guard refused the whole notes section. Build now
+stamps both ids, node and note. This also settled the open question of whether `externalId` earns
+its cost: hand-authoring with one's own ids is a workflow to support, so it does.
+
+**One dialog for Update, not two.** §5.5 listed settings, §5.6 showed counts, and neither said where
+the checkboxes lived. They are the same screen, counts recomputed per tick — affordable because
+planning is pure over a document parsed once and a graph read once, and necessary because "tags may
+change appearance" has to be visible next to the switch that causes it.
+
+**Menu shape.** `Workspace ▸ Markdown ▸ Import… / Update… / Export…` — nested, so the top-level menu
+does not grow and the two artefacts stay visibly related. *Build* stays the spec's name for the
+operation; *Import* is the label, disambiguated by nesting now that the workspace one is *Open*.
+Same code-vs-UI split Part 1 settled. Working names *Build graph from Markdown…* and *New workspace
+from document…* both dropped. One inaccuracy fixed along the way: the Build confirm dialog claims to
+replace "your current workspace graph", but `clearAllData()` also wipes chat, paths, background
+images and the shelf — it now says what the Open dialog says.
+
+**System-property list → `config/`.** A declared table like the storage keys and shortcut
+definitions beside it. `core/` holds types and no data.
+
+**`markdown.ts` beside `markdown/`, not inside it.** Matches `storage/workspace.ts` +
+`storage/workspace/`: entry point beside, parts within. Also keeps L0b mechanical.
+
+**Build with no diagram: refused**, naming Update as the operation for content-only documents.
+
+**No relabel helper.** §6.4 assumed every Markdown-built catalog graph carried `source: 'tutorial'`
+prose. In practice only the shipped Tutorial graph does, and its prose has no reason to round-trip.
+Build stops producing the mismatch, so nothing accumulates; the helper is a handful of lines if a
+graph ever needs it.
+
+**`<!-- knogra:doc v1 -->` dropped.** A hand-written document would never carry it, so no code may
+branch on its absence — which is the only thing a version marker is for.
+
+**Editorial.** Heading level is free on read, `##` on write under a `#` title; all six headings
+(including the legacy `tutorial`) registered in the terminator/scrubber alternation; the §5.6 mock
+uses real ids instead of the old positional `N7`.
+
 ## Open issues
 
-1. **Where the system-property list lives** — `config/` or `core/`. It is data, not configuration,
-   but `config/` already holds storage keys and shortcut tables.
-2. **Menu labels.** *Build graph from Markdown…* / *Update graph from document…* /
-   *Export as Markdown…* are working names. "Build" is clear in the doc; unclear whether it reads
-   right in a canvas menu next to *Open workspace from file…*.
-3. **Build with no diagram** — currently refused. Alternative: allow it as a no-op that reports
-   nothing was created. Refusal is simpler and probably right.
-4. **Relabel helper naming** on the `knogra.*` diagnostics surface, and whether it is scoped to the
-   open workspace only (assumed yes).
-5. **Document version marker.** `<!-- knogra:doc v1 -->` has no consumer yet. Confirm it earns its
-   place, or drop it until a v2 grammar actually exists.
+None. Part 2 starts at L0.

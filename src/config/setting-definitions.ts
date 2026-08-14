@@ -10,19 +10,6 @@ import type { SettingKey } from './index';
 import { DESIGN_MANIFEST } from './design-manifest';
 import { AUTOLAYOUT_ALGORITHMS } from './autolayout-settings';
 
-const BASE_THEME_OPTIONS = [
-  { value: 'default', label: 'Black & White' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
-  { value: 'high-contrast', label: 'High Contrast' },
-  { value: 'warm-dark', label: 'Warm Dark' },
-  { value: 'ocean', label: 'Ocean' },
-  { value: 'midnight-purple', label: 'Midnight Purple' },
-  { value: 'forest', label: 'Forest' },
-  { value: 'slate', label: 'Slate' },
-  { value: 'ember', label: 'Ember' },
-];
-
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -797,6 +784,29 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
     ]
   },
   {
+    id: 'files',
+    label: 'Files',
+    icon: '◇',
+    settings: [
+      {
+        key: 'file.namePrefix',
+        label: 'File Name',
+        description: 'Base name for saved workspace and document files, without the number or extension. Leave blank to have it named after the anchor node on the next save. Letters, digits, underscore and hyphen only — anything else becomes a hyphen.',
+        type: 'string',
+        placeholder: 'e.g. kg-calculus'
+      },
+      {
+        key: 'file.nextNumber',
+        label: 'Next File Number',
+        description: 'Version number stamped on the next saved file. Counts up on every save, shared by workspace and document files so a folder listing sorts in the order you exported. Numbered 01–99, then a00–z99. Set it back to 1 to restart the sequence.',
+        type: 'number',
+        min: 1,
+        max: 2699,
+        step: 1
+      }
+    ]
+  },
+  {
     id: 'shelf',
     label: 'Shelf',
     icon: '◇',
@@ -920,228 +930,6 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
             min: 0,
             max: 3000,
             step: 100
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'custom-theme',
-    label: 'Custom Theme',
-    icon: '◇',
-    description: 'User-configurable theme. Select a base theme and override individual properties. Empty values inherit from the base.',
-    children: [
-      {
-        id: 'custom-theme-canvas',
-        label: 'Canvas',
-        settings: [
-          {
-            key: 'customTheme.baseTheme',
-            label: 'Base Theme',
-            description: 'Built-in theme to start from. All unset properties inherit from this theme.',
-            type: 'select',
-            options: BASE_THEME_OPTIONS
-          },
-          {
-            key: 'customTheme.canvasColor',
-            label: 'Background Color',
-            description: 'Canvas background color (hex). Empty = inherit from base.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.canvasVignetteStrength',
-            label: 'Vignette Strength',
-            description: 'Canvas edge darkening (0–1). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 1,
-            step: 0.05
-          },
-          {
-            key: 'customTheme.canvasVignetteSpread',
-            label: 'Vignette Spread',
-            description: 'Solid border inset from edges (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 200,
-            step: 5
-          },
-          {
-            key: 'customTheme.canvasVignetteBlur',
-            label: 'Vignette Blur',
-            description: 'Feather distance beyond spread (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 500,
-            step: 10
-          },
-          {
-            key: 'customTheme.canvasVignetteColor',
-            label: 'Vignette Color',
-            description: 'Vignette shade color (hex). Empty = inherit from base.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.canvasVignetteColorOpacity',
-            label: 'Vignette Color Opacity',
-            description: 'Base opacity of the vignette shade (0–1). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 1,
-            step: 0.05
-          }
-        ]
-      },
-      {
-        id: 'custom-theme-node',
-        label: 'Node',
-        settings: [
-          {
-            key: 'customTheme.nodeBackground',
-            label: 'Background Color',
-            description: 'Node background color (hex). Empty = inherit from base.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.nodeOpacity',
-            label: 'Opacity',
-            description: 'Node background opacity (0–1). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 1,
-            step: 0.05
-          },
-          {
-            key: 'customTheme.nodeTextColor',
-            label: 'Text Color',
-            description: 'Node text color (hex). Empty = inherit from base.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.nodeBorderColor',
-            label: 'Border Color',
-            description: 'Normal border color (hex). Empty = inherit from base.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.nodeBorderWidth',
-            label: 'Border Width',
-            description: 'Normal border width (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 5,
-            step: 0.5
-          },
-          {
-            key: 'customTheme.centralBorderColor',
-            label: 'Central Border',
-            description: 'Central node border color (hex). Empty = inherit.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.selectedBorderColor',
-            label: 'Selected Border',
-            description: 'Selected node border color (hex). Empty = inherit.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.centralSelectedBorderColor',
-            label: 'Central+Selected Border',
-            description: 'Central+selected border color (hex). Empty = inherit.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.shadowOffsetX',
-            label: 'Shadow Offset X',
-            description: 'Horizontal shadow offset (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 20,
-            step: 1
-          },
-          {
-            key: 'customTheme.shadowOffsetY',
-            label: 'Shadow Offset Y',
-            description: 'Vertical shadow offset (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 20,
-            step: 1
-          },
-          {
-            key: 'customTheme.shadowBlur',
-            label: 'Shadow Blur',
-            description: 'Shadow blur radius (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 20,
-            step: 1
-          },
-          {
-            key: 'customTheme.shadowOpacity',
-            label: 'Shadow Opacity',
-            description: 'Shadow opacity (0–1). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 1,
-            step: 0.1
-          },
-          {
-            key: 'customTheme.shadowColor',
-            label: 'Shadow Color',
-            description: 'Shadow color (hex). Empty = inherit from base.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.nodeVignetteStrength',
-            label: 'Vignette Strength',
-            description: 'Node edge darkening (0–1). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 1,
-            step: 0.05
-          },
-          {
-            key: 'customTheme.nodeVignetteSpread',
-            label: 'Vignette Spread',
-            description: 'Solid border inset (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 200,
-            step: 5
-          },
-          {
-            key: 'customTheme.nodeVignetteBlur',
-            label: 'Vignette Blur',
-            description: 'Feather distance (px). Empty = inherit from base.',
-            type: 'number',
-            min: 0,
-            max: 500,
-            step: 10
-          },
-          {
-            key: 'customTheme.nodeVignetteColor',
-            label: 'Vignette Color',
-            description: 'Vignette shade color (hex). Empty = inherit from base.',
-            type: 'string'
-          }
-        ]
-      },
-      {
-        id: 'custom-theme-edge',
-        label: 'Edge',
-        settings: [
-          {
-            key: 'customTheme.edgeColor',
-            label: 'Line Color',
-            description: 'Edge line color (hex). Empty = inherit from base.',
-            type: 'string'
-          },
-          {
-            key: 'customTheme.edgeArrowColor',
-            label: 'Arrow Color',
-            description: 'Edge arrow color (hex). Empty = inherit from base.',
-            type: 'string'
           }
         ]
       }

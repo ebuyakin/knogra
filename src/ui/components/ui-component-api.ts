@@ -13,7 +13,7 @@ import { EdgeTypeVisibilityModal } from './edge-type-visibility-modal';
 import { NodePicker } from './node-picker';
 import { NodeManager } from './node-manager';
 import { BackgroundEditor } from './background-editor';
-import { ThemeEditor } from './theme-editor';
+import { ThemePicker } from './theme-picker';
 import { QuizPanel } from './quiz-panel';
 import { ContextMenu } from '../context-menu/context-menu';
 import { PasteStyleDialog } from './paste-style-dialog';
@@ -22,7 +22,7 @@ import { QuickTitleEditor } from './quick-title-editor';
 import { ConnectionBadgeManager } from './connection-badge';
 import { FoldBadgeManager } from './fold-badge';
 import { EdgeCreationMode } from '../edge-creation-mode';
-import { KeyboardHandler } from '../keyboard-handler';
+import { KeyboardHandler } from '../keyboard/keyboard-handler';
 import { TransitionInputGuard } from '../transition-input-guard';
 import { graphStore } from '../../storage/graph-store';
 import { StyleGenerator } from '../../styles/style-generator';
@@ -35,7 +35,7 @@ export class UIComponentAPI {
   readonly nodePicker: NodePicker;
   readonly nodeManager: NodeManager;
   readonly backgroundEditor: BackgroundEditor;
-  readonly themeEditor: ThemeEditor;
+  readonly themePicker: ThemePicker;
   readonly quizPanel: QuizPanel;
   readonly anchorLinkTooltip: AnchorLinkTooltip;
   readonly quickTitleEditor: QuickTitleEditor;
@@ -58,7 +58,7 @@ export class UIComponentAPI {
     this.nodePicker = new NodePicker();
     this.nodeManager = new NodeManager(features);
     this.backgroundEditor = new BackgroundEditor(container);
-    this.themeEditor = new ThemeEditor();
+    this.themePicker = new ThemePicker();
     this.quizPanel = new QuizPanel(features, container);
     this.anchorLinkTooltip = new AnchorLinkTooltip(cy, container);
     this.quickTitleEditor = new QuickTitleEditor(cy, container);
@@ -77,7 +77,7 @@ export class UIComponentAPI {
       edgeTypeVisibilityModal: this.edgeTypeVisibilityModal,
       nodeManager: this.nodeManager,
       backgroundEditor: this.backgroundEditor,
-      themeEditor: this.themeEditor,
+      themePicker: this.themePicker,
       quizPanel: this.quizPanel,
       anchorLinkTooltip: this.anchorLinkTooltip,
       pasteStyleDialog: this.pasteStyleDialog
@@ -88,7 +88,16 @@ export class UIComponentAPI {
     this.foldBadgeManager = new FoldBadgeManager(cy, container, features);
 
     // Create keyboard handler
-    this.keyboardHandler = new KeyboardHandler(cy, features, this.badgeManager, this.nodeEditor, this.nodeManager, container, this.anchorLinkTooltip, this.quickTitleEditor);
+    this.keyboardHandler = new KeyboardHandler({
+      cy,
+      features,
+      container,
+      badgeManager: this.badgeManager,
+      nodeEditor: this.nodeEditor,
+      nodeManager: this.nodeManager,
+      anchorLinkTooltip: this.anchorLinkTooltip,
+      quickTitleEditor: this.quickTitleEditor
+    });
     this.keyboardHandler.setEdgeCreationMode(this.edgeCreationMode);
 
     // Create transition input guard (blocks input during transitions)

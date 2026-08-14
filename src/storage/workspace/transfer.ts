@@ -1,7 +1,9 @@
 import Dexie from 'dexie';
 import type { EdgeType, EdgeTypeId } from '../../core/main-types';
 import type { ChatImageAttachment, Conversation } from '../../core/chat-types';
+import { getSetting, setSetting } from '../../config';
 import { createStarterEdgeTypes, getDefaultEdgeStyleSlotId, getDefaultEdgeTypeId, isEdgeStyleSlotId } from '../../config/edge-type-settings';
+import { FILE_DEFAULTS } from '../../config/file-settings';
 
 import {
   GRAPH_DB_NAME,
@@ -35,25 +37,154 @@ const SENSITIVE_KEYS: Array<[string, string]> = [
 
 export async function generateWorkspaceName(): Promise<string> {
   const dateStr = new Date().toISOString().split('T')[0];
+  const slug = await readAnchorSlug();
+  return slug ? `graph-${slug}-${dateStr}` : `graph-${dateStr}`;
+}
 
+/**
+ * The anchor node's title as a filename-safe slug, or null when there is no
+ * anchor, no title, or the database cannot be read.
+ */
+async function readAnchorSlug(): Promise<string | null> {
   try {
     const db = new Dexie(GRAPH_DB_NAME);
     db.version(GRAPH_DB_VERSION).stores(GRAPH_DB_SCHEMA);
 
     const nodes = await db.table('nodes').toArray();
     const anchor = nodes.find((node: { isAnchor?: boolean }) => node.isAnchor);
-    if (anchor?.title) {
-      const slug = anchor.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-      return `graph-${slug}-${dateStr}`;
-    }
-  } catch {
-    // Ignore DB errors and fall back to date-based name.
-  }
+    if (!anchor?.title) return null;
 
-  return `graph-${dateStr}`;
+    return sanitizeFileNamePrefix(anchor.title) || null;
+  } catch {
+    // Ignore DB errors — callers fall back to a date-based name.
+    return null;
+  }
+}
+
+// ============================================================================
+// EXPORT FILE NAMING
+// ============================================================================
+
+/**
+ * Exported files are named `<prefix>-<number>.<ext>`, with one counter shared
+ * by workspace saves and document exports so a folder listing sorts in the
+ * order things were written.
+ *
+ * Both halves live in the `file` settings domain, which means they travel
+ * inside the workspace file. The number is therefore the workspace's version
+ * count rather than this browser's export tally: leave a workspace, come back
+ * to it, and the sequence resumes where its last saved file left off.
+ */
+
+/** Long enough for a descriptive name, short enough to stay readable in a file listing. */
+const MAX_PREFIX_LENGTH = 60;
+
+/** Below this the number is two plain digits: `01`–`99`. */
+const PLAIN_NUMBER_LIMIT = 100;
+
+/** Below this the number is a letter plus two digits: `a00`–`z99`. */
+const LETTERED_NUMBER_LIMIT = 2700;
+
+/**
+ * Reduce free text to a filename-safe slug.
+ *
+ * Deliberately an allowlist, not a blocklist of bad characters: the result is
+ * assigned to an anchor's `download` attribute, where a path separator, a
+ * control character or a leading dot would be the app's problem and not the
+ * user's typo.
+ */
+export function sanitizeFileNamePrefix(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '-')
+    .slice(0, MAX_PREFIX_LENGTH)
+    .replace(/^[-_]+|[-_]+$/g, '');
+}
+
+/**
+ * Render a counter value as a sortable fixed-width token.
+ *
+ * `01`–`99`, then `a00`–`z99`, because `'9' < 'a'` in every byte ordering a
+ * file manager uses — so the names keep sorting into export order well past
+ * the point where two digits run out.
+ *
+ * Past `z99` there is no continuation that still sorts correctly (`2700` sorts
+ * before `z99`, `zz00` before `z99` fails the next time), so the number is
+ * emitted plainly and sort order degrades. That is 2699 saved versions of a
+ * single workspace; the counter is user-resettable long before then.
+ */
+export function formatExportNumber(value: number): string {
+  const number = Math.max(1, Math.floor(value));
+  if (number < PLAIN_NUMBER_LIMIT) return String(number).padStart(2, '0');
+  if (number >= LETTERED_NUMBER_LIMIT) return String(number);
+
+  const letter = String.fromCharCode('a'.charCodeAt(0) - 1 + Math.floor(number / PLAIN_NUMBER_LIMIT));
+  return `${letter}${String(number % PLAIN_NUMBER_LIMIT).padStart(2, '0')}`;
+}
+
+/**
+ * Reserve and return the base name for a file about to be written — no
+ * extension, because the same name serves `.json` and `.md`.
+ *
+ * Reserving is a side effect: the counter advances, so callers must invoke this
+ * only once the file is certain to be produced, after every abort point.
+ *
+ * A workspace with no prefix yet acquires one here, derived from its anchor
+ * node and persisted, which is what makes the naming stable from the first save
+ * onward without asking the user to configure anything.
+ */
+export async function claimExportBaseName(): Promise<string> {
+  const stored = sanitizeFileNamePrefix(getSetting('file.namePrefix'));
+  const prefix = stored || `kg-${(await readAnchorSlug()) ?? new Date().toISOString().split('T')[0]}`;
+  const number = readFileNumber();
+
+  setSetting('file.namePrefix', prefix);
+  setSetting('file.nextNumber', number + 1);
+
+  return `${prefix}-${formatExportNumber(number)}`;
+}
+
+/**
+ * Drop the current file identity so the next save names itself afresh.
+ *
+ * Called wherever a genuinely different graph replaces the open one while
+ * settings survive — otherwise the new graph would inherit the old one's name
+ * and keep counting, producing backups that claim to be versions of something
+ * they are not.
+ */
+export function resetFileNaming(): void {
+  setSetting('file.namePrefix', FILE_DEFAULTS.namePrefix);
+  setSetting('file.nextNumber', FILE_DEFAULTS.nextNumber);
+}
+
+/**
+ * Take the file identity carried by an imported workspace.
+ *
+ * Written explicitly rather than left to `importSettings()` because that
+ * function returns early on an empty settings block, which would leave the
+ * previous workspace's prefix in place — the imported graph would then be saved
+ * under a name belonging to a different graph. Absent or malformed values reset
+ * to defaults, so such a file simply names itself on its first save.
+ */
+export function adoptImportedFileNaming(settings: Record<string, unknown>): void {
+  const incoming = (settings.file ?? {}) as Record<string, unknown>;
+  const prefix = typeof incoming.namePrefix === 'string'
+    ? sanitizeFileNamePrefix(incoming.namePrefix)
+    : FILE_DEFAULTS.namePrefix;
+
+  setSetting('file.namePrefix', prefix);
+  setSetting('file.nextNumber', normalizeFileNumber(incoming.nextNumber));
+}
+
+/** The stored counter, healed if a hand-edited or foreign file supplied nonsense. */
+function readFileNumber(): number {
+  return normalizeFileNumber(getSetting('file.nextNumber'));
+}
+
+function normalizeFileNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1
+    ? Math.floor(value)
+    : FILE_DEFAULTS.nextNumber;
 }
 
 export async function exportGraphData(): Promise<GraphData> {

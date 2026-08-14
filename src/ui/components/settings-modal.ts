@@ -5,54 +5,7 @@
 
 import { SETTING_CATEGORIES, getAllSettings, type SettingCategory, type SettingDefinition } from '../../config/setting-definitions';
 import { getSetting, setSetting, resetSetting, FACTORY_DEFAULTS, type SettingKey } from '../../config';
-import { getTheme } from '../../styles/themes';
-import type { ColorTheme } from '../../core/style-types';
 import '../../styles/settings-modal.css';
-
-// ============================================================================
-// CUSTOM THEME PLACEHOLDER RESOLUTION
-// ============================================================================
-
-/** Map from customTheme setting key suffix to a path into ColorTheme */
-const CUSTOM_THEME_PATHS: Record<string, (t: ColorTheme) => unknown> = {
-  canvasColor:                   t => t.canvas.background.color,
-  canvasVignetteStrength:        t => t.canvas.background.vignette?.strength ?? 0,
-  canvasVignetteSpread:          t => t.canvas.background.vignette?.spread ?? 50,
-  canvasVignetteBlur:            t => t.canvas.background.vignette?.blur ?? 200,
-  canvasVignetteColor:           t => t.canvas.background.vignette?.color ?? '#000000',
-  canvasVignetteColorOpacity:    t => t.canvas.background.vignette?.colorOpacity ?? 1,
-  nodeBackground:                t => t.node.background.color,
-  nodeOpacity:                   t => t.node.background.opacity ?? 1,
-  nodeTextColor:                 t => t.node.text.color,
-  nodeBorderColor:               t => t.node.border.color,
-  nodeBorderWidth:               t => t.node.border.width ?? 0,
-  centralBorderColor:            t => t.node.borderCentral.color,
-  selectedBorderColor:           t => t.node.borderSelected.color,
-  centralSelectedBorderColor:    t => t.node.borderCentralSelected.color,
-  shadowOffsetX:                 t => t.node.shadow.offsetX,
-  shadowOffsetY:                 t => t.node.shadow.offsetY,
-  shadowBlur:                    t => t.node.shadow.blur,
-  shadowOpacity:                 t => t.node.shadow.opacity,
-  shadowColor:                   t => t.node.shadow.color,
-  nodeVignetteStrength:          t => t.node.background.vignette?.strength ?? 0,
-  nodeVignetteSpread:            t => t.node.background.vignette?.spread ?? 50,
-  nodeVignetteBlur:              t => t.node.background.vignette?.blur ?? 200,
-  nodeVignetteColor:             t => t.node.background.vignette?.color ?? '#000000',
-  edgeColor:                     t => t.edge.line.color,
-  edgeArrowColor:                t => t.edge.arrow.color,
-};
-
-/** Get the base theme's value for a customTheme setting key */
-function getCustomThemePlaceholder(settingKey: string): string | undefined {
-  if (!settingKey.startsWith('customTheme.')) return undefined;
-  const suffix = settingKey.slice('customTheme.'.length);
-  if (suffix === 'baseTheme') return undefined;
-  const resolver = CUSTOM_THEME_PATHS[suffix];
-  if (!resolver) return undefined;
-  const baseId = getSetting('customTheme.baseTheme' as SettingKey) as string;
-  const base = getTheme(baseId);
-  return String(resolver(base));
-}
 
 // ============================================================================
 // SETTINGS MODAL
@@ -420,19 +373,13 @@ export class SettingsModal {
 
     switch (setting.type) {
       case 'number': {
-        const isCustomTheme = setting.key.startsWith('customTheme.');
         const input = document.createElement('input');
         input.type = 'number';
         input.className = 'settings-input-number';
-        // Custom theme: empty string = inherit, show empty input
-        input.value = (isCustomTheme && currentValue === '') ? '' : String(currentValue);
+        input.value = String(currentValue);
         if (setting.min !== undefined) input.min = String(setting.min);
         if (setting.max !== undefined) input.max = String(setting.max);
         if (setting.step !== undefined) input.step = String(setting.step);
-
-        // Placeholder from base theme for custom theme settings
-        const numPlaceholder = getCustomThemePlaceholder(setting.key);
-        if (numPlaceholder) input.placeholder = numPlaceholder;
 
         // Range slider when min/max are defined
         if (setting.min !== undefined && setting.max !== undefined) {
@@ -442,28 +389,19 @@ export class SettingsModal {
           range.min = String(setting.min);
           range.max = String(setting.max);
           range.step = String(setting.step ?? 1);
-          // When empty (inherit), position slider at base theme value
-          range.value = (isCustomTheme && currentValue === '') ? (numPlaceholder ?? String(setting.min)) : String(currentValue);
+          range.value = String(currentValue);
           range.addEventListener('input', () => {
             input.value = range.value;
-            this.#pendingChanges.set(setting.key, isCustomTheme ? range.value : Number(range.value));
+            this.#pendingChanges.set(setting.key, Number(range.value));
           });
           input.addEventListener('change', () => {
-            if (isCustomTheme && input.value === '') {
-              this.#pendingChanges.set(setting.key, '');
-            } else {
-              range.value = input.value;
-              this.#pendingChanges.set(setting.key, isCustomTheme ? input.value : Number(input.value));
-            }
+            range.value = input.value;
+            this.#pendingChanges.set(setting.key, Number(input.value));
           });
           container.appendChild(range);
         } else {
           input.addEventListener('change', () => {
-            if (isCustomTheme && input.value === '') {
-              this.#pendingChanges.set(setting.key, '');
-            } else {
-              this.#pendingChanges.set(setting.key, Number(input.value));
-            }
+            this.#pendingChanges.set(setting.key, Number(input.value));
           });
         }
         container.appendChild(input);
@@ -504,10 +442,6 @@ export class SettingsModal {
         input.type = 'text';
         input.className = 'settings-input-text';
         input.value = String(currentValue);
-
-        // Placeholder from base theme for custom theme settings
-        const strPlaceholder = getCustomThemePlaceholder(setting.key);
-        if (strPlaceholder) input.placeholder = strPlaceholder;
 
         input.addEventListener('change', () => {
           this.#pendingChanges.set(setting.key, input.value);

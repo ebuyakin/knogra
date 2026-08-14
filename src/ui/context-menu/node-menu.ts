@@ -8,7 +8,7 @@ import type { NodeId } from '../../core/main-types';
 import type { MenuItem, MenuPosition } from './menu-renderer';
 import type { MenuDependencies, StyleClipboard } from './menu-context';
 import { buildArrangeMenu } from './menu-context';
-import { openNodeEditor } from './editor-openers';
+import { openNodeEditor } from '../components/editor-openers';
 import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
 

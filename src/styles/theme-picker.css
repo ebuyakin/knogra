@@ -1,0 +1,299 @@
+/**
+ * Theme Picker Modal Styles
+ * Two columns: theme list on the left, read-only parameter inspector on the right.
+ */
+
+.theme-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.theme-picker-modal {
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 8px;
+  width: 760px;
+  max-width: calc(100vw - 40px);
+  /* Fixed height so the modal keeps its size across tabs — the inspector pane
+     scrolls instead of the dialog growing and shrinking under the cursor. */
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary, #e6edf3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+}
+
+.theme-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+  cursor: move;
+}
+
+.theme-picker-header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #e6edf3);
+}
+
+.theme-picker-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #8b949e);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.theme-picker-close-btn:hover {
+  background: var(--bg-tertiary, #1c2128);
+  color: var(--text-primary, #e6edf3);
+}
+
+/* Body — two columns */
+.theme-picker-body {
+  display: flex;
+  gap: 20px;
+  padding: 16px 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Left column — theme list */
+.theme-picker-list {
+  flex: 0 0 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.theme-picker-list label {
+  font-size: 12px;
+  color: var(--text-secondary, #7d8590);
+}
+
+/* Rendered as a list box (`size` is set in theme-picker.ts), so this styles an
+   inline scrolling list rather than a closed control. */
+.theme-picker-list select {
+  flex: 1;
+  min-height: 0;
+  padding: 4px;
+  background: var(--bg-tertiary, #1c2128);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+  cursor: pointer;
+  overflow-y: auto;
+}
+
+.theme-picker-list select:focus {
+  outline: none;
+  border-color: var(--accent-blue, #58a6ff);
+}
+
+.theme-picker-list select option {
+  padding: 5px 8px;
+  border-radius: 3px;
+}
+
+/* One selection colour, focused or not. Chrome paints the system accent over
+   the checked option while the list has focus and a muted grey when it loses
+   focus — two different highlights for one state. A plain `background-color` is
+   overridden by that UA style; a `background-image` is not, so the gradient
+   below is what actually pins the fill. `color` is overridden the same way and
+   has no such escape, so the text is pinned with `-webkit-text-fill-color`,
+   which wins over the UA `color`. */
+.theme-picker-list select option:checked {
+  background: var(--border-primary, #30363d)
+    linear-gradient(0deg, var(--border-primary, #30363d) 0%, var(--border-primary, #30363d) 100%);
+  color: var(--text-primary, #e6edf3);
+  -webkit-text-fill-color: var(--text-primary, #e6edf3);
+}
+
+/* Right column — tabs + inspector */
+.theme-picker-details {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.theme-picker-preview {
+  height: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-picker-preview svg {
+  display: block;
+  max-width: 100%;
+}
+
+.theme-picker-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+}
+
+.theme-picker-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary, #7d8590);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.theme-picker-tab:hover {
+  color: var(--text-primary, #e6edf3);
+}
+
+.theme-picker-tab.active {
+  color: var(--text-primary, #e6edf3);
+  border-bottom-color: var(--accent-blue, #58a6ff);
+}
+
+.theme-picker-pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Reserve the scrollbar's width whether or not it is showing, so switching
+     between a tab that scrolls and one that doesn't cannot shift the columns. */
+  scrollbar-gutter: stable;
+  padding-right: 6px;
+}
+
+/* Inspector rows */
+.detail-group {
+  margin-bottom: 16px;
+}
+
+.detail-group-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary, #e6edf3);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+}
+
+.detail-group-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 28px;
+  align-items: start;
+}
+
+.detail-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.detail-label {
+  font-size: 12px;
+  color: var(--text-secondary, #7d8590);
+}
+
+.detail-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-swatch {
+  width: 32px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid var(--border-primary, #30363d);
+  flex: 0 0 auto;
+}
+
+.detail-text {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-primary, #e6edf3);
+}
+
+/* Footer */
+.theme-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 20px 16px;
+  border-top: 1px solid var(--border-primary, #30363d);
+}
+
+.theme-picker-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.theme-picker-btn[data-tooltip] {
+  position: relative;
+}
+
+.theme-picker-btn[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--bg-tertiary, #1c2128);
+  color: var(--text-primary, #e6edf3);
+  border: 1px solid var(--border-primary, #30363d);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.theme-picker-btn-secondary {
+  background: transparent;
+  border-color: var(--border-primary, #30363d);
+  color: var(--text-primary, #e6edf3);
+}
+
+.theme-picker-btn-secondary:hover {
+  background: var(--bg-tertiary, #1c2128);
+}

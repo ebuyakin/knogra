@@ -1,7 +1,7 @@
 # Node Design System
 
 > **Status:** Current  
-> **Last reviewed:** 2026-06-14  
+> **Last reviewed:** 2026-08-14  
 > **Authority:** Canonical source for built-in node designs and node-level visual parameters.  
 > **Related:** [Documentation map](README.md), [Theme architecture](theme-architecture.md), [Central node styling refactor](central-node-styling-refactor.md)
 
@@ -167,12 +167,13 @@ Each scene stores per-node: position, scale, designId, designParams.
 
 ## Known Issues & Cleanup Items
 
-### Dead / Unwired Fields
+### Unwired / Reserved Fields
 
-| Field | Location | Issue | Fix |
+| Field | Location | Status | Disposition |
 |---|---|---|---|
-| `textSecondary` | Theme `NodeStyle` | Defined in every theme, never read by any design | Wire or remove |
-| `accent` | Theme `NodeStyle` | Defined in every theme, never read by any design | Wire or remove |
+| `textSecondary` | Theme `NodeStyle` | Defined in every theme, read by no design | **Reserved.** A second text colour inside a node (subtitles, annotations) is wanted for future designs — keep it defined. Do not delete as dead. |
+| `accent` | Theme `NodeStyle` | Read by `resolveEdgeStyleSlot()` as the `edge-style-2` fallback colour — but all 16 palettes define their slots explicitly, so the branch never runs in practice | Keep: live code on a currently unreachable path |
+| `decoration.background` / `.text` | Theme `ColorTheme` | Defined in every theme, read by no code. Intended for the scene-level decorations in `knogra-vision.md` (icons/anchors); that idea landed as background images (`imageDefaults`) and anchors (CSS chrome) instead | Undecided — implement or remove |
 | `ColorOverrides.border` | `style-types.ts` | Exists in type, no design reads it | Wire to Cytoscape border output |
 
 ### Inconsistencies

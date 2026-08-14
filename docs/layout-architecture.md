@@ -226,7 +226,7 @@ $$\text{minFit}_d = \frac{\sum_{n \text{ at depth } d}\big(2\cdot\text{footprint
 
 `siblingGap` is the additive per-node padding inside the sum. It is a *minimum* gap contribution, not an exact inter-node spacing.
 
-`footprintScale` (setting `autolayout.footprintScale`, default 1) multiplies the reserved footprint (`2·footprintRadius`) inside the sum. The half-diagonal `footprintRadius` over-reserves space — nodes are axis-aligned rectangles, not the circumscribed disks it measures — so values `<1` pack rings and siblings tighter and `>1` looser. It mirrors the Mermaid importer's *Density* knob (`storage/mermaid/layout/`). A pure-multiplier lever was chosen over a geometrically exact tangential footprint to give the author a single, predictable tightness control.
+`footprintScale` (setting `autolayout.footprintScale`, default 1) multiplies the reserved footprint (`2·footprintRadius`) inside the sum. The half-diagonal `footprintRadius` over-reserves space — nodes are axis-aligned rectangles, not the circumscribed disks it measures — so values `<1` pack rings and siblings tighter and `>1` looser. It mirrors the Mermaid importer's *Density* knob (`storage/markdown/layout/`). A pure-multiplier lever was chosen over a geometrically exact tangential footprint to give the author a single, predictable tightness control.
 
 ### 4.4 Ring placement — spread inner rings inside the outer radius
 
@@ -316,4 +316,4 @@ It reuses **Animation** (`NodePositionAnimator` with a supplied `ViewportTarget`
 - **More algorithms:** equal-sector radial, grid, layered/flow, force-directed — each a `SceneLayout` behind the registry.
 - **The Arrange family:** the selection-scoped tools named in §1.1 (Distribute, Circle, Tighten / Spread), built on a tool registry mirroring §3. To be specified in its own document when the family lands.
 - **Sub-strategy composition:** if radial variants proliferate, factor angle-allocation / ring-radius / placement into named, swappable policies. Not before real demand.
-- **Mermaid convergence:** the importer's layouts (`storage/mermaid/layout/`) are a **separate lineage** — they estimate footprints from title text before nodes exist, whereas auto-layout uses real rendered footprints. They are kept parallel on purpose; extract a shared geometry core only if they demonstrably converge.
+- **Mermaid convergence:** the importer's layouts (`storage/markdown/layout/`) are a **separate lineage** — they estimate footprints from title text before nodes exist, whereas auto-layout uses real rendered footprints. They are kept parallel on purpose; extract a shared geometry core only if they demonstrably converge.

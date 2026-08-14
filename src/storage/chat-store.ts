@@ -12,8 +12,11 @@ const DB_VERSION = 1;
 
 /**
  * Generate unique message ID
+ *
+ * Exported so writers that compose a whole conversation before saving it —
+ * the Markdown update applier — mint ids in the same format as `addMessage`.
  */
-function generateMessageId(): MessageId {
+export function generateMessageId(): MessageId {
   return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 

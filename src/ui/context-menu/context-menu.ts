@@ -10,10 +10,11 @@ import type { NodeId } from '../../core/main-types';
 import type { MenuDependencies } from './menu-context';
 import { StyleClipboard } from './menu-context';
 import { MenuRenderer } from './menu-renderer';
+import type { MenuItem, MenuPosition } from './menu-renderer';
 import { buildNodeMenu } from './node-menu';
 import { buildEdgeMenu } from './edge-menu';
 import { buildCanvasMenu } from './canvas-menu';
-import { openNodeEditor, openEdgeEditor } from './editor-openers';
+import { openNodeEditor, openEdgeEditor } from '../components/editor-openers';
 import { isEditMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
 
@@ -24,6 +25,7 @@ export class ContextMenu {
   #deps: MenuDependencies;
   #renderer: MenuRenderer;
   #clipboard = new StyleClipboard();
+  #pendingShow: number | null = null;
 
   constructor(deps: MenuDependencies) {
     this.#deps = deps;
@@ -42,7 +44,7 @@ export class ContextMenu {
       event.preventDefault();
       const nodeId = event.target.id() as NodeId;
       const position = event.renderedPosition;
-      this.#renderer.show(buildNodeMenu(this.#deps, this.#clipboard, nodeId, position), position);
+      this.#showWhenActive(buildNodeMenu(this.#deps, this.#clipboard, nodeId, position), position);
     });
 
     // Double-click on node → edit or navigate based on setting
@@ -60,7 +62,7 @@ export class ContextMenu {
       event.preventDefault();
       const edgeId = event.target.id();
       const position = event.renderedPosition;
-      this.#renderer.show(buildEdgeMenu(this.#deps, this.#clipboard, edgeId), position);
+      this.#showWhenActive(buildEdgeMenu(this.#deps, this.#clipboard, edgeId), position);
     });
 
     // Double-click on edge → open editor
@@ -83,7 +85,7 @@ export class ContextMenu {
       if (event.target === cy) {
         event.preventDefault();
         const position = event.renderedPosition;
-        this.#renderer.show(buildCanvasMenu(this.#deps, position), position);
+        this.#showWhenActive(buildCanvasMenu(this.#deps, position), position);
       }
     });
 
@@ -116,9 +118,42 @@ export class ContextMenu {
   }
 
   /**
+   * Show a menu only while the window is active.
+   *
+   * On macOS a right-click into an inactive window does not activate it. The
+   * menu would render but receive no hover events, and would swallow its first
+   * click as the activation click. Withholding it keeps the screen honest, and
+   * — because the menu can then only exist in a focused window — guarantees the
+   * `blur` handler below actually fires when the user switches away.
+   *
+   * The retry covers platforms where a click *does* activate the window:
+   * activation can land after this handler runs, so a single synchronous test
+   * would wrongly suppress the menu there.
+   */
+  #showWhenActive(items: MenuItem[], position: MenuPosition): void {
+    this.#cancelPendingShow();
+    if (document.hasFocus()) {
+      this.#renderer.show(items, position);
+      return;
+    }
+    this.#pendingShow = requestAnimationFrame(() => {
+      this.#pendingShow = null;
+      if (document.hasFocus()) this.#renderer.show(items, position);
+    });
+  }
+
+  #cancelPendingShow(): void {
+    if (this.#pendingShow !== null) {
+      cancelAnimationFrame(this.#pendingShow);
+      this.#pendingShow = null;
+    }
+  }
+
+  /**
    * Clean up
    */
   destroy(): void {
+    this.#cancelPendingShow();
     this.#renderer.close();
     this.#deps.cy.off('cxttap');
   }

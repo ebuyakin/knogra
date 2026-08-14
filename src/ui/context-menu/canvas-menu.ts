@@ -11,7 +11,7 @@ import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
 import { exportWorkspace, showImportDialog, newWorkspace } from '../../storage/workspace';
-import { exportMermaidGraph, showImportMermaidDialog } from '../../storage/mermaid';
+import { exportDocument, showBuildDocumentDialog, showUpdateDocumentDialog } from '../../storage/markdown';
 import { SettingsModal } from '../components/settings-modal';
 
 export function buildCanvasMenu(deps: MenuDependencies, position: MenuPosition): MenuItem[] {
@@ -66,12 +66,22 @@ export function buildCanvasMenu(deps: MenuDependencies, position: MenuPosition):
           action: () => { exportWorkspace(); }
         },
         {
-          label: 'Mermaid import',
-          action: () => { showImportMermaidDialog(); }
-        },
-        {
-          label: 'Mermaid export',
-          action: () => { exportMermaidGraph(); }
+          label: 'Markdown',
+          children: [
+            {
+              label: 'Import…',
+              action: () => { showBuildDocumentDialog(); }
+            },
+            {
+              label: 'Update…',
+              enabled: editMode,
+              action: () => { showUpdateDocumentDialog(); }
+            },
+            {
+              label: 'Export…',
+              action: () => { exportDocument(); }
+            }
+          ]
         }
       ]
     },
@@ -198,12 +208,12 @@ function buildSceneDesignMenu(deps: MenuDependencies, editMode: boolean): MenuIt
         }
       },
       {
-        label: 'Edit theme',
+        label: 'Scene theme',
         enabled: editMode,
         action: async () => {
           const currentThemeId = deps.features.scene.getThemeId();
           const containerRect = deps.container.getBoundingClientRect();
-          const result = await deps.themeEditor.show(currentThemeId, containerRect);
+          const result = await deps.themePicker.show(currentThemeId, containerRect);
           if (!result) return;
 
           if (result.scope === 'all') {

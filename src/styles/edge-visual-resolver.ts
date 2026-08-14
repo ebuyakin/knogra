@@ -87,7 +87,7 @@ export function resolveEdgeTypeStyle(edgeType: EdgeType | undefined, themeId: st
   if (!edgeType) return resolveBaseEdgeStyle(themeId);
 
   const theme = getTheme(themeId);
-  const thematicStyle = getEdgeStyleSlot(theme, edgeType.thematicStyleSlotId);
+  const thematicStyle = resolveEdgeStyleSlot(theme, edgeType.thematicStyleSlotId);
   return withEdgeUnderlayColor({
     ...edgeStyleToCytoscape(thematicStyle),
     ...(edgeType.styleOverride ?? {})
@@ -170,7 +170,12 @@ function withEdgeUnderlayColor(style: Record<string, unknown>): Record<string, u
   return { ...style, 'underlay-color': lineColor };
 }
 
-function getEdgeStyleSlot(theme: ColorTheme, slotId: EdgeStyleSlotId): EdgeStyle {
+/**
+ * Resolve one of the theme's three preconfigured edge styles. Themes normally
+ * define all three explicitly; the branches below synthesise a slot from the
+ * base edge style for a theme that omits one.
+ */
+export function resolveEdgeStyleSlot(theme: ColorTheme, slotId: EdgeStyleSlotId): EdgeStyle {
   const explicitSlot = theme.edgeStyleSlots?.[slotId];
   if (explicitSlot) return explicitSlot;
 

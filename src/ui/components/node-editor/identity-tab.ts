@@ -24,6 +24,7 @@ export function createIdentityTab(deps: IdentityTabDeps): { element: HTMLElement
   const { x: viewportX, y: viewportY } = deps.context.viewportPosition;
 
   addRow(grid, 'Node ID', deps.nodeId);
+  addRow(grid, 'Document ID', externalId(deps.node));
   addRow(grid, 'Scene ID', deps.context.sceneId);
   addRow(grid, 'Theme', deps.context.themeId);
   addRow(grid, 'Model position', `${Math.round(modelX)}, ${Math.round(modelY)}`);
@@ -42,6 +43,16 @@ function addRow(grid: HTMLElement, label: string, value: string): void {
   const valueEl = text('div', value);
   valueEl.className = 'node-editor-identity-value';
   grid.append(labelEl, valueEl);
+}
+
+/**
+ * The id this node carries in Markdown documents (`properties.externalId`).
+ * Hidden from the Advanced tab's JSON editor because it is app-owned, so this
+ * is the only place a user can see what a document entry refers to.
+ */
+function externalId(node: Node): string {
+  const value = node.properties?.externalId;
+  return typeof value === 'string' && value.length > 0 ? value : '—';
 }
 
 function formatStamp(stamp: Date | number | string | undefined): string {

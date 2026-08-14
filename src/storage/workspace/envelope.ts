@@ -109,11 +109,6 @@ export function serializeEnvelope(envelope: WorkspaceEnvelope): string {
   return JSON.stringify(envelope);
 }
 
-/** `<workspace-name>-knogra.json` — one extension, so allowlists and MIME sniffers see `.json`. */
-export function workspaceFileName(name: string): string {
-  return `${name}-knogra.json`;
-}
-
 // ============================================================================
 // PARSE
 // ============================================================================

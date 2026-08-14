@@ -104,7 +104,12 @@ export interface DesignTabValues {
 }
 
 export interface AdvancedTabValues {
-  /** Node properties excluding `equation` and `comment`, which the Content tab owns. */
+  /**
+   * Node properties excluding `equation` and `comment`, which the Content tab
+   * owns and `#composeProperties` restores. System properties
+   * (`config/node-properties.ts`) are never displayed but *are* present here:
+   * the Advanced tab carries them through unchanged, since no other tab would.
+   */
   properties: Record<string, unknown>;
   designParams: Record<string, unknown>;
 }

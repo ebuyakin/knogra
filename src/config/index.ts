@@ -14,6 +14,7 @@ import { CUSTOM_THEME_DEFAULTS } from './custom-theme-settings';
 import { INTERACTION_DEFAULTS } from './interaction-settings';
 import { AUTOLAYOUT_DEFAULTS } from './autolayout-settings';
 import { ARRANGE_DEFAULTS } from './arrange-settings';
+import { FILE_DEFAULTS } from './file-settings';
 import { SETTINGS_KEY } from './storage-config';
 
 /**
@@ -37,6 +38,7 @@ const ALL_DEFAULTS = {
   interaction: INTERACTION_DEFAULTS,
   autolayout: AUTOLAYOUT_DEFAULTS,
   arrange: ARRANGE_DEFAULTS,
+  file: FILE_DEFAULTS,
 };
 
 export { ALL_DEFAULTS as FACTORY_DEFAULTS };
@@ -57,6 +59,7 @@ type SettingValue<K extends SettingKey> =
   K extends `interaction.${infer S}` ? S extends keyof typeof INTERACTION_DEFAULTS ? typeof INTERACTION_DEFAULTS[S] : never :
   K extends `autolayout.${infer S}` ? S extends keyof typeof AUTOLAYOUT_DEFAULTS ? typeof AUTOLAYOUT_DEFAULTS[S] : never :
   K extends `arrange.${infer S}` ? S extends keyof typeof ARRANGE_DEFAULTS ? typeof ARRANGE_DEFAULTS[S] : never :
+  K extends `file.${infer S}` ? S extends keyof typeof FILE_DEFAULTS ? typeof FILE_DEFAULTS[S] : never :
   never;
 
 /**
@@ -72,7 +75,8 @@ export type SettingKey =
   | `customTheme.${keyof typeof CUSTOM_THEME_DEFAULTS}`
   | `interaction.${keyof typeof INTERACTION_DEFAULTS}`
   | `autolayout.${keyof typeof AUTOLAYOUT_DEFAULTS}`
-  | `arrange.${keyof typeof ARRANGE_DEFAULTS}`;
+  | `arrange.${keyof typeof ARRANGE_DEFAULTS}`
+  | `file.${keyof typeof FILE_DEFAULTS}`;
 
 /**
  * Get all settings from localStorage (merged with defaults)
@@ -96,6 +100,7 @@ function getAllSettings(): SettingsObject {
       interaction: { ...ALL_DEFAULTS.interaction, ...parsed.interaction },
       autolayout: { ...ALL_DEFAULTS.autolayout, ...parsed.autolayout },
       arrange: { ...ALL_DEFAULTS.arrange, ...parsed.arrange },
+      file: { ...ALL_DEFAULTS.file, ...parsed.file },
     };
   } catch {
     return ALL_DEFAULTS;
@@ -178,6 +183,7 @@ export function importSettings(settings: Partial<SettingsObject>): void {
     interaction: { ...ALL_DEFAULTS.interaction, ...settings.interaction },
     autolayout: { ...ALL_DEFAULTS.autolayout, ...settings.autolayout },
     arrange: { ...ALL_DEFAULTS.arrange, ...settings.arrange },
+    file: { ...ALL_DEFAULTS.file, ...settings.file },
   };
   saveAllSettings(merged);
 }
