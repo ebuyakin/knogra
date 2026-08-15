@@ -698,8 +698,14 @@ export class Transition {
     // re-included later, and accumulate across transitions. Runs after ghost
     // cleanup and FoldStateHandler, so only real, target-scene rules remain.
     const prunedStylesheet = StyleGenerator.pruneStaleEdgeRules(stylesheet, targetScene);
+    // Same for per-node rules: the morph adds rules for arriving nodes but never
+    // removes them for departed ones, so they accumulate across a traversal —
+    // each one holding an encoded SVG payload that is re-parsed on every later
+    // stylesheet update. Folded nodes stay in `scene.nodes`, so their rules
+    // survive; central/selected rules are not per-node and are filtered below.
+    const nodePrunedStylesheet = StyleGenerator.pruneStaleNodeRules(prunedStylesheet, targetScene);
     // Remove old central/selected rules
-    const filteredStylesheet = prunedStylesheet.filter(
+    const filteredStylesheet = nodePrunedStylesheet.filter(
       (r: { selector: string }) =>
         r.selector !== 'node[?centralNode]' &&
         r.selector !== 'node:selected' &&

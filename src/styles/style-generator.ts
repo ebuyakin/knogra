@@ -464,11 +464,40 @@ export class StyleGenerator {
     });
   }
 
+  /**
+   * Drop every per-node rule that is not backed by a node in the given scene.
+   * The node counterpart of `pruneStaleEdgeRules`, and needed for the same
+   * reason: morph transitions add rules for arriving nodes incrementally and
+   * never remove them for departed ones, so the rules accumulate across a
+   * traversal until the next `openScene` rebuilds the stylesheet from scratch.
+   * Each rule carries an encoded SVG payload that is re-parsed on every later
+   * `fromJson().update()`, so the cost is paid on every fold, scale, and
+   * arrange for the rest of the session.
+   *
+   * Removal-only: rule order is preserved, rules for folded nodes survive
+   * because folded nodes remain in `scene.nodes`, and the central/selected
+   * rules are untouched because their selectors are not per-node.
+   */
+  static pruneStaleNodeRules(stylesheet: any[], scene: Scene): any[] {
+    return stylesheet.filter(rule => {
+      const nodeId = this.#nodeIdFromPerNodeSelector(rule.selector);
+      if (!nodeId) return true; // not a per-node rule
+      return nodeId in scene.nodes;
+    });
+  }
+
   /** Parse the edge ID out of a per-edge rule selector (`edge[id = "..."]`), or null. */
   static #edgeIdFromPerEdgeSelector(selector: unknown): EdgeId | null {
     if (typeof selector !== 'string') return null;
     const match = /^edge\[id = "(.+)"\]$/.exec(selector);
     return match ? (match[1] as EdgeId) : null;
+  }
+
+  /** Parse the node ID out of a per-node rule selector (`node[id = "..."]`), or null. */
+  static #nodeIdFromPerNodeSelector(selector: unknown): NodeId | null {
+    if (typeof selector !== 'string') return null;
+    const match = /^node\[id = "(.+)"\]$/.exec(selector);
+    return match ? (match[1] as NodeId) : null;
   }
 
 }
