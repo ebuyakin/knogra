@@ -167,7 +167,7 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   padding: 12px 20px;
   border-top: 1px solid var(--border-primary, #30363d);
@@ -186,8 +186,10 @@
   font-size: 13px;
 }
 
+/* `not-allowed`, not `wait`: the control is unavailable, not busy. A spinner
+   reads as "the app is working" and leaves the user waiting for nothing. */
 .node-editor-btn:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.7;
 }
 
@@ -312,6 +314,12 @@
   min-width: 0;
 }
 
+/* A knob its design gates on a checkbox: dimmed so the row reads as inert
+   rather than broken. The input is disabled in the tab, not here. */
+.node-editor-layout-cell-disabled {
+  opacity: 0.45;
+}
+
 .node-editor-layout-controls .node-editor-inline-label {
   min-width: 86px;
   text-align: left;
@@ -404,6 +412,124 @@
 }
 
 /* =============================================================================
+   IMAGE TAB
+
+   Two stacked panels: the stage (preview + control column) above, the source
+   box below.
+
+   Unlike the other tabs this panel does not scroll: it takes the body's height
+   and distributes it. The stage is intrinsic, the source box takes the slack.
+   Nothing here is a height that has to be re-derived when a control is added —
+   the only fixed number is the control column's width.
+   ============================================================================= */
+
+.node-editor-panel.node-editor-image-panel.active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* The control column is the stage's only height source — it holds the full set
+   of controls at their natural size, and the preview stretches to match it. */
+.node-editor-image-stage {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.node-editor-image-preview {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background-color: var(--bg-primary, #0d1117);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 6px;
+  color: var(--text-secondary, #7d8590);
+  font-size: 12px;
+}
+
+/* Taken out of flow so a tall pictogram cannot grow the stage: an SVG's
+   intrinsic height would otherwise set the flex line's cross size, and a
+   percentage cap does not apply while that height is still indefinite. Out of
+   flow, the preview contributes nothing and the control column decides. */
+.node-editor-image-preview-img {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
+  object-fit: contain;
+}
+
+/* Over the image rather than beside it: the stage height belongs to the
+   preview, and a row below would take some of it back. */
+.node-editor-image-colour-badge {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.55);
+  color: var(--text-secondary, #7d8590);
+  font-size: 10px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* Wide enough for the longest label at the standard button size. The gap is
+   tight because the controls set the stage height, and the stage height is
+   what the preview gets to keep. */
+.node-editor-image-controls {
+  flex: 0 0 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node-editor-image-panel .node-editor-caption {
+  flex: 0 0 auto;
+}
+
+/* RESERVED — suspended for this version. The SVG source box was removed from the
+   Image tab as too technical for most users; `accept()` and the sanitizer path
+   behind it are intact, so restoring the control is a UI change only.
+
+   Absorbs the leftover height, and gives it to the textarea. No bottom margin:
+   the error line below carries the separation, and it is always present. */
+.node-editor-image-source {
+  flex: 1;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+
+/* Sized by the panel, so the drag handle would only fight it. */
+.node-editor-image-source .node-editor-textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+}
+
+/* One line is reserved so a rejection does not resize the box under the cursor;
+   a longer message scrolls rather than eating the box. */
+.node-editor-image-error {
+  flex: 0 0 auto;
+  margin: 6px 0 0;
+  color: var(--danger, #f85149);
+  font-size: 12px;
+  line-height: 1.35;
+  min-height: 16px;
+  max-height: 48px;
+  overflow-y: auto;
+}
+
+/* =============================================================================
    EQUATION GENERATION DIALOG
    ============================================================================= */
 
@@ -450,4 +576,274 @@
   justify-content: flex-end;
   gap: 12px;
   margin-top: 10px;
+}
+
+/* =============================================================================
+   IMAGE GENERATION DIALOG
+
+   Same overlay technique as the equation dialog — absolutely positioned inside
+   the editor modal and anchored to the graph viewport. Sized and placed over
+   the editor frame in script, so it covers the editor rather than stacking a
+   third visible frame on top of it. The width below is the fallback for when
+   the editor's rect cannot be measured.
+   ============================================================================= */
+
+.node-editor-image-overlay {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.45);
+}
+
+.node-editor-image-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100% - 32px));
+  padding: 18px;
+  background-color: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+}
+
+/* Same weight and size as the editor's own title bar. */
+.node-editor-image-dialog-title {
+  flex-shrink: 0;
+  margin: 0 0 14px;
+  font-size: var(--modal-header-font-size);
+  font-weight: 500;
+  color: var(--text-primary, #e6edf3);
+}
+
+/* The description field keeps its rows; only the result pane takes the slack. */
+.node-editor-image-dialog .node-editor-field {
+  flex-shrink: 0;
+}
+
+/* The revision transcript, and the only part of the dialog that scrolls. Its
+   height is pinned in script to whatever the description box first renders at,
+   so corrections accumulate inside it instead of pushing the preset row, the
+   preview and the footer down. `overflow-y` also opens a block formatting
+   context here, which is what keeps the last field's bottom margin inside the
+   measurement rather than collapsing out of it.
+
+   The padding matters: the scroll box is the clipping edge, so anything drawn
+   at a child's outer edge is sliced in half without it. */
+.node-editor-image-dialog-conversation {
+  flex-shrink: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+}
+
+/* Entries read as one transcript rather than as a stack of input boxes: a
+   border round each turn segments a pane whose whole point is to scroll as a
+   single column. The horizontal padding gives back exactly what the pane took,
+   so the text still lines up with the controls below it.
+
+   The focus ring goes with the border, and for the same reason. It is a second
+   box drawn round one entry, in an accent colour, inside a pane that is meant to
+   read as continuous text — and it is redundant here, since the open turn is
+   already the only one in the primary text colour and always the last. */
+.node-editor-image-dialog-conversation .node-editor-textarea {
+  padding-left: 4px;
+  padding-right: 4px;
+  background-color: transparent;
+  border-color: transparent;
+  outline: none;
+  /* Every message is the same fixed height, and stays that height. The pane is
+     measured to fit exactly two of them, so a box the user could drag taller
+     would make the second one overflow a container sized before the drag. */
+  resize: none;
+}
+
+/* One rule between turns, so it is clear where a message ends. Drawn on the
+   following entry rather than the preceding one, which keeps it off the bottom
+   of the transcript where there is nothing to separate. */
+.node-editor-image-dialog-conversation .node-editor-field + .node-editor-field {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary, #30363d);
+}
+
+/* A message already sent. Colour is the only difference from the open box, so
+   nothing shifts by a pixel when a turn settles. */
+.node-editor-image-dialog-sent .node-editor-textarea {
+  color: var(--text-secondary, #7d8590);
+  cursor: default;
+}
+
+/* Preset and size share one row as two label+control pairs. The gap between
+   pairs is wider than the gap inside one, so the pairing reads without a rule
+   or a box. */
+/* Groups sized to their content and spread by `space-between`: the first label
+   sits on the left edge, the last select on the right, and the leftover space
+   splits evenly between them. `gap` is the floor, for a narrow dialog where
+   there is nothing left to distribute. */
+.node-editor-image-dialog-row {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.node-editor-image-dialog-pair {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Natural width, so a caption never opens a gap in front of its own control.
+   The shared inline label reserves 100px for the design tab's long captions,
+   which here would do exactly that. */
+.node-editor-image-dialog-pair .node-editor-inline-label {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+/* One width for all three. `width` is set explicitly, not just `flex-basis`,
+   because the base select rule is `width: 100%` — inside a content-sized pair
+   that resolves against the control's own longest option, which is what made
+   the node-title dropdown wider than its neighbours. */
+.node-editor-image-dialog-pair .node-editor-select {
+  flex: 0 1 140px;
+  width: 140px;
+  min-width: 0;
+}
+
+/* One line reserved, not two: the gap this opened above the preview was the
+   largest dead space in the dialog, and it was there for a message that is
+   absent almost all of the time. A longer message grows the line and the preview
+   gives up the difference — a shift, but only at the moment there is something
+   to read. */
+.node-editor-image-dialog-message {
+  flex-shrink: 0;
+  min-height: 16px;
+  margin: 0;
+  color: var(--danger, #f85149);
+  font-size: 12px;
+  line-height: 1.35;
+  max-height: 64px;
+  overflow-y: auto;
+}
+
+/* Takes the slack, so Generate and Redraw sit in the same place either way. */
+.node-editor-image-dialog-result {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background-color: var(--bg-primary, #0d1117);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 6px;
+}
+
+.node-editor-image-dialog-preview {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.node-editor-image-dialog-hint {
+  color: var(--text-secondary, #7d8590);
+  font-size: 12px;
+}
+
+/* Raw SVG when the sanitizer refuses a result, or the composed prompt in dev:
+   both are long monospaced text that fills the same pane. */
+.node-editor-image-dialog-source {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+/* Buttons are the editor's standard size; the row wraps rather than clipping
+   when the dev-only prompt button and a result are on screen together. */
+.node-editor-image-dialog-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Without this the longest label wraps inside its button under pressure, and
+   that one button ends up taller than every other button in the editor. */
+.node-editor-image-dialog-footer .node-editor-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Holds the two groups apart without drawing a separator between them. */
+.node-editor-image-dialog-spacer {
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   RECOLOUR DIALOG
+   One row per colour in the image, then a preview of the mapping applied.
+   -------------------------------------------------------------------------- */
+
+.node-editor-recolour-rows {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.node-editor-recolour-row {
+  display: grid;
+  grid-template-columns: 24px 72px 16px 1fr 24px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Bordered, so a swatch whose colour matches the dialog background still reads
+   as a swatch. */
+.node-editor-recolour-swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+}
+
+.node-editor-recolour-hex {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary, #7d8590);
+}
+
+.node-editor-recolour-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+}
+
+/* Contained rather than stretched: an SVG carries its own intrinsic size, and
+   without a ceiling it renders at that size and escapes the box. */
+.node-editor-recolour-preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }

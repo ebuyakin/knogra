@@ -59,6 +59,9 @@
 | [theme-architecture.md](theme-architecture.md) | Current | Theme cascade, style generation, and scene theme behavior. |
 | [node-design-system.md](node-design-system.md) | Current | Built-in node designs and node-level visual parameters. |
 | [node-design-parameters.md](node-design-parameters.md) | Current | Cheat sheet of configurable JSON params for the default and equation/compact-equation node designs. |
+| [nodes-svg-images.md](nodes-svg-images.md) | Current | Hub of the three node-image documents, and canonical for the image as a stored artifact: the image record, the two image designs and their sizing, the sanitization trust boundary, the node editor's Image tab, interchange, settings, the file map (§14), and the decisions index (§13) covering all three. |
+| [node-image-presets.md](node-image-presets.md) | Current | Canonical for the preset record — what the knobs are, what values they take, localStorage storage and seeding, and the preset editor. Says what a value *is*; not what the model is told about it. Subordinate to [nodes-svg-images.md](nodes-svg-images.md). |
+| [node-image-generation.md](node-image-generation.md) | Current | Canonical for everything between "the user wants a picture" and "a raw SVG exists": the generation dialog, message structure, prompt composition, the colour and theme-token system, the correction conversation, and the provider call. Subordinate to [nodes-svg-images.md](nodes-svg-images.md). |
 | [background-design.md](background-design.md) | Current | Scene background canvas system and theme integration. |
 | [central-node-styling-refactor.md](central-node-styling-refactor.md) | Current with caveats | Current central-node styling contract; broad transition sequencing defers to [scene-transitions.md](scene-transitions.md). |
 | [node-styling-diagram.md](node-styling-diagram.md) | Current with caveats | Current styling principles and call-flow reference; some old diagram names are historical. |

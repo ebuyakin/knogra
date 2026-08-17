@@ -11,7 +11,7 @@
  * Types only, no runtime imports: this file and the palettes beside it are data.
  */
 
-import type { ColorTheme, EdgeStyle } from '../../core/style-types';
+import type { ColorTheme, EdgeStyle, ThemeImagePalette } from '../../core/style-types';
 
 // =============================================================================
 // PALETTE OVERRIDE SHAPE
@@ -26,8 +26,16 @@ type DeepPartial<T> = {
  *
  * No `name` — the display label comes from `THEME_MANIFEST` in config, so a
  * theme's label is stated once and cannot drift from the picker's copy of it.
+ *
+ * `imagePalette` is the one field a palette may **not** omit. Inheriting it
+ * would be silent — a theme would draw its images in another theme's colours
+ * and nobody would find out until someone generated one — so the compiler asks
+ * every palette for its own.
  */
-export type BuiltInTheme = DeepPartial<ColorTheme> & { id: string };
+export type BuiltInTheme = DeepPartial<ColorTheme> & {
+  id: string;
+  imagePalette: ThemeImagePalette;
+};
 
 // =============================================================================
 // EDGE STYLE HELPERS
@@ -113,6 +121,7 @@ export const DEFAULT_THEME: ColorTheme = {
     background: { color: '#161b22', opacity: 1, brightness: 1, saturation: 1, hue: 0, gradient: { type: 'solid' } },
     text: { color: '#7d8590', opacity: 1 }
   },
+  imagePalette: ['#e6edf3', '#58a6ff', '#f0883e', '#8b949e'],
   imageDefaults: {
     opacity: 0.7,
     blendMode: 'source-over',

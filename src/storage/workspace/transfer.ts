@@ -21,6 +21,7 @@ import {
   SETTINGS_KEY,
   SHELF_KEY,
   STATE_KEY,
+  NODE_IMAGE_PRESETS_KEY,
 } from '../../config/storage-config';
 
 export interface GraphData {
@@ -28,6 +29,13 @@ export interface GraphData {
   edges: unknown[];
   edgeTypes?: unknown[];
   scenes: unknown[];
+  /**
+   * Node SVG pictograms. Optional so files written before the feature existed
+   * normalise to an empty list. Carried inside `graph` rather than as a
+   * top-level envelope member because it is graph data living in the graph
+   * database, and is deleted with its owning node.
+   */
+  nodeImages?: unknown[];
 }
 
 const SENSITIVE_KEYS: Array<[string, string]> = [
@@ -191,14 +199,15 @@ export async function exportGraphData(): Promise<GraphData> {
   const db = new Dexie(GRAPH_DB_NAME);
   db.version(GRAPH_DB_VERSION).stores(GRAPH_DB_SCHEMA);
 
-  const [nodes, edges, edgeTypes, scenes] = await Promise.all([
+  const [nodes, edges, edgeTypes, scenes, nodeImages] = await Promise.all([
     db.table('nodes').toArray(),
     db.table('edges').toArray(),
     db.table('edgeTypes').toArray(),
     db.table('scenes').toArray(),
+    db.table('nodeImages').toArray(),
   ]);
 
-  return { nodes, edges, edgeTypes, scenes };
+  return { nodes, edges, edgeTypes, scenes, nodeImages };
 }
 
 export function exportSettings(): Record<string, unknown> {
@@ -340,6 +349,7 @@ export async function clearAllData(keepSettings = false): Promise<void> {
   await graphDb.table('edgeTypes').clear();
   await graphDb.table('scenes').clear();
   await graphDb.table('backgroundImages').clear();
+  await graphDb.table('nodeImages').clear();
 
   const chatDb = new Dexie(CHAT_DB_NAME);
   chatDb.version(CHAT_DB_VERSION).stores(CHAT_DB_SCHEMA);
@@ -358,6 +368,10 @@ export async function clearAllData(keepSettings = false): Promise<void> {
 
     localStorage.removeItem(SETTINGS_KEY);
     localStorage.removeItem(STATE_KEY);
+    // Presets are a kind of setting and follow the same rule. Removing the key
+    // rather than emptying the collection matters: the registry seeds starters
+    // when the key is absent, and respects an emptied collection.
+    localStorage.removeItem(NODE_IMAGE_PRESETS_KEY);
   }
 }
 
@@ -380,6 +394,9 @@ export async function importGraphData(graph: GraphData, images: unknown[]): Prom
   }
   if (graph.scenes.length > 0) {
     await db.table('scenes').bulkPut(graph.scenes);
+  }
+  if (graph.nodeImages && graph.nodeImages.length > 0) {
+    await db.table('nodeImages').bulkPut(graph.nodeImages);
   }
   if (images.length > 0) {
     await db.table('backgroundImages').bulkPut(images);

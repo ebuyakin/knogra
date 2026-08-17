@@ -1,7 +1,8 @@
 // repository
 
 import Dexie from 'dexie'
-import type { Node, Edge, EdgeType, EdgeTypeId, Scene, SceneId, NodeId, EdgeId, BackgroundImage, BackgroundImageId } from '../core/main-types'
+import type { Node, Edge, EdgeType, EdgeTypeId, Scene, SceneId, NodeId, EdgeId, BackgroundImage, BackgroundImageId, NodeImageId } from '../core/main-types'
+import type { NodeImage } from '../core/node-image-types'
 import { GRAPH_DB_NAME, GRAPH_DB_VERSION, GRAPH_DB_SCHEMA } from '../config/storage-config'
 import { createStarterEdgeTypes, getDefaultEdgeTypeId } from '../config/edge-type-settings'
 import { isDebug } from '../config/debug-flags'
@@ -174,6 +175,31 @@ class GraphDataStore {
         if (index >= 0) {
             this.backgroundImages.splice(index, 1);
         }
+    }
+
+    // Node image methods
+    // The only async reads on this store: node images are not cached, so unlike
+    // every other record here they are fetched per call rather than read from a
+    // resident array. See docs/nodes-svg-images.md §4.3 for why.
+    async getNodeImage(imageId: NodeImageId): Promise<NodeImage | undefined> {
+        return await this.#db.table('nodeImages').get(imageId) as NodeImage | undefined;
+    }
+
+    async createNodeImage(image: NodeImage): Promise<void> {
+        await this.#db.table('nodeImages').put(image);
+    }
+
+    async updateNodeImage(image: NodeImage): Promise<void> {
+        await this.#db.table('nodeImages').put(image);
+    }
+
+    async deleteNodeImage(imageId: NodeImageId): Promise<void> {
+        await this.#db.table('nodeImages').delete(imageId);
+    }
+
+    /** Delete every image owned by a node. Used by the deletion cascade. */
+    async deleteNodeImagesForNode(nodeId: NodeId): Promise<void> {
+        await this.#db.table('nodeImages').where('ownerNodeId').equals(nodeId).delete();
     }
 
     #withValidEdgeType(edge: Edge): Edge {

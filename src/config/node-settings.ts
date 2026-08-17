@@ -57,4 +57,29 @@ export const NODE_DEFAULTS = {
    * of differently sized nodes keeps its relative sizes.
    */
   scaleStep: 1.1,
+
+  /**
+   * Size cap for a node image, enforced by the SVG sanitizer. Kilobytes of SVG
+   * source text, not pixels — an SVG has no resolution.
+   *
+   * A guard against a workspace filling up with megabyte images, not a control
+   * on how elaborate a drawing may be (D30) — a few large images and nothing
+   * else is a legitimate graph. Complexity is the preset's element budget.
+   * See docs/nodes-svg-images.md §7.
+   */
+  imageMaxKB: 1024,
+
+  /**
+   * Base render width in pixels for each node image size class. The image's
+   * height follows from its viewBox aspect ratio, and the node's per-scene
+   * `scale` applies on top of both.
+   *
+   * An author-chosen class rather than the SVG's intrinsic size: intrinsic
+   * sizes are arbitrary, a class is predictable, and the size is known at
+   * generation time so a model can be told how much detail to draw.
+   * See docs/nodes-svg-images.md §5.2.
+   */
+  imageSizeSmall: 64,
+  imageSizeMedium: 128,
+  imageSizeLarge: 256,
 };

@@ -10,8 +10,9 @@
 import type { Node, NodeId, DesignId } from '../../../core/main-types';
 import { createAdvancedTab } from './advanced-tab';
 import { createContentTab, type ContentTab } from './content-tab';
-import { createDesignTab, mergeDefaultNodeLayoutParams, type DesignTab } from './design-tab';
+import { createDesignTab, mergeNodeLayoutParams, type DesignTab } from './design-tab';
 import { createIdentityTab } from './identity-tab';
+import { createImageTab } from './image-tab';
 import { createTextarea, el, text } from './editor-fields';
 import { readActiveTab, writeActiveTab } from './tab-memory';
 import type {
@@ -19,9 +20,11 @@ import type {
   ContentTabValues,
   DesignTabValues,
   EditorTab,
+  ImageTabValues,
   NodeEditorCheckTitleConflict,
   NodeEditorContext,
   NodeEditorOnGenerateEquation,
+  NodeEditorOnGenerateImage,
   NodeEditorOnSave,
   NodeEditorTabId
 } from './node-editor-types';
@@ -31,6 +34,7 @@ export type {
   NodeEditorContext,
   NodeEditorOnSave,
   NodeEditorOnGenerateEquation,
+  NodeEditorOnGenerateImage,
   NodeEditorCheckTitleConflict,
   NodeEditorEquationRequest,
   NodeEditorEquationResult,
@@ -63,7 +67,8 @@ export class NodeEditor {
     context: NodeEditorContext,
     onSave: NodeEditorOnSave,
     onGenerateEquation?: NodeEditorOnGenerateEquation,
-    checkTitleConflict?: NodeEditorCheckTitleConflict
+    checkTitleConflict?: NodeEditorCheckTitleConflict,
+    onGenerateImage?: NodeEditorOnGenerateImage
   ): void {
     // Tear down any open instance first: `hide()` clears the editing state, so it
     // must run before the new state is captured.
@@ -72,7 +77,14 @@ export class NodeEditor {
     this.#onSave = onSave;
     this.#checkTitleConflict = checkTitleConflict ?? null;
     this.#originalTitle = currentData.title;
-    this.#render(nodeId, currentData, currentDesign, context, onGenerateEquation ?? null);
+    this.#render(
+      nodeId,
+      currentData,
+      currentDesign,
+      context,
+      onGenerateEquation ?? null,
+      onGenerateImage ?? null
+    );
   }
 
   hide(): void {
@@ -102,7 +114,8 @@ export class NodeEditor {
     currentData: Node,
     currentDesign: { id: DesignId; params: Record<string, unknown> },
     context: NodeEditorContext,
-    onGenerateEquation: NodeEditorOnGenerateEquation | null
+    onGenerateEquation: NodeEditorOnGenerateEquation | null,
+    onGenerateImage: NodeEditorOnGenerateImage | null
   ): void {
     this.#containerRect = context.containerRect;
 
@@ -158,6 +171,17 @@ export class NodeEditor {
       designParams: currentDesign.params || {}
     });
 
+    const imageTab = createImageTab({
+      node: currentData,
+      getTitle: () => titleField.input.value,
+      getContainerRect: () => this.#containerRect,
+      getOverlayHost: () => this.#modalElement,
+      getEditorRect: () => dialog.getBoundingClientRect(),
+      themeId: context.themeId,
+      styleReferences: context.styleReferences,
+      generateImage: onGenerateImage
+    });
+
     const identityTab = createIdentityTab({ nodeId, node: currentData, context });
 
     const body = el('div', 'node-editor-body');
@@ -166,6 +190,7 @@ export class NodeEditor {
       [
         { id: 'content', label: 'Content', panel: contentTab.element },
         { id: 'design', label: 'Design', panel: designTab.element },
+        { id: 'image', label: 'Image', panel: imageTab.element },
         { id: 'advanced', label: 'Advanced', panel: advancedTab.element },
         { id: 'identity', label: 'Identity', panel: identityTab.element }
       ],
@@ -176,10 +201,7 @@ export class NodeEditor {
 
     // ------------------------------ footer ---------------------------------
     const footer = el('div', 'node-editor-footer');
-    const footerLeft = el('div', 'node-editor-footer-group');
     const footerRight = el('div', 'node-editor-footer-group');
-
-    if (contentTab.equationButton) footerLeft.appendChild(contentTab.equationButton);
 
     const cancelBtn = text('button', 'Cancel') as HTMLButtonElement;
     cancelBtn.type = 'button';
@@ -192,11 +214,11 @@ export class NodeEditor {
     saveBtn.className = 'node-editor-btn node-editor-btn-neutral';
     saveBtn.title = `Save changes and close (${saveShortcut})`;
     saveBtn.addEventListener('click', () => {
-      this.#handleSave(titleField.input.value, contentTab, designTab, advancedTab);
+      this.#handleSave(titleField.input.value, contentTab, designTab, imageTab, advancedTab);
     });
 
     footerRight.append(cancelBtn, saveBtn);
-    footer.append(footerLeft, footerRight);
+    footer.append(footerRight);
 
     dialog.append(titleBar, titleField.container, tabStrip, body, footer);
 
@@ -271,12 +293,15 @@ export class NodeEditor {
     title: string,
     contentTab: ContentTab,
     designTab: DesignTab,
+    imageTab: EditorTab<ImageTabValues>,
     advancedTab: EditorTab<AdvancedTabValues>
   ): void {
     if (!this.#nodeId || !this.#onSave) return;
 
     const content = contentTab.read();
     if (!content) return;
+    const image = imageTab.read();
+    if (!image) return;
     const design = designTab.read();
     if (!design) return;
     const advanced = advancedTab.read();
@@ -290,7 +315,7 @@ export class NodeEditor {
       if (!proceed) return;
     }
 
-    const properties = this.#composeProperties(advanced, content);
+    const properties = this.#composeProperties(advanced, content, image);
     const designParams = this.#composeDesignParams(advanced, design);
 
     const contentUpdates: Partial<Node> = {
@@ -303,14 +328,16 @@ export class NodeEditor {
       this.#nodeId,
       contentUpdates,
       { id: design.designId, params: designParams },
-      design.scale
+      design.scale,
+      image
     );
     this.hide();
   }
 
   #composeProperties(
     advanced: AdvancedTabValues,
-    content: ContentTabValues
+    content: ContentTabValues,
+    image: ImageTabValues
   ): Record<string, unknown> {
     // `advanced.properties` is the raw JSON the user typed plus the system
     // properties the Advanced tab hid and carried through; `equation` and
@@ -318,6 +345,16 @@ export class NodeEditor {
     const properties = { ...advanced.properties };
     if (content.equation.trim()) properties.equation = content.equation.trim();
     if (content.comment.trim()) properties.comment = content.comment.trim();
+    // `imageId` is one of the system properties the Advanced tab carried
+    // through, so an Image tab verdict has to overwrite it rather than merge
+    // with it. An untouched tab has no verdict, and the carried value stands.
+    if (image.changed) {
+      if (image.image) {
+        properties.imageId = image.image.id;
+      } else {
+        delete properties.imageId;
+      }
+    }
     return properties;
   }
 
@@ -355,9 +392,7 @@ export class NodeEditor {
       delete designParams.effects;
     }
 
-    if (design.defaultNodeLayout) {
-      mergeDefaultNodeLayoutParams(designParams, design.defaultNodeLayout);
-    }
+    mergeNodeLayoutParams(designParams, design.designId, design.layout);
 
     return designParams;
   }

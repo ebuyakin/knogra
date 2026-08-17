@@ -8,6 +8,7 @@
  * - Paths (remove deleted scenes)
  * - Chat (delete conversation)
  * - Shelf (clear suggestions)
+ * - Node images (delete owned SVG pictograms)
  */
 
 import type { EdgeId, FoldedNodeEntry, NodeId, Scene, SceneId } from '../core/main-types';
@@ -64,6 +65,11 @@ export async function cascadeNodeDeletion(nodeId: NodeId): Promise<CascadeNodeDe
   // 6. Clear shelf suggestions for this node
   clearShelfForNode(nodeId);
   if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Cleared shelf for node: ${nodeId}`);
+  
+  // 7. Delete SVG images owned by this node. Images are owned 1:1, never shared,
+  //    which is what makes this unconditional and orphans impossible.
+  await graphStore.deleteNodeImagesForNode(nodeId);
+  if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Deleted images for node: ${nodeId}`);
   
   if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Complete for node: ${nodeId}`);
   

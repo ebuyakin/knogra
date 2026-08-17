@@ -152,6 +152,19 @@ export interface EdgeStyle {
 // 4. COLOR THEME — top-level container, one per scene
 // =============================================================================
 
+/**
+ * The four drawing colours a generated node image may use, most dominant first.
+ *
+ * Hand-picked per theme rather than derived from the node colours, which exist
+ * for text legibility and are too few and too similar to draw with. Order is
+ * dominance, because a preset's palette size truncates from the end.
+ *
+ * The colours are handed to the model untagged — no fill/line split and no
+ * per-colour job — since either would collide with the preset's render mode
+ * (D40). See docs/node-image-generation.md §7.1.
+ */
+export type ThemeImagePalette = [string, string, string, string];
+
 /** Complete color theme definition — applied scene-wide */
 export interface ColorTheme {
   id: string;
@@ -173,6 +186,9 @@ export interface ColorTheme {
     background: BackgroundStyleProps;
     text: TextStyleProps;
   };
+
+  /** Every ink here must stay legible against this theme's node surfaces. */
+  imagePalette: ThemeImagePalette;
 
   /** Default appearance for background images added to scenes */
   imageDefaults?: ImageVisualAppearance;

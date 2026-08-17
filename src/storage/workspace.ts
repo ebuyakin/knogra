@@ -53,6 +53,7 @@ import {
   type WorkspaceMembers,
 } from './workspace/envelope';
 import { readLegacyZip } from './workspace/legacy-zip';
+import { exportNodeImagePresets, importNodeImagePresets } from './node-image-presets';
 import { AppStateManager } from './app-state';
 import { seedInitialGraph } from './seed-workspace';
 
@@ -173,6 +174,7 @@ export async function exportWorkspace(): Promise<void> {
     // resolves, so the validation in Path.restoreSession() would not catch it.
     appState: AppStateManager.getExportableAppState(),
     themes: await exportThemes(),
+    nodeImagePresets: exportNodeImagePresets(),
   });
 
   const blob = new Blob([serializeEnvelope(envelope)], { type: 'application/json' });
@@ -346,7 +348,11 @@ export async function importWorkspace(file: File): Promise<boolean> {
     // 6b. Adopt the file identity the workspace carries, so saving it again
     //     continues its version sequence instead of starting a new one.
     adoptImportedFileNaming(settings);
-    
+
+    // 6c. Image presets, alongside settings because they are a kind of setting.
+    //     A file that carried none leaves the local collection untouched.
+    importNodeImagePresets(members.nodeImagePresets);
+
     // 7. Import conversations to IndexedDB
     await importConversations(conversations);
     

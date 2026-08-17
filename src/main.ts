@@ -205,8 +205,16 @@ if (pendingImportUrl && hadRealDataAtStartup) {
 // DEBUGGING (expose globals for console access - dev only)
 // =============================================================================
 if (import.meta.env.DEV) {
+  // Node image presets and prompt composition are plain modules of functions;
+  // the namespace objects give the console a handle to exercise them before any
+  // UI exists.
+  const nodeImagePresets = await import('./storage/node-image-presets');
+  const nodeImagePrompt = await import('./ai/node-image/prompt/prompt-composer');
+  const nodeImagePalette = await import('./styles/node-image-palette');
+  const nodeImageGenerator = await import('./ai/node-image/svg-generator');
+  nodeImagePalette.auditImagePalettes();
   // @ts-expect-error ts(2339)
-  window.debugger = {cy, features, graphSaver, components, panels, graphStore};
+  window.debugger = {cy, features, graphSaver, components, panels, graphStore, nodeImagePresets, nodeImagePrompt, nodeImagePalette, nodeImageGenerator};
 }
 
 // Diagnostics snapshot — `knogra.snapshot()` from devtools or Ctrl+Shift+D.

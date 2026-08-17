@@ -12,4 +12,4 @@
  */
 
 /** Keys hidden from the Advanced tab's JSON editor and carried through on save. */
-export const NODE_SYSTEM_PROPERTIES = ['externalId'] as const;
+export const NODE_SYSTEM_PROPERTIES = ['externalId', 'imageId'] as const;

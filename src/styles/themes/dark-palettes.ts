@@ -25,6 +25,9 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── Black & White ─────────────────────────────────────────────────────
   'default': {
     id: 'default',
+    // Four neutral steps and no accent: the one theme whose character is the
+    // absence of hue, so an image drawn in it stays monochrome too.
+    imagePalette: ['#f0f6fc', '#b9c2cc', '#8b949e', '#5f6b78'],
     canvas: {
       background: {
         vignette: { strength: 0.25, spread: 40, blur: 180, color: '#000000' }
@@ -40,6 +43,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── Slate (neutral grey/blue-grey) ────────────────────────────────────
   'slate': {
     id: 'slate',
+    imagePalette: ['#d8dae0', '#80a0d0', '#c0725d', '#9aa6b8'],
     canvas: {
       background: {
         color: '#14161a',
@@ -77,6 +81,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── High Contrast ─────────────────────────────────────────────────────
   'high-contrast': {
     id: 'high-contrast',
+    imagePalette: ['#ffffff', '#ffff00', '#8ee63c', '#ff6b6b'],
     canvas: {
       background: {
         color: '#1b1a1a',
@@ -114,6 +119,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── Dark (blue) ───────────────────────────────────────────────────────
   'dark': {
     id: 'dark',
+    imagePalette: ['#e6edf3', '#5cbde0', '#dda45a', '#84a6d4'],
     canvas: {
       background: {
         color: '#0a1628',
@@ -134,6 +140,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── Ocean (teal/cyan) ─────────────────────────────────────────────────
   'ocean': {
     id: 'ocean',
+    imagePalette: ['#d0f0f0', '#40d8c0', '#cf6560', '#7fc4d4'],
     canvas: {
       background: {
         color: '#0a1a1e',
@@ -171,6 +178,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── Forest (green/emerald/gold) ───────────────────────────────────────
   'forest': {
     id: 'forest',
+    imagePalette: ['#d0e8d0', '#50c870', '#c28f34', '#7fae86'],
     canvas: {
       background: {
         color: '#0c1a10',
@@ -208,6 +216,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── Warm Dark (amber/rust) ────────────────────────────────────────────
   'warm-dark': {
     id: 'warm-dark',
+    imagePalette: ['#f0dcc8', '#e8a848', '#cf5a3c', '#b09a78'],
     canvas: {
       background: {
         color: '#392615',
@@ -247,6 +256,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // one is genuinely dark and low-chroma, so warmth reads without glare.
   'espresso': {
     id: 'espresso',
+    imagePalette: ['#e8ddd4', '#d49b72', '#8faa7c', '#b3a294'],
     canvas: {
       background: {
         color: '#17110f',
@@ -284,6 +294,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // ── Ember (deep red/crimson/orange) ───────────────────────────────────
   'ember': {
     id: 'ember',
+    imagePalette: ['#f0d8d0', '#f07040', '#e8a838', '#c08c84'],
     canvas: {
       background: {
         color: '#1a0c0a',
@@ -322,6 +333,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // The one hue the dark set was missing.
   'wine': {
     id: 'wine',
+    imagePalette: ['#f2d8e4', '#ee74a8', '#e8b040', '#c096ac'],
     canvas: {
       background: {
         color: '#180a12',
@@ -361,6 +373,7 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // look rather than the lit depth every other dark theme uses.
   'midnight-purple': {
     id: 'midnight-purple',
+    imagePalette: ['#dcd0f0', '#b080f0', '#e06870', '#9d8fc4'],
     canvas: {
       background: {
         color: '#100a1e',
@@ -402,6 +415,9 @@ export const DARK_PALETTES: Record<string, BuiltInTheme> = {
   // lime against a neutral indigo so the three node states are unmistakable.
   'nebula': {
     id: 'nebula',
+    // The one polychrome set, because the theme's own strategy is polychrome:
+    // cyan, magenta and lime against neutral indigo.
+    imagePalette: ['#dfe6f5', '#5cc8ff', '#ff5fa2', '#9fd45c'],
     canvas: {
       background: {
         color: '#0b0d18',

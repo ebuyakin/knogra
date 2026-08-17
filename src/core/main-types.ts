@@ -9,6 +9,7 @@
  * main-types.ts (this file)
  *   - Primitive IDs (NodeId, EdgeId, SceneId, ThemeId, etc.)
  *   - Data model (Node, Edge, Scene, Path)
+ *   - Asset records (BackgroundImage)
  *   - Application state (GraphState)
  *
  * style-types.ts
@@ -19,7 +20,6 @@
  *   - Cytoscape style mapping (CytoscapeNodeStyle)
  *
  * design-types.ts
- *   - Design registry (NodeDesign, DesignConfigSchema, SchemaProperty)
  *   - Design-specific params (AreaColors)
  *
  * background-types.ts
@@ -31,6 +31,11 @@
  *
  * chat-types.ts
  *   - Chat persistence types (Conversation, ChatMessage, MessageId, MessageSource)
+ *
+ * node-image-types.ts
+ *   - Node image record (NodeImage, NodeImageSizeClass, NodeImageOrigin)
+ *   - Generation vocabulary (NodeImageRenderMode, NodeImageStrokeWeight,
+ *     NodeImagePaletteSize, NodeImageDetailLevel)
  *
  * Feature-local types: each module may define its own internal types.
  *   These are not listed here — they are not part of the shared type system.
@@ -60,6 +65,7 @@ export type ThemeId = string;
 export type DesignId = string;
 export type DesignParameterId = string;
 export type BackgroundImageId = string;
+export type NodeImageId = string;
 
 // =============================================================================
 // UI MODE (APP MODE)

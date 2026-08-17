@@ -125,6 +125,48 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         ]
       },
       {
+        id: 'node-images',
+        label: 'Images',
+        settings: [
+          {
+            key: 'node.imageSizeSmall',
+            label: 'Small Image Width',
+            description: 'Base render width in pixels for a small node image. Height follows from the image\'s aspect ratio, and the node\'s scale applies on top.',
+            type: 'number',
+            min: 24,
+            max: 512,
+            step: 4
+          },
+          {
+            key: 'node.imageSizeMedium',
+            label: 'Medium Image Width',
+            description: 'Base render width in pixels for a medium node image',
+            type: 'number',
+            min: 24,
+            max: 512,
+            step: 4
+          },
+          {
+            key: 'node.imageSizeLarge',
+            label: 'Large Image Width',
+            description: 'Base render width in pixels for a large node image',
+            type: 'number',
+            min: 24,
+            max: 1024,
+            step: 4
+          },
+          {
+            key: 'node.imageMaxKB',
+            label: 'Image Size Limit (KB)',
+            description: 'Largest accepted SVG source, in kilobytes. A guard against a workspace filling up with oversized images, not a limit on how detailed a drawing may be.',
+            type: 'number',
+            min: 4,
+            max: 1024,
+            step: 16
+          }
+        ]
+      },
+      {
         id: 'fold',
         label: 'Fold/Unfold',
         settings: [

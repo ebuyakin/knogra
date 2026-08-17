@@ -1,9 +1,9 @@
 # Node Design System
 
 > **Status:** Current  
-> **Last reviewed:** 2026-08-14  
+> **Last reviewed:** 2026-08-16  
 > **Authority:** Canonical source for built-in node designs and node-level visual parameters.  
-> **Related:** [Documentation map](README.md), [Theme architecture](theme-architecture.md), [Central node styling refactor](central-node-styling-refactor.md)
+> **Related:** [Documentation map](README.md), [Theme architecture](theme-architecture.md), [Node SVG images](nodes-svg-images.md), [Central node styling refactor](central-node-styling-refactor.md)
 
 ## Overview
 
@@ -22,28 +22,41 @@ For the theme system and cascade model, see `theme-architecture.md`.
 | `rectangle` | `rectangle-node.ts` | roundrectangle | Fixed-ratio rectangle, supports vignette |
 | `equation` | `equation-node.ts` | round-rectangle | 3-section layout, MathJax equations |
 | `equation-compact` | `equation-compact-node.ts` | round-rectangle | Compact MathJax layout |
+| `image` | `image-node.ts` | round-rectangle | SVG pictogram alone in the box |
+| `image-caption` | `image-caption-node.ts` | round-rectangle | Title bar + pictogram; same renderer as `image` |
 | `tester` | `tester-node.ts` | round-rectangle | Development/testing design |
+
+The two image designs fall back to `default-node` when the node has no image or its record cannot be
+resolved — a node must never disappear because a picture is missing. See
+[Node SVG images](nodes-svg-images.md) §5.
 
 ---
 
 ## Per-Design Constants (Level 3)
 
-Layout constants hardcoded per design type. These are developer decisions, not user-configurable.
+Layout constants hardcoded per design type. Most are developer decisions; the ones marked overridable
+are exposed to the user through the Design tab's declared layout controls (see below).
 
 | Parameter | Design | Value | Notes |
 |---|---|---|---|
 | `BORDER_RADIUS` | default-node | `8` px | Hardcoded |
-| `borderRadius` | equation, equation-compact | `6` px (default) | Overridable via design params |
+| `borderRadius` | equation, equation-compact, image | `6` px (default) | Overridable via design params |
 | `rx` | rectangle-node | `8` px | Hardcoded in SVG |
-| `H_PADDING` | default-node | `28` px | Hardcoded |
-| `V_PADDING` | default-node | `18` px | Hardcoded |
+| `H_PADDING` | default-node | `18` px | Hardcoded default for `params.hPadding` |
+| `V_PADDING` | default-node | `18` px | Hardcoded default for `params.vPadding` |
 | `LINE_HEIGHT_FACTOR` | default-node | `1.4` | Hardcoded |
 | `CHAR_WIDTH_FACTOR` | default-node | `0.6` | Hardcoded |
 | `font-family` | all designs | system sans-serif | Hardcoded, copy-pasted |
-| `DEFAULT_FONT_SIZE` | default-node | `14` px | Overridable via design params |
-| `DEFAULT_MIN_WIDTH` | default-node | `100` px | Overridable via design params |
-| `DEFAULT_ASPECT` | default-node | `16/9` | Overridable via design params |
+| `DEFAULT_FONT_SIZE` | default-node | `14` px | Exported; overridable via design params |
+| `DEFAULT_MIN_WIDTH` | default-node | `100` px | Exported; overridable via design params |
+| `DEFAULT_ASPECT` | default-node | `16/9` | Exported; overridable via design params |
+| `IMAGE_DEFAULT_H_PADDING` / `_V_PADDING` | image, image-caption | `14` px | Exported; overridable via design params |
+| `IMAGE_DEFAULT_ASPECT` | image, image-caption | `1` | Exported; used only when `fixedAspect` |
+| `IMAGE_DEFAULT_TITLE_FONT_SIZE` | image-caption | `11` px | Exported; the title bar's height derives from it |
 | Cytoscape `shape` | per design | varies | `roundrectangle`, `ellipse`, etc. |
+
+The exported constants are exported for one reason: the Design tab's layout controls are declared
+against them, so a control's default cannot drift from the design it configures.
 
 ---
 
@@ -92,11 +105,33 @@ Each node in a scene can override specific visual properties. Stored in `Scene.n
 | Field | Type | Notes |
 |---|---|---|
 | `scale` | number | Size multiplier (1.0 = default), range 0.2–3.0 (`NODE_SCALE_MIN` / `NODE_SCALE_MAX` in `config/node-settings.ts`). Stored at `Scene.nodes[id].scale` — **per scene**, so the same node can be sized differently in each |
-| `fontSize` | number | Per-node font size |
+| `fontSize` | number | Per-node font size (default-node) |
+| `titleFontSize` | number | Title font size (image-caption); the title bar's height derives from it |
 | `minWidth` | number | Per-node minimum width |
 | `size` | number | Circle radius / rectangle width |
-| `aspectRatio` | number | Target width:height ratio (default-node only, default 16/9) |
-| `fixedAspect` | boolean | Enforce exact aspect ratio (default-node only, default false) |
+| `aspectRatio` | number | Target width:height ratio. default-node `16/9`, image designs `1` |
+| `fixedAspect` | boolean | Hold that ratio exactly (default false) |
+| `hPadding` / `vPadding` | number | Per-axis padding. default-node `18`, image designs `14` |
+
+### Declared layout controls
+
+Which of these the Design tab shows is **declared per design** in `styles/designs/design-registry.ts`,
+not branched on in the editor. Each entry names the param key it writes, its label, its bounds and its
+default — the default referenced from the design module's own exported constant, so the two cannot
+diverge. `design-tab.ts` renders, validates and merges whatever it is handed and names no design id;
+a design absent from the table simply shows no layout section.
+
+Two details worth keeping:
+
+- The section is **rebuilt on every design change**, carrying values across by key, because the
+  control set belongs to the design rather than to the tab. The two image designs differ by one knob,
+  so resetting the other four on a switch would read as a bug.
+- A control may declare `enabledBy`, naming a checkbox it depends on. This is per-design on purpose:
+  an image node's `aspectRatio` does nothing until `fixedAspect` holds it, so the input is disabled
+  and dimmed, while `default-node` reflows its text toward that ratio either way and stays live.
+
+Values equal to the design's default are **deleted** rather than written, so an unchanged node keeps
+an empty params object and stays theme-responsive.
 
 #### Editing `scale`
 
@@ -122,10 +157,25 @@ The `default-node` design sizes the box based on text content and a target aspec
 4. Pick the wrapping that produces the closest aspect ratio to the target
 
 **Two modes:**
-- `fixedAspect: false` (default) — aspect ratio is a *hint* for the line-breaking algorithm. The actual box dimensions are determined by text wrapping + fixed padding (H_PADDING=28, V_PADDING=18). Short titles may not match the target ratio.
+- `fixedAspect: false` (default) — aspect ratio is a *hint* for the line-breaking algorithm. The actual box dimensions are determined by text wrapping + fixed padding (H_PADDING=18, V_PADDING=18). Short titles may not match the target ratio.
 - `fixedAspect: true` — after text layout, the box is expanded (wider or taller) to match the exact target ratio. This gives a consistent visual shape regardless of title length.
 
 **Why aspect ratio "snaps":** Since line count is integer, small changes to `aspectRatio` may not change the line-breaking decision. The visual shape only changes when the ratio is different enough to shift the optimal line count to a different integer.
+
+### Image Node Sizing
+
+The same two param names mean something different for the image designs, because a picture cannot be
+reflowed the way text can. Width is authoritative — the size class times `imageScale`, floored by
+`minWidth` and the title — and the mode decides the height:
+
+- `fixedAspect: false` (default) — height follows the image's own `viewBox` ratio.
+- `fixedAspect: true` — height follows `aspectRatio`, and the image is contained in what the title
+  bar and padding leave: scaled down to fit, centred, never upscaled past the size-class width.
+
+`imageScale` is **reserved**: it is multiplied into every render but no control writes it, so it is
+always 1. Kept for image designs whose framing is not padding-shaped — a round node, for instance.
+
+Full rules and the reason for the no-upscale rule: [Node SVG images](nodes-svg-images.md) §5.2.
 
 ---
 

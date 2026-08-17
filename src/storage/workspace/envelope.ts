@@ -7,7 +7,9 @@
  * destroying the workspace to test it.
  *
  * The envelope carries the same nine members the legacy ZIP did, unchanged, as
- * nine top-level keys. It is a container swap, not a schema change.
+ * nine top-level keys. It is a container swap, not a schema change. Members
+ * added since are optional, so a file from either side of the addition reads
+ * without a version bump.
  */
 
 import { APP_VERSION, WORKSPACE_FORMAT, WORKSPACE_VERSION } from '../../config/storage-config';
@@ -28,8 +30,8 @@ export interface WorkspaceManifest {
 }
 
 /**
- * The eight data members, each a verbatim dump of one store. Shapes are owned
- * by `transfer.ts`; the envelope only carries them.
+ * The data members, each a verbatim dump of one store. Shapes are owned by the
+ * modules that write them; the envelope only carries them.
  */
 export interface WorkspaceMembers {
   graph: GraphData;
@@ -40,6 +42,16 @@ export interface WorkspaceMembers {
   paths: unknown[];
   appState: Record<string, unknown>;
   themes: unknown[];
+  /**
+   * Node image generation presets — shape owned by `storage/node-image-presets.ts`.
+   *
+   * Optional, and the one member where *absent* and *empty* must stay
+   * distinguishable: a file written before the feature carries nothing and must
+   * leave the reader's own presets alone, while a file carrying an empty
+   * collection is reporting that its author deleted theirs. Normalising this to
+   * a default the way every other member is normalised would collapse the two.
+   */
+  nodeImagePresets?: unknown;
 }
 
 export interface WorkspaceEnvelope extends WorkspaceMembers {
@@ -130,6 +142,7 @@ function parseGraph(value: unknown): GraphData {
     edges: asArray(graph.edges),
     edgeTypes: asArray(graph.edgeTypes),
     scenes: asArray(graph.scenes),
+    nodeImages: asArray(graph.nodeImages),
   };
 }
 
@@ -177,5 +190,8 @@ export function parseEnvelope(text: string): WorkspaceEnvelope {
     paths: asArray(source.paths),
     appState: asRecord(source.appState),
     themes: asArray(source.themes),
+    // Passed through rather than normalised, so the reader can still tell a
+    // file that carried no presets from one that carried none deliberately.
+    nodeImagePresets: source.nodeImagePresets,
   };
 }

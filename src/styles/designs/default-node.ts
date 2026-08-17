@@ -30,9 +30,13 @@ export interface DefaultNodeParams {
 // LAYOUT CONSTANTS
 // =============================================================================
 
-const DEFAULT_ASPECT = 16 / 9;
-const DEFAULT_FONT_SIZE = 14;
-const DEFAULT_MIN_WIDTH = 100;
+// Exported because the Design tab's layout controls are declared against them
+// in `design-registry.ts`: a control whose default is copied by hand drifts
+// from the design it configures.
+export const DEFAULT_ASPECT = 16 / 9;
+export const DEFAULT_FONT_SIZE = 14;
+export const DEFAULT_MIN_WIDTH = 100;
+
 const LINE_HEIGHT_FACTOR = 1.4;
 const CHAR_WIDTH_FACTOR = 0.6;   // Average char width / fontSize for sans-serif
 const H_PADDING = 18;            // Horizontal padding each side (default; overridable via params.hPadding)

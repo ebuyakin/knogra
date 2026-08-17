@@ -11,6 +11,8 @@ export const DESIGN_MANIFEST: { id: DesignId; label: string }[] = [
   { id: 'default-node' as DesignId, label: 'Default' },
   { id: 'equation-node' as DesignId, label: 'Equation' },
   { id: 'equation-compact-node' as DesignId, label: 'Equation Compact' },
+  { id: 'image-node' as DesignId, label: 'Image' },
+  { id: 'image-caption-node' as DesignId, label: 'Image with Title' },
   { id: 'circle-node' as DesignId, label: 'Circle' },
   { id: 'rectangle-node' as DesignId, label: 'Rectangle' },
   { id: 'tester-node' as DesignId, label: 'Tester' },

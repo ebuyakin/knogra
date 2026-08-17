@@ -20,5 +20,5 @@
 
 - [ ] Keyboard handler second refactoring - code deduplication, leader key support.
 - [ ] UI theme (panels, modals). potentially matching the graph theme. Unified styling for UI elements.
-- [ ] Markdown export/import redesign: extract UI code, extract layout - use feature
+- [ ] Markdown export/import redesign: extract UI code, extract layout - use feature. Node properties file.
 

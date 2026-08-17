@@ -27,13 +27,7 @@ export interface ContentTabDeps {
   applyDesign: (designId: DesignId) => boolean;
 }
 
-export interface ContentTab extends EditorTab<ContentTabValues> {
-  /**
-   * Rendered by the shell in the footer, beside Cancel/Save. It belongs to this
-   * tab logically but sits with the other actions visually.
-   */
-  equationButton: HTMLButtonElement | null;
-}
+export type ContentTab = EditorTab<ContentTabValues>;
 
 export function createContentTab(deps: ContentTabDeps): ContentTab {
   const element = el('div', 'node-editor-panel');
@@ -57,13 +51,14 @@ export function createContentTab(deps: ContentTabDeps): ContentTab {
 
   element.append(comment.container, tags.container, equation.container);
 
-  const equationButton = deps.generateEquation
-    ? buildEquationButton(deps, deps.generateEquation, equation.input)
-    : null;
+  // Directly under the field it writes to, rather than in the shell's footer:
+  // it acts on this tab alone and means nothing from any other tab.
+  if (deps.generateEquation) {
+    element.appendChild(buildEquationButton(deps, deps.generateEquation, equation.input));
+  }
 
   return {
     element,
-    equationButton,
     read: (): ContentTabValues => ({
       tags: tags.input.value
         .split(',')

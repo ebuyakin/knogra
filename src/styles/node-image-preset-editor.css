@@ -1,0 +1,351 @@
+/**
+ * Node Image Preset Editor Styles
+ * Two columns: preset list on the left, tabbed field editor on the right,
+ * with every action gathered into a single footer row.
+ * Shares the theme picker's modal proportions so the two read as siblings.
+ */
+
+.preset-editor-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Above the node editor modal (2000), which is the only surface that opens it. */
+  z-index: 2100;
+}
+
+.preset-editor-modal {
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 8px;
+  /* Wide enough for the footer to hold every action on one row at the shared
+     button size. */
+  width: 860px;
+  max-width: calc(100vw - 40px);
+  /* Fixed height so the pane scrolls instead of the modal resizing per tab. */
+  height: 74vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary, #e6edf3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+}
+
+.preset-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+  cursor: move;
+}
+
+.preset-editor-header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.preset-editor-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #8b949e);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.preset-editor-close-btn:hover {
+  background: var(--bg-tertiary, #1c2128);
+  color: var(--text-primary, #e6edf3);
+}
+
+/* Body — two columns */
+.preset-editor-body {
+  display: flex;
+  gap: 20px;
+  padding: 16px 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Left column — preset list */
+.preset-editor-list {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Rendered as a list box (`size` is set in the component). */
+.preset-editor-list select {
+  flex: 1;
+  min-height: 0;
+  padding: 4px;
+  background: var(--bg-tertiary, #1c2128);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+  cursor: pointer;
+  overflow-y: auto;
+}
+
+.preset-editor-list select:focus {
+  outline: none;
+  border-color: var(--accent-blue, #58a6ff);
+}
+
+.preset-editor-list select option {
+  padding: 5px 8px;
+  border-radius: 3px;
+}
+
+/* One selection colour, focused or not — see the note in theme-picker.css. */
+.preset-editor-list select option:checked {
+  background: var(--border-primary, #30363d)
+    linear-gradient(0deg, var(--border-primary, #30363d) 0%, var(--border-primary, #30363d) 100%);
+  color: var(--text-primary, #e6edf3);
+  -webkit-text-fill-color: var(--text-primary, #e6edf3);
+}
+
+/* Right column — name, tabs, fields */
+.preset-editor-details {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preset-editor-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+}
+
+.preset-editor-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary, #7d8590);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.preset-editor-tab:hover {
+  color: var(--text-primary, #e6edf3);
+}
+
+.preset-editor-tab.active {
+  color: var(--text-primary, #e6edf3);
+  border-bottom-color: var(--accent-blue, #58a6ff);
+}
+
+.preset-editor-pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  /* One gap for every row, whatever control it holds. */
+  gap: 12px;
+  /* The pane is the scroll container, so its padding box is the clipping edge:
+     a first or last row sitting flush against it loses the border of whichever
+     control has focus. The vertical padding is that control's breathing room,
+     not spacing. */
+  padding: 4px 4px 4px 0;
+}
+
+/* Two columns of controls. A select is far narrower than the pane, and the
+   slack that buys is what the preview below occupies.
+
+   Three explicit rows whatever the tab holds: the tabs carry 4, 6 and 5
+   controls, so without a floor the preview and its rule jumped as you switched. */
+.preset-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(3, minmax(28px, auto));
+  gap: 12px 20px;
+}
+
+/* A narrower caption than a full-width row: half a pane is not 140px plus a
+   usable control. */
+.preset-editor-grid .preset-editor-row {
+  grid-template-columns: 104px 1fr;
+  gap: 10px;
+}
+
+.preset-editor-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.preset-editor-row > label {
+  font-size: 12px;
+  color: var(--text-secondary, #7d8590);
+}
+
+.preset-editor-row input[type="text"],
+.preset-editor-row select {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg-tertiary, #1c2128);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* Prompt preview — the exact lines this tab's controls send to the model.
+   Deliberately not styled as a field: it is read-only, and a bordered box with
+   an input's background reads as something to type into. */
+.preset-editor-preview {
+  flex: 1;
+  min-height: 96px;
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Same size and weight as the dialog's own heading, so it reads as a section
+   title rather than as a field label. */
+.preset-editor-preview-caption {
+  flex: 0 0 auto;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-primary, #30363d);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #7d8590);
+}
+
+.preset-editor-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* 14px, not the controls' 13px. The list box and the selects carry no
+   `font-family`, so they render in the browser's default form font, whose
+   x-height is larger; matching the number would have left this looking
+   smaller than everything around it. Matching apparent size is the point. */
+.preset-editor-preview-body p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-secondary, #7d8590);
+}
+
+.preset-editor-preview-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* The empty state is the editor talking, not the prompt. Italic and dimmer so
+   it cannot be read as one of the sentences being sent. */
+.preset-editor-preview-body p.preset-editor-preview-empty {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* Direction tab — one field, given the whole pane. */
+.preset-editor-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #7d8590);
+}
+
+.preset-editor-direction {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-tertiary, #1c2128);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 4px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: none;
+}
+
+.preset-editor-direction:focus {
+  outline: none;
+  border-color: var(--accent-blue, #58a6ff);
+}
+
+/* Matches the height of a select row, so the column keeps one rhythm. */
+.preset-editor-row input[type="checkbox"] {
+  justify-self: start;
+  width: 15px;
+  height: 15px;
+  margin: 7px 0;
+  accent-color: var(--accent-blue, #58a6ff);
+}
+
+.preset-editor-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #7d8590);
+}
+
+/* Footer — the single action row: structural actions left, Cancel/Save right */
+.preset-editor-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-primary, #30363d);
+}
+
+/* Sits between the two groups, taking the slack that separates them. */
+.preset-editor-status {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  text-align: right;
+  color: var(--text-secondary, #7d8590);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Deliberately identical to `.node-editor-btn` + `.node-editor-btn-neutral`:
+   this modal is opened from the node editor, so its actions must not read as a
+   different kind of control. `min-width` evens out the label lengths. */
+.preset-editor-btn {
+  flex: 0 0 auto;
+  min-width: 84px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-primary, #30363d);
+  background-color: transparent;
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.preset-editor-btn:hover {
+  border-color: var(--text-secondary, #7d8590);
+}

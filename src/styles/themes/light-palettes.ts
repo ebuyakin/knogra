@@ -39,6 +39,9 @@ export const LIGHT_PALETTES: Record<string, BuiltInTheme> = {
   // ── Light (cool grey — the original light theme) ───────────────────────
   'light': {
     id: 'light',
+    // Light surfaces invert the rule: these are the dark end of the range, not
+    // the bright end, or nothing would be visible on near-white paper.
+    imagePalette: ['#1f2328', '#0969da', '#1a7f37', '#656d76'],
     canvas: {
       background: {
         color: '#f0f3f6',
@@ -79,6 +82,7 @@ export const LIGHT_PALETTES: Record<string, BuiltInTheme> = {
   // blue light, reading-desk feel.
   'paper': {
     id: 'paper',
+    imagePalette: ['#2e2822', '#a15c1e', '#4f6b3a', '#6f6355'],
     canvas: {
       background: {
         color: '#f6f1e7',
@@ -122,6 +126,7 @@ export const LIGHT_PALETTES: Record<string, BuiltInTheme> = {
   // ── Meadow (soft sage, emerald + ochre) ───────────────────────────────
   'meadow': {
     id: 'meadow',
+    imagePalette: ['#22301f', '#1e7a4a', '#a06a14', '#5c6b58'],
     canvas: {
       background: {
         color: '#eef4ec',
@@ -163,6 +168,7 @@ export const LIGHT_PALETTES: Record<string, BuiltInTheme> = {
   // Light counterpart to Midnight Purple, for the same palette in a bright room.
   'iris': {
     id: 'iris',
+    imagePalette: ['#262036', '#6d4bc4', '#a8761a', '#5f5875'],
     canvas: {
       background: {
         color: '#f0edf8',
