@@ -2,7 +2,7 @@
 
 **Think in graphs. Learn visually.**
 
-Knogra is a browser-based knowledge graph editor where every concept gets its own focused view. Navigate between nodes with smooth spatial transitions, annotate with an AI assistant that understands your graph, and arrange layouts that reflect how you think — not just how the algorithm thinks.
+Knogra is a browser-based knowledge graph editor where every concept gets its own focused view. Navigate between nodes with smooth spatial transitions, illustrate them with AI-generated SVG pictograms, annotate with an assistant that understands your graph, and arrange layouts that reflect how you think — not just how the algorithm thinks.
 
 <img width="800" height="450" alt="knogra-demo" src="https://github.com/user-attachments/assets/0ce38a19-63a9-4b12-b405-8ed209199da3" />
 
@@ -12,15 +12,17 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 
 ## Getting started
 
-**Option A — start fresh:** Go to [app.knogra.io](https://app.knogra.io) and start building. Double-click the canvas to create a node, drag between nodes to connect them, click a connected node to transition into its scene.
+Knogra runs at **[app.knogra.io](https://app.knogra.io)** — nothing to install, no account, no sign-up.
 
-**Option B — start with the tutorial:** On [knogra.io](https://knogra.io), click the **Tutorial** button. It opens the tutorial graph directly in the app — a pre-built interactive graph that walks you through the core concepts.
+**See it in action.** [knogra.io](https://knogra.io/#videos) has a short video walkthrough.
 
-**Option C — explore example graphs:** The **Library** section on the landing page lists available graphs. Click **Open** to load one into the app, or **Download** to save the `.knogra` file and import it later with `Ctrl+O`.
+**Start with a ready-made graph.** The [Library](https://knogra.io/#library) on knogra.io holds complete graphs across a range of subjects. Click **Open** on any card to load one straight into the app and explore it.
 
-**Keyboard shortcuts:** `Ctrl+S` export workspace · `Ctrl+O` import workspace · `Ctrl+N` new workspace · `F1` show all shortcuts
+**Or build your own.** Double-click the canvas to create a node, drag from one node to another to connect them, and click a connected node to transition into its scene. That's the core loop — everything else builds on it.
 
-**Your work is auto-saved** to the browser's IndexedDB. Use `Ctrl+S` to download a `.knogra` backup file anytime.
+**Finding your way around.** Right-click the canvas for the command menu, and press `F1` for the full keyboard reference. Your work saves itself to the browser's IndexedDB as you go; `Ctrl+S` downloads the entire workspace as a single `.json` file when you want a backup or want to share it.
+
+**Read more.** The [blog](https://knogra.io/blog/) covers first steps, worked examples, and the thinking behind the graph-first approach.
 
 ---
 
@@ -34,15 +36,20 @@ Knogra is a browser-based knowledge graph editor where every concept gets its ow
 
 ## Features
 
-- **Scenes & transitions** — each node gets a focused view; navigate between them with fluid animations
-- **Layout tools** — radial auto-layout for a whole scene, plus align, distribute, circle, grid, diamond, rotate, and spacing tools for any selection
-- **AI assistant** — context-aware chat per node; suggests new concepts and connections (BYOK — Gemini, OpenRouter)
-- **Quiz mode** — hide node labels in the graph and self-grade recall while navigating scenes
-- **Design system** — 20+ node designs, multiple themes, background images with color grading
-- **Paths** — guided tours through your graph for revision, presentation, or storytelling
-- **Fold & unfold** — collapse branches to focus, expand to explore
-- **Mermaid import / export** — turn Mermaid diagrams into navigable drill-down scenes, or export any graph back to Mermaid
-- **Export / import** — full workspace snapshots as `.knogra` files
+- **Scenes** — every node gets its own view, with its own layout, framing and background
+- **Transitions** — moving between scenes is a spatial animation, not a redraw, so you build a sense of where things are
+- **Node and edge taxonomy** — nodes carry tags that categorize them across the whole graph: restyle every node with a given tag in one step, and the AI reads them as context. Edges carry labels and relationship types you define, each with its own styling; show or hide an entire type at once
+- **Topology-aware AI** — chat that knows the graph around the node you're on: suggests new nodes, explains existing ones, or discusses any topic
+- **Notes & images per node** — every node keeps its own notebook: prose, LaTeX, and image attachments, including pictures pulled straight from Wikimedia search
+- **Bring your own key** — AI runs on your own Gemini or OpenRouter key. Requests go from your browser directly to the provider: no proxy, no relay, no account with us
+- **Paths & presentation mode** — record a route through the graph and walk it for revision, a lecture, or a story
+- **Quiz mode** — hide the labels and test how much of the graph you actually remember
+- **SVG graphics** — pictograms inside nodes, generated by a model from a description or brought in from anywhere; reusable presets keep one visual language across a graph
+- **Design system** — 20+ node designs, 16 themes, background images, LaTeX equations rendered inside nodes
+- **Layout system** — radial trees, circles, grids, alignment, distribution, rotation, spacing, and fold/unfold to collapse a branch
+- **Node Manager** — a table view over every node in the workspace, for review and bulk edits when a graph outgrows the canvas
+- **Markdown import / export** — a whole graph as one Markdown file: a Mermaid diagram for the structure, prose per node. Build it into scenes, or update an existing graph from an edited file
+- **JSON save / load** — the entire workspace, content and design, in a single `.json` file
 
 ## Privacy
 
@@ -59,7 +66,8 @@ Your work stays in your browser — IndexedDB storage, works offline, no account
 | Build | [Vite](https://vitejs.dev/) + TypeScript |
 | Math rendering | MathJax (LaTeX in nodes) |
 | Layout | Custom — radial auto-layout, geometric arrange tools, Mermaid fan layout |
-| Workspace files | JSZip |
+| AI providers | BYOK — Gemini ([@google/genai](https://www.npmjs.com/package/@google/genai)), OpenRouter |
+| Workspace files | Plain JSON; [JSZip](https://stuk.github.io/jszip/) read-only, for `.knogra` archives written before 1.6 |
 | Telemetry | Upstash Redis via Vercel (anonymous counters only) |
 
 No frontend framework — vanilla TypeScript throughout.

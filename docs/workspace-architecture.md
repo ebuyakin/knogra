@@ -4,7 +4,7 @@
 > **Last reviewed:** 2026-08-12  
 > **Authority:** Canonical source for saving, opening, and creating workspaces: file format, transfer, storage keys, and startup.  
 > **Out of scope:** The Knogra Markdown document — an unrelated format with an unrelated purpose. See [Markdown architecture](markdown-architecture.md).  
-> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Markdown architecture](markdown-architecture.md), [Release plan](release-plan.md)
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Markdown architecture](markdown-architecture.md)
 
 ## 1. Overview
 

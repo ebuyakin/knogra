@@ -5,7 +5,7 @@
 
 // Application version — single source of truth. Consumed by the workspace
 // export manifest and the diagnostics snapshot so the two never drift.
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 
 // IndexedDB database names
 export const GRAPH_DB_NAME = 'knogra-graph';
@@ -52,7 +52,7 @@ export const SHELF_KEY = 'knogra.shelf';       // AI suggestions
 // Node image presets — the named generation constraints, plus the default
 // selection, in one record. localStorage rather than IndexedDB because the
 // collection is small and bounded, and nothing in persisted graph data refers
-// to it. See docs/node-image-templates.md §2.3.
+// to it. See docs/node-image-presets.md §4.
 export const NODE_IMAGE_PRESETS_KEY = 'knogra.nodeImagePresets';
 
 // Mermaid-import authoring preferences. Deliberately isolated from SETTINGS_KEY
@@ -69,5 +69,8 @@ export const NODE_EDITOR_TAB_KEY = 'knogra.nodeEditor.tab';
 // `WORKSPACE_FORMAT` is what identifies a workspace file: the reader matches on
 // it rather than on the extension, so a renamed file still opens and a foreign
 // JSON is rejected with a clear message instead of a parse crash.
+// `WORKSPACE_VERSION` tracks the file layout, not the app: 1.x was the ZIP
+// archive, 2.x is the single JSON document. It moves only when the shape
+// changes, independently of APP_VERSION.
 export const WORKSPACE_FORMAT = 'knogra-workspace';
 export const WORKSPACE_VERSION = '2.0';

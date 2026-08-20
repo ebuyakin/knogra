@@ -1,10 +1,12 @@
 # Pictogram Node Design
 
-> **Status:** Draft — specification for v2. Not implemented. No code in `src/` reflects this document yet.
-> **Last reviewed:** 2026-08-11
-> **Authority:** Proposed design. Authoritative for *intent and approach*; every implementation
-> detail is provisional until built. Where it describes **current** system behaviour (§2), that
-> behaviour was verified against code and in the browser on the date above.
+> **Status:** Superseded — the node-image feature shipped by *generating* drawings per node
+> (see [nodes-svg-images.md](nodes-svg-images.md)) rather than sourcing them from the glyph
+> library this document proposes. **§2 and §2.1 remain live**: they record a verified finding
+> about the node rendering pipeline that is documented nowhere else.
+> **Last reviewed:** 2026-08-20
+> **Authority:** None for current work, except §2/§2.1, whose claims were verified against code
+> and in the browser on 2026-08-11. Everything else is the design that was not chosen.
 > **Related:** [Node design system](node-design-system.md), [Theme architecture](theme-architecture.md),
 > [Knogra vision](knogra-vision.md), [Chat image retrieval](chat-image-retrieval.md)
 

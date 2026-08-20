@@ -20,7 +20,7 @@
  * because a preset is never referenced from persisted graph data — the same
  * reason MessageId lives in chat-types.ts. See docs/nodes-svg-images.md §13 (D14).
  *
- * See docs/nodes-svg-images.md §4 and docs/node-image-templates.md §2.
+ * See docs/nodes-svg-images.md §4 and docs/node-image-presets.md §2.
  */
 
 import type { NodeId, NodeImageId } from './main-types';
@@ -289,7 +289,7 @@ export interface NodeImagePresetColour {
  * Neither the size class nor any colour is a field: size is chosen per image,
  * and the palette is resolved against the scene's theme at request time, which
  * keeps a preset portable across themes.
- * See docs/node-image-templates.md §2.
+ * See docs/node-image-presets.md §2.
  */
 export interface NodeImagePreset {
   id: NodeImagePresetId;

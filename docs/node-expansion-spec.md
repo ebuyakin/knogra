@@ -1,9 +1,9 @@
 # Node Expansion Placement — Specification
 
-**Status:** Draft — under active authoring, not yet implemented.
-**Last updated:** 2026-07-03
-**Authority:** Working spec for the node-expansion placement algorithm. Once ratified,
-this document is the source of truth for `src/features/utils/pure/donut-placement.ts`
+**Status:** Current — implemented in `src/features/utils/pure/donut-placement.ts`.
+**Last updated:** 2026-08-20
+**Authority:** Source of truth for the node-expansion placement algorithm, covering
+`src/features/utils/pure/donut-placement.ts`
 and the obstacle/viewport wiring in `src/features/scene/expand-animator.ts`.
 
 ---

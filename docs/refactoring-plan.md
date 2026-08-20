@@ -1,8 +1,8 @@
 # Refactoring Implementation Plan
 
 > **Status:** Historical  
-> **Last reviewed:** 2026-06-14  
-> **Authority:** Implementation plan and bug record for transition/fold stabilization. Current architectural authority lives in [architecture.md](architecture.md) and [scene-transitions.md](scene-transitions.md).  
+> **Last reviewed:** 2026-08-20  
+> **Authority:** Implementation plan and bug record for transition/fold stabilization. Current architectural authority lives in [architecture.md](architecture.md) and [scene-transitions.md](scene-transitions.md). **Retained because the journal does not cover this period** — vol-01 ends 2026-05-23 and vol-02 begins 2026-06-14, so this is the only surviving record of the regime-model and fold-state work done in between.  
 > **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Scene transitions](scene-transitions.md), [Fold/unfold design](fold-unfold-design.md)
 
 ---

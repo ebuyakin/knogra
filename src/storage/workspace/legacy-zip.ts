@@ -2,8 +2,8 @@
  * Legacy `.knogra` reader — see docs/workspace-architecture.md §5.1.
  *
  * Read-only, forever. The ZIP was written up to v1.5 and is never written
- * again; every file in the wild and every `knogra-graphs` catalog entry keeps
- * opening with no migration. Isolated here so the modern path in `workspace.ts`
+ * again; every file a user saved before v1.6 keeps opening with no migration.
+ * Isolated here so the modern path in `workspace.ts`
  * carries no archive handling, and so `jszip` has exactly one caller.
  *
  * The archive is nine flat JSON members, no folders and no binary entries, so

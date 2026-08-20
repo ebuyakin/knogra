@@ -6,16 +6,16 @@
  * hosted inside the editor modal, so it dims only the editor.
  *
  * It resolves everything the AI layer is not allowed to look up itself — the
- * preset from the registry, the palette from the scene's theme, the display
- * width from the size class — and hands the generator plain values.
+ * preset from the registry, the palette from the scene's theme — and hands the
+ * generator plain values.
  *
- * It carries its own size control because the display width is stated in the
- * prompt and so has to be chosen before generating; Accept writes it back to
- * the Image tab.
+ * It carries its own size control even though generation never reads it: the
+ * prompt states no display size (D45), but Accept writes the chosen class back
+ * to the Image tab alongside the image.
  *
  * **Writes nothing to storage.** Accept sets the tab's draft, so an accepted
  * image is still lost if the editor is then cancelled — which is exactly what
- * keeps Cancel safe. See docs/node-image-templates.md §6.
+ * keeps Cancel safe. See docs/node-image-generation.md §2.
  */
 
 import type { NodeImageColourMode, NodeImageSizeClass, NodeImageStyleReference } from '../../../core/node-image-types';

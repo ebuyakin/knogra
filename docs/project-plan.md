@@ -3,7 +3,7 @@
 > **Status:** Historical  
 > **Last reviewed:** 2026-06-14  
 > **Authority:** Early project plan and prioritization history. Read with caution; use [knogra-vision.md](knogra-vision.md), [architecture.md](architecture.md), [todo.md](../todo.md), and the project journal for current direction.  
-> **Related:** [Documentation map](README.md), [Product vision](knogra-vision.md), [Release plan](release-plan.md)
+> **Related:** [Documentation map](README.md), [Product vision](knogra-vision.md)
 
 ## Overview
 Architecture-first approach: design complete system structure, then implement incrementally. Each milestone delivers working, tested functionality.

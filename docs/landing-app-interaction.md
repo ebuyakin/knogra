@@ -3,7 +3,7 @@
 > **Status:** Current  
 > **Last reviewed:** 2026-06-14  
 > **Authority:** User-facing landing/app behavior specification and implementation status table.  
-> **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Release plan](release-plan.md)
+> **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md)
 
 User-facing scenarios and expected behavior. Technical rules are derived from these — not the other way around.
 

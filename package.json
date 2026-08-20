@@ -1,6 +1,6 @@
 {
   "name": "knogra",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "An AI-assisted web client for constructing and exploring knowledge graphs with memory-palace-like navigation and mind-mapping capabilities",
   "type": "module",
   "scripts": {

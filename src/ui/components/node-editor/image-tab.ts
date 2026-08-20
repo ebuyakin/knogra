@@ -98,7 +98,7 @@ export function createImageTab(deps: ImageTabDeps): EditorTab<ImageTabValues> {
   // --------------------------------- actions --------------------------------
   // Generation opens an overlay rather than living here: it is a transaction
   // with busy, preview, accept and redraw states, none of which a tab whose
-  // contract is `read()` has anywhere to put. See docs/node-image-templates.md §6.
+  // contract is `read()` has anywhere to put. See docs/node-image-generation.md §2.
   const generateButton = deps.generateImage
     ? button('Generate', () => openGenerationDialog())
     : null;

@@ -1,7 +1,7 @@
 # Mermaid Fan Layout
 
-> **Status:** Draft — spec + implementation brief  
-> **Last reviewed:** 2026-07-09  
+> **Status:** Current — implemented  
+> **Last reviewed:** 2026-08-20  
 > **Authority:** Canonical model for the Mermaid import "Fan (nested scenes)" layout (§1–§8) and for the shared **scene-composition / adjacency layer** used by every Mermaid-import layout (§9). §5–§9 are **implemented** as of 2026-07-09.  
 > **Related:** [Documentation map](README.md), [Scene transitions](scene-transitions.md), [Architecture](architecture.md)
 

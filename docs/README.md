@@ -1,7 +1,7 @@
 # Knogra Documentation Map
 
 > **Status:** Current index  
-> **Last reviewed:** 2026-08-08  
+> **Last reviewed:** 2026-08-20  
 > **Authority:** Use this file to orient within `docs/`. It classifies documents by current usefulness and points to the canonical sources when older documents overlap.
 
 ## Status Legend
@@ -21,10 +21,13 @@
 | Document | Status | Notes |
 |---|---|---|
 | [knogra-vision.md](knogra-vision.md) | Current | Product direction and core UX primitives. |
+| [roadmap.md](roadmap.md) | Draft | Raw idea list for v2. Not a commitment and not sequenced. |
 | [project-plan.md](project-plan.md) | Historical | Early project plan; read through current docs and `todo.md`. |
-| [release-plan.md](release-plan.md) | Historical | v1 release checklist; v1 is complete as of 2026-06-14. |
-| [release-plan-v1-5.md](release-plan-v1-5.md) | Current | Active V1.5 checklist for the next public release, website updates, graph-library expansion, videos, and launch follow-through. |
 | [knogra-product-discussion.md](knogra-product-discussion.md) | Historical | Early Python/Neo4j R&D planning background. |
+
+Completed release and migration plans (`release-plan.md`, `release-plan-v1-5.md`,
+`site-separation-plan.md`, `export-import-redesign-plan.md`) were deleted on 2026-08-20. What they
+recorded now lives in `.github/project-journal.md`.
 
 ## Architecture
 
@@ -33,8 +36,7 @@
 | [architecture.md](architecture.md) | Current | Main authoritative architecture document; scene/fold terminology should defer to [scene-transitions.md](scene-transitions.md) where overlapping. |
 | [scene-transitions.md](scene-transitions.md) | Current | Canonical source for scene manipulation, transitions, fold semantics, and related invariants. |
 | [workspace-architecture.md](workspace-architecture.md) | Current | Canonical for saving, opening, and creating workspaces: file format (workspace JSON, plus the legacy `.knogra` ZIP which is read forever), transfer, storage keys, and startup. The Markdown document is out of scope. |
-| [markdown-architecture.md](markdown-architecture.md) | Draft | Agreed specification, not implemented. Canonical for the Knogra Markdown document and its three operations — Build (document → new graph), Update (document → open graph, content only), and Export — with the id-based identity model. |
-| [export-import-redesign-plan.md](export-import-redesign-plan.md) | Temporary | Working plan for the two interchange workstreams: sequencing, steps, risks, open issues. Delete when both ship. Not normative. |
+| [markdown-architecture.md](markdown-architecture.md) | Current | Implemented 2026-08-13. Canonical for the Knogra Markdown document and its three operations — Build (document → new graph), Update (document → open graph, content only), and Export — with the id-based identity model. |
 | [paths-architecture.md](paths-architecture.md) | Current | Paths feature model and implementation history. Part II covers navigation modes (history/path), the path manager, and the full-path generator. |
 | [chat-panel-architecture.md](chat-panel-architecture.md) | Current | Chat, notes, tutorial timeline, and chat storage model. |
 | [ai-assistant-vision.md](ai-assistant-vision.md) | Current | AI assistant behavior, architecture, graph-action flow, and preconfigured Scene/Node/Suggest/Connect command model. |
@@ -47,9 +49,9 @@
 | [autolayout-grow-arrange.md](autolayout-grow-arrange.md) | Current | Grow & Arrange: pulling in the central node's degree-≤N neighbourhood, then arranging, with a seed-and-arrange animation. |
 | [telemetry-design.md](telemetry-design.md) | Current | Anonymous usage-counting design and privacy constraints. |
 | [landing-app-interaction.md](landing-app-interaction.md) | Current | User-facing landing/app scenarios and implementation status. |
-| [chat-image-retrieval.md](chat-image-retrieval.md) | Draft | Proposed design for retrieving real images into the per-node chat; not yet implemented. |
+| [chat-image-retrieval.md](chat-image-retrieval.md) | Current | Implemented 2026-07-09 — image retrieval into the per-node chat (`src/ai/image-search/`, Wikimedia source). The wider "learning space" material in the later sections is still proposal. |
 | [node-placement.md](node-placement.md) | Current | Canonical rules for placing a **single** node added to or included in a scene (add child/parent, shelf create/include, node manager): reference resolution, between-spokes direction, nearest clearing radius, and the `node.spacing` multiplier. Multi-node expansion defers to [node-expansion-spec.md](node-expansion-spec.md). |
-| [node-expansion-spec.md](node-expansion-spec.md) | Draft | Working spec for the node-expansion placement algorithm (multi-node "include children/parents/neighbours"). Doc status predates the implementation in `donut-placement.ts` — verify before relying on it. |
+| [node-expansion-spec.md](node-expansion-spec.md) | Current | Implemented in `donut-placement.ts`. Canonical for the multi-node expansion placement algorithm ("include children/parents/neighbours"). |
 | [context-menu-structure-draft.md](context-menu-structure-draft.md) | Historical | Menu IA draft from the 2026-06 reorganization; the shipped structure has since evolved. Current menu structure is read directly from the builders in `src/ui/context-menu/`. |
 
 ## Visual Systems
@@ -66,6 +68,7 @@
 | [central-node-styling-refactor.md](central-node-styling-refactor.md) | Current with caveats | Current central-node styling contract; broad transition sequencing defers to [scene-transitions.md](scene-transitions.md). |
 | [node-styling-diagram.md](node-styling-diagram.md) | Current with caveats | Current styling principles and call-flow reference; some old diagram names are historical. |
 | [node-rank-z-index.md](node-rank-z-index.md) | Deferred | Explicit z-index design intentionally postponed beyond v1. |
+| [pictogram-node-design.md](pictogram-node-design.md) | Superseded | Proposed a **library** of pre-made glyphs; the shipped feature generates drawings per node instead ([nodes-svg-images.md](nodes-svg-images.md)). **§2/§2.1 remain live** — a verified finding that node SVGs are re-rasterised at device resolution (so there is no resolution ceiling), and what actually breaks at high `scale`. Recorded nowhere else; fold into [node-design-system.md](node-design-system.md) before deleting. |
 
 ## Superseded Transition Documents
 
@@ -73,7 +76,7 @@
 |---|---|---|
 | [transition-sequence-spec.md](transition-sequence-spec.md) | Superseded | Replaced by [scene-transitions.md](scene-transitions.md). |
 | [fold-unfold-design.md](fold-unfold-design.md) | Historical / partly superseded | Fold basics remain useful; transition and invariant sections defer to [scene-transitions.md](scene-transitions.md). |
-| [refactoring-plan.md](refactoring-plan.md) | Historical | Implementation plan and bug record; current architecture authority lives in [architecture.md](architecture.md) and [scene-transitions.md](scene-transitions.md). |
+| [refactoring-plan.md](refactoring-plan.md) | Historical | Implementation plan and bug record for transition/fold stabilization; current authority lives in [architecture.md](architecture.md) and [scene-transitions.md](scene-transitions.md). **Retained despite being a completed plan**: the journal has no entries between 2026-05-23 and 2026-06-14, so this is the only record of the regime-model and fold-state work from that gap. |
 
 ## Marketing
 

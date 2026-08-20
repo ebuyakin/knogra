@@ -16,7 +16,7 @@
  *     step nothing else backfills a field added by a later build.
  *   - **Refuse to delete the last preset.** Generation needs one to exist.
  *
- * See docs/node-image-templates.md §2.3.
+ * See docs/node-image-presets.md §4.
  */
 
 import type {

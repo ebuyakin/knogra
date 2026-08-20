@@ -12,11 +12,12 @@
  * normal edit; deleting one is a normal delete.
  *
  * The prose each value expands to at prompt composition time lives in
- * `ai/node-image/prompt-composer.ts`, not here — this file is what a value *is*,
- * that one is what the model is told about it. Adding a value is one entry here
- * plus one there.
+ * `ai/node-image/prompt/` — `drawing-rules.ts`, `technique-rules.ts`,
+ * `colour-rules.ts` — not here: this file is what a value *is*, those are what
+ * the model is told about it. Adding a value is one entry here plus one in the
+ * matching rules module.
  *
- * See docs/node-image-templates.md §2.1, §2.2, §2.3, §3.3.
+ * See docs/node-image-presets.md §2 and §3.
  */
 
 import type {

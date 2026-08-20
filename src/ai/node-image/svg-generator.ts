@@ -14,7 +14,7 @@
  * caller passes it through `svg-sanitizer.ts` before anything stores or renders
  * it, exactly as it would a paste or an upload.
  *
- * See docs/node-image-templates.md §5.
+ * See docs/node-image-generation.md §9.
  */
 
 import type { ProviderType } from '../../core/main-types';

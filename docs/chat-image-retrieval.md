@@ -1,8 +1,8 @@
 # Chat Image Retrieval & Node Learning Space
 
-> **Status:** Draft — proposed design, not yet implemented. Under active discussion.
-> **Last reviewed:** 2026-07-09
-> **Authority:** Design intent and architectural direction for retrieving real (non-generated) images into the per-node chat. Supersedes the `todo.md` line "Image search by LLM." Specs below are proposals pending the open decisions in §12.
+> **Status:** Implemented — 2026-07-09. Retrieval ships in `src/ai/image-search/`; note attachments in `src/ui/panels/chat-panel/chat-note-editor.ts`.
+> **Last reviewed:** 2026-08-20
+> **Authority:** Design intent and architectural direction for retrieving real (non-generated) images into the per-node chat. Supersedes the `todo.md` line "Image search by LLM." The retrieval path and note attachments are built; the wider "learning space" material below remains proposal.
 > **Related:** [Documentation map](README.md), [Chat panel architecture](chat-panel-architecture.md), [AI assistant vision](ai-assistant-vision.md), [Workspace architecture](workspace-architecture.md)
 
 ---

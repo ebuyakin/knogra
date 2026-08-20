@@ -83,9 +83,11 @@ const hadRealDataAtStartup = await hasMeaningfulWorkspaceData();
 // Cross-origin handoff from the marketing site (knogra.io). The Library "Open"
 // and Tutorial flows navigate to app.knogra.io/?import=<graph-url>. sessionStorage
 // cannot cross origins, so the graph URL travels in a query param instead. The
-// param is user-controllable, so only knogra-graphs raw URLs are honoured — an
-// allowlist prevents the app from being coerced into fetching arbitrary content.
-const KNOGRA_GRAPHS_URL_PREFIX = 'https://raw.githubusercontent.com/ebuyakin/knogra-graphs/';
+// param is user-controllable, so only the site's own graph library is honoured —
+// an allowlist prevents the app from being coerced into fetching arbitrary
+// content. Pinning scheme and host at the start of the string is what makes the
+// check sound: no prefix can be forged ahead of position zero.
+const GRAPH_LIBRARY_URL_PREFIX = 'https://knogra.io/graphs/';
 
 function consumePendingImportUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
@@ -96,7 +98,7 @@ function consumePendingImportUrl(): string | null {
   const query = params.toString();
   const cleaned = window.location.pathname + (query ? `?${query}` : '') + window.location.hash;
   window.history.replaceState(null, '', cleaned);
-  return raw.startsWith(KNOGRA_GRAPHS_URL_PREFIX) ? raw : null;
+  return raw.startsWith(GRAPH_LIBRARY_URL_PREFIX) ? raw : null;
 }
 
 // Catalog import — EARLY branch.

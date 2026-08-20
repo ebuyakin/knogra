@@ -1,7 +1,7 @@
 # Auto-layout: Grow & Arrange
 
-> **Status:** Draft — spec + implementation brief
-> **Last reviewed:** 2026-08-04
+> **Status:** Current — implemented 2026-07-11
+> **Last reviewed:** 2026-08-20
 > **Authority:** Canonical model for the **Grow & Arrange** extension of the Auto-layout feature (`src/features/autolayout/`). Plain radial auto-layout (`AutoLayout.apply`) is unchanged; this document specifies the new membership-growing variant only.
 > **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Mermaid Fan Layout](mermaid-fan-layout.md) (shares the radial geometry lineage)
 
