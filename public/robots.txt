@@ -1,4 +1,8 @@
 # app.knogra.io is the application, not marketing content — keep it out of search
 # indexes. The public marketing site (knogra.io) has its own robots.txt + sitemap.
+#
+# Crawling is allowed on purpose. The `noindex` tag in index.html is what removes the
+# page, and a crawler can only obey a tag it is permitted to read: `Disallow: /` left
+# the URL listed with no description and no way to withdraw it.
 User-agent: *
-Disallow: /
+Allow: /
