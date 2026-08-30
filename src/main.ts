@@ -214,9 +214,10 @@ if (import.meta.env.DEV) {
   const nodeImagePrompt = await import('./ai/node-image/prompt/prompt-composer');
   const nodeImagePalette = await import('./styles/node-image-palette');
   const nodeImageGenerator = await import('./ai/node-image/svg-generator');
+  const graphQuery = await import('./utils/diagnostics/graph-query');
   nodeImagePalette.auditImagePalettes();
   // @ts-expect-error ts(2339)
-  window.debugger = {cy, features, graphSaver, components, panels, graphStore, nodeImagePresets, nodeImagePrompt, nodeImagePalette, nodeImageGenerator};
+  window.debugger = {cy, features, graphSaver, components, panels, graphStore, nodeImagePresets, nodeImagePrompt, nodeImagePalette, nodeImageGenerator, graphQuery};
 }
 
 // Diagnostics snapshot — `knogra.snapshot()` from devtools or Ctrl+Shift+D.

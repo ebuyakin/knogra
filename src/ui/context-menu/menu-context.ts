@@ -10,7 +10,7 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { EdgeTypeId, NodeId } from '../../core/main-types';
+import type { EdgeTypeId, NodeId, SceneId } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
 import type { ArrangeGroup } from '../../features/arrange/tools/types';
 import { ARRANGE_GROUP_LABELS } from '../../features/arrange/tools/registry';
@@ -58,6 +58,8 @@ export interface CopiedNodeDesign {
   design: { id: string; params: Record<string, unknown> };
   scale: number;
   sourceNodeId: NodeId;
+  /** The node has one design per scene, so the source is a node *and* a scene. */
+  sourceSceneId: SceneId;
   sourceTags: string[];
 }
 

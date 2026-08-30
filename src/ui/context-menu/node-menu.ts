@@ -82,6 +82,7 @@ export function buildNodeMenu(
             design: { id: ctx.design.id, params: { ...ctx.design.params } },
             scale: ctx.scale,
             sourceNodeId: nodeId,
+            sourceSceneId: ctx.sceneId,
             sourceTags: ctx.nodeData.tags ?? []
           };
         }
@@ -209,8 +210,9 @@ export function buildNodeMenu(
 
 /**
  * Paste style item — three variants depending on selection and clipboard:
- * pasting back onto the copy source opens the tag-aware dialog; otherwise
- * paste applies directly to the clicked node or the whole selection.
+ * pasting back onto the copy source, in the scene it was copied from, opens the
+ * tag-aware dialog; otherwise paste applies directly to the clicked node or the
+ * whole selection.
  */
 function buildPasteStyleItem(
   deps: MenuDependencies,
@@ -221,7 +223,12 @@ function buildPasteStyleItem(
   const selectedNodes = deps.cy.nodes(':selected');
   const count = selectedNodes.length;
   const copied = clipboard.nodeDesign;
-  const isSourceSelfPaste = copied !== null && count <= 1 && nodeId === copied.sourceNodeId;
+  // The scene must match: the same node in another scene is a legitimate paste
+  // target, since a node carries a separate design per scene.
+  const isSourceSelfPaste = copied !== null
+    && count <= 1
+    && nodeId === copied.sourceNodeId
+    && copied.sourceSceneId === deps.features.scene.getCurrentSceneId();
   if (isSourceSelfPaste) {
     return {
       label: 'Paste style…',
