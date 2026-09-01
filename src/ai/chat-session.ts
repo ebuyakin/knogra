@@ -7,12 +7,12 @@ import type { NodeId, SceneId } from '../core/main-types';
 import type { ChatMessage, MessageSource } from '../core/chat-types';
 import type { AIResponse, ProviderMessage, ProposedAction } from './types';
 import type { AIProvider } from './providers/provider';
-import type { ProviderType } from '../core/main-types';
 import type { SceneContext } from './context-builder';
 
 import { chatStore } from '../storage/chat-store';
 import { buildSystemPrompt } from './context-builder';
 import { createProvider } from './providers/provider';
+import { getSelectedProviderModel, resolveProviderConfig } from './providers/provider-resolution';
 import { getSetting } from '../config';
 import { eventBus } from '../events/event-bus';
 import { isDebug } from '../config/debug-flags';
@@ -63,15 +63,10 @@ export class ChatSession {
    * Initialize the AI provider
    */
   async initProvider(apiKey: string): Promise<void> {
-    const providerType = getSetting('ai.provider');
-    const model = providerType === 'openrouter'
-      ? getSetting('ai.openrouterModel')
-      : getSetting('ai.geminiModel');
-    
     this.#provider = createProvider({
-      type: providerType,
+      type: getSetting('ai.provider'),
       apiKey,
-      model
+      model: getSelectedProviderModel()
     });
   }
 
@@ -83,36 +78,11 @@ export class ChatSession {
   }
 
   /**
-   * Resolve which provider to use and its API key.
-   * If selected provider has a key, use it. Otherwise, fall back to
-   * whichever provider has a key configured.
-   */
-  #resolveProvider(): { providerType: ProviderType; apiKey: string } | null {
-    const selectedProvider = getSetting('ai.provider') as ProviderType;
-    const geminiKey = getSetting('ai.geminiApiKey') as string;
-    const openrouterKey = getSetting('ai.openrouterApiKey') as string;
-
-    // Prefer selected provider if it has a key
-    if (selectedProvider === 'openrouter' && openrouterKey) {
-      return { providerType: 'openrouter', apiKey: openrouterKey };
-    }
-    if (selectedProvider === 'gemini' && geminiKey) {
-      return { providerType: 'gemini', apiKey: geminiKey };
-    }
-
-    // Fall back to whichever has a key
-    if (openrouterKey) return { providerType: 'openrouter', apiKey: openrouterKey };
-    if (geminiKey) return { providerType: 'gemini', apiKey: geminiKey };
-
-    return null;
-  }
-
-  /**
    * Check if any AI provider has an API key configured.
    * Does not initialize the provider — just reads settings.
    */
   hasApiKey(): boolean {
-    return this.#resolveProvider() !== null;
+    return resolveProviderConfig() !== null;
   }
 
   /**
@@ -121,23 +91,14 @@ export class ChatSession {
    * Returns true if provider was successfully initialized.
    */
   async tryAutoInit(): Promise<boolean> {
-    const resolved = this.#resolveProvider();
+    const config = resolveProviderConfig();
 
-    if (!resolved) {
+    if (!config) {
       this.#provider = null;
       return false;
     }
 
-    const { providerType, apiKey } = resolved;
-    const model = providerType === 'openrouter'
-      ? getSetting('ai.openrouterModel')
-      : getSetting('ai.geminiModel');
-
-    this.#provider = createProvider({
-      type: providerType,
-      apiKey,
-      model
-    });
+    this.#provider = createProvider(config);
 
     return this.#provider !== null;
   }

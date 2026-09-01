@@ -17,10 +17,9 @@
  * See docs/node-image-generation.md §9.
  */
 
-import type { ProviderType } from '../../core/main-types';
 import type { NodeImagePalette, NodeImagePreset } from '../../core/node-image-types';
-import { getSetting } from '../../config';
 import { createProvider } from '../providers/provider';
+import { getSelectedProviderModel, resolveProviderConfig } from '../providers/provider-resolution';
 import type { NodeImageCorrection } from './prompt/prompt-composer';
 import { composeNodeImagePrompt } from './prompt/prompt-composer';
 
@@ -72,7 +71,7 @@ export async function generateNodeImageSvg(
     return { type: 'clarification', message: EMPTY_DESCRIPTION };
   }
 
-  const providerConfig = resolveImageProviderConfig();
+  const providerConfig = resolveProviderConfig();
   if (!providerConfig) {
     throw new Error('Add an AI provider API key in Settings before generating images.');
   }
@@ -95,46 +94,6 @@ export async function generateNodeImageSvg(
 // ============================================================================
 // PARSING
 // ============================================================================
-
-function resolveImageProviderConfig(): { type: ProviderType; apiKey: string; model?: string } | null {
-  const selectedProvider = getSetting('ai.provider') as ProviderType;
-  const geminiKey = getSetting('ai.geminiApiKey') as string;
-  const openrouterKey = getSetting('ai.openrouterApiKey') as string;
-
-  if (selectedProvider === 'openrouter' && openrouterKey) {
-    return {
-      type: 'openrouter',
-      apiKey: openrouterKey,
-      model: getSetting('ai.openrouterModel') as string
-    };
-  }
-
-  if (selectedProvider === 'gemini' && geminiKey) {
-    return {
-      type: 'gemini',
-      apiKey: geminiKey,
-      model: getSetting('ai.geminiModel') as string
-    };
-  }
-
-  if (openrouterKey) {
-    return {
-      type: 'openrouter',
-      apiKey: openrouterKey,
-      model: getSetting('ai.openrouterModel') as string
-    };
-  }
-
-  if (geminiKey) {
-    return {
-      type: 'gemini',
-      apiKey: geminiKey,
-      model: getSetting('ai.geminiModel') as string
-    };
-  }
-
-  return null;
-}
 
 function parseGenerationResult(content: string): NodeImageGenerationResult {
   const jsonText = extractJsonObject(content.trim());
@@ -167,10 +126,7 @@ function parseGenerationResult(content: string): NodeImageGenerationResult {
  * wrapped in commentary, and no amount of rewording fixes it.
  */
 function capabilityMessage(): string {
-  const provider = getSetting('ai.provider');
-  const model = provider === 'openrouter'
-    ? getSetting('ai.openrouterModel')
-    : getSetting('ai.geminiModel');
+  const model = getSelectedProviderModel();
 
   return `${model || 'The selected model'} did not return an SVG. Some models cannot draw SVG reliably — try a stronger model in Settings.`;
 }

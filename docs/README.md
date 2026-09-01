@@ -40,6 +40,7 @@ recorded now lives in `.github/project-journal.md`.
 | [paths-architecture.md](paths-architecture.md) | Current | Paths feature model and implementation history. Part II covers navigation modes (history/path), the path manager, and the full-path generator. |
 | [chat-panel-architecture.md](chat-panel-architecture.md) | Current | Chat, notes, tutorial timeline, and chat storage model. |
 | [ai-assistant-vision.md](ai-assistant-vision.md) | Current | AI assistant behavior, architecture, graph-action flow, and preconfigured Scene/Node/Suggest/Connect command model. |
+| [ai-provider-architecture.md](ai-provider-architecture.md) | Current | Canonical for how AI providers are declared, resolved, and called: the provider registry, resolution and fallback order, shared reply parsing, request timeouts, and the per-vendor facts for Gemini, OpenAI, Anthropic, and OpenRouter. |
 | [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md) | Current | Authoritative AI chat API call composition, quick-action prompt contract, and scene/node request behavior. |
 | [edge-types-architecture.md](edge-types-architecture.md) | Current | Workspace-specific edge types, theme-aware type styles, scene-local edge visibility, selected-edge affordances, and current AI context boundary. |
 | [edge-curve-style-unbundling.md](edge-curve-style-unbundling.md) | Current | Design rationale and implementation record for separating per-edge curve/layout from visual style. |

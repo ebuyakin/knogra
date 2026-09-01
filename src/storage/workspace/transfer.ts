@@ -23,6 +23,7 @@ import {
   STATE_KEY,
   NODE_IMAGE_PRESETS_KEY,
 } from '../../config/storage-config';
+import { PROVIDER_API_KEY_SETTING_KEYS } from '../../config/ai-providers';
 
 export interface GraphData {
   nodes: unknown[];
@@ -38,10 +39,9 @@ export interface GraphData {
   nodeImages?: unknown[];
 }
 
-const SENSITIVE_KEYS: Array<[string, string]> = [
-  ['ai', 'geminiApiKey'],
-  ['ai', 'openrouterApiKey'],
-];
+const SENSITIVE_KEYS: Array<[string, string]> = PROVIDER_API_KEY_SETTING_KEYS.map(
+  settingKey => settingKey.split('.') as [string, string]
+);
 
 export async function generateWorkspaceName(): Promise<string> {
   const dateStr = new Date().toISOString().split('T')[0];
@@ -487,7 +487,9 @@ export function importSettings(
   settings: Record<string, unknown>,
   savedKeys: Record<string, Record<string, string>> = {}
 ): void {
-  if (Object.keys(settings).length === 0) return;
+  // Saved keys must be written even when the file carries no settings of its own:
+  // clearAllData() has already wiped them, so returning early would lose them.
+  if (Object.keys(settings).length === 0 && Object.keys(savedKeys).length === 0) return;
 
   // Restore API keys that were saved before clearAllData() wiped localStorage.
   for (const [domain, keys] of Object.entries(savedKeys)) {

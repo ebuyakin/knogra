@@ -3,9 +3,8 @@
  * Independent from chat sessions and chat persistence.
  */
 
-import type { ProviderType } from '../core/main-types';
-import { getSetting } from '../config';
 import { createProvider } from './providers/provider';
+import { resolveProviderConfig } from './providers/provider-resolution';
 import { NODE_EQUATION_VALUE_RULES } from './prompts';
 import { repairLatexControlEscapes, stripMathDelimiters } from './latex-sanitizer';
 
@@ -55,7 +54,7 @@ export async function generateEquationFromPrompt(request: EquationGenerationRequ
     };
   }
 
-  const providerConfig = resolveEquationProviderConfig();
+  const providerConfig = resolveProviderConfig();
   if (!providerConfig) {
     throw new Error('Add an AI provider API key in Settings before generating equations.');
   }
@@ -73,46 +72,6 @@ export async function generateEquationFromPrompt(request: EquationGenerationRequ
   );
 
   return parseEquationGenerationResult(response.rawContent ?? response.content);
-}
-
-function resolveEquationProviderConfig(): { type: ProviderType; apiKey: string; model?: string } | null {
-  const selectedProvider = getSetting('ai.provider') as ProviderType;
-  const geminiKey = getSetting('ai.geminiApiKey') as string;
-  const openrouterKey = getSetting('ai.openrouterApiKey') as string;
-
-  if (selectedProvider === 'openrouter' && openrouterKey) {
-    return {
-      type: 'openrouter',
-      apiKey: openrouterKey,
-      model: getSetting('ai.openrouterModel') as string
-    };
-  }
-
-  if (selectedProvider === 'gemini' && geminiKey) {
-    return {
-      type: 'gemini',
-      apiKey: geminiKey,
-      model: getSetting('ai.geminiModel') as string
-    };
-  }
-
-  if (openrouterKey) {
-    return {
-      type: 'openrouter',
-      apiKey: openrouterKey,
-      model: getSetting('ai.openrouterModel') as string
-    };
-  }
-
-  if (geminiKey) {
-    return {
-      type: 'gemini',
-      apiKey: geminiKey,
-      model: getSetting('ai.geminiModel') as string
-    };
-  }
-
-  return null;
 }
 
 function parseEquationGenerationResult(content: string): EquationGenerationResult {

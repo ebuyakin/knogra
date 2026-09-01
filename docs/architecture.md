@@ -1,7 +1,7 @@
 # Knogra Architecture
 
 > **Status:** Current  
-> **Last reviewed:** 2026-08-08  
+> **Last reviewed:** 2026-09-01  
 > **Authority:** Main authoritative architecture document for layers, dependency direction, module responsibilities, persistence ownership, and coding standards. For detailed scene, fold, visibility, and transition terminology, defer to [Scene Transitions](scene-transitions.md). For typed edge styling and scene-local edge type visibility, defer to [Edge Types Architecture](edge-types-architecture.md).  
 > **Related:** [Documentation map](README.md), [Workspace architecture](workspace-architecture.md), [Scene transitions](scene-transitions.md), [Edge Types Architecture](edge-types-architecture.md)
 
@@ -195,6 +195,7 @@ Application settings and user preferences.
 | `setting-definitions.ts` | All configurable settings with defaults |
 | `transition-settings.ts` | Animation timing configurations |
 | `ai-settings.ts` | AI provider settings |
+| `ai-providers.ts` | Provider registry — the one list of which AI providers exist |
 
 **Storage:** Persisted to localStorage with `knogra.` prefix.
 
@@ -397,12 +398,25 @@ AI-assisted learning companion. Provides contextual help, suggestions, and graph
 |------|---------|
 | `types.ts` | Message, Action, Conversation, ShelfItem types |
 | `providers/provider.ts` | AI provider interface + factory |
-| `providers/gemini-adapter.ts` | Gemini API implementation |
-| `providers/openrouter-adapter.ts` | OpenRouter API implementation |
+| `providers/gemini-adapter.ts` | Gemini, via the `@google/genai` SDK |
+| `providers/openai-adapter.ts` | OpenAI, via the Responses API |
+| `providers/anthropic-adapter.ts` | Anthropic, via the native Messages API |
+| `providers/openrouter-adapter.ts` | OpenRouter, via its OpenAI-compatible endpoint |
+| `providers/provider-resolution.ts` | Which provider, key, and model answer a request |
+| `providers/response-parsing.ts` | Shared reply parsing: action block, LLM-JSON repair, prose extraction |
+| `providers/request-timeout.ts` | Bounds every provider call so a stalled vendor cannot hang the UI |
 | `context-builder.ts` | Builds system prompt from graph state |
 | `chat-session.ts` | Manages conversation state |
 | `node-shelf.ts` | Suggestion state; orchestrates placement via FeatureAPI |
 | `shelf-design-selector.ts` | Selects designs for shelf items |
+
+**Provider layer.** Four vendors behind one narrow interface — `sendMessage(messages, systemPrompt)`, non-streaming, no tool loop. Adapters own only the **request** shape; every adapter is handed the same prompt contract and so gets back the same reply shape, which is why parsing is shared rather than per-vendor.
+
+Three unrelated call sites resolve a provider, not just chat: `chat-session.ts`, `equation-generator.ts`, and `node-image/svg-generator.ts`. All three go through `resolveProviderConfig()`.
+
+**Why the registry lives in `config`, not `ai`.** `PROVIDER_REGISTRY` is in `config/ai-providers.ts` because `ai` already imports `config`; a registry under `ai` that `config` had to read to generate its settings UI would close an import cycle. Consumers include the generated Settings sections, the workspace export blocklist, and the factory-reset keep-list — the last two derive their API-key lists from it so a new provider cannot leak a key into an exported workspace. Canonical doc: [AI provider architecture](ai-provider-architecture.md).
+
+**Bring your own key.** Every request goes from the browser straight to the vendor. No proxy, no relay, no server of ours in the path — which makes browser-callability (CORS) a hard constraint on which providers can be supported at all.
 
 **NodeShelf** is the AI→Features integration point. It:
 - Manages suggested nodes per scene, converts AI actions to shelf items, and calls FeatureAPI when the user approves placement

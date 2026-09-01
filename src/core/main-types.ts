@@ -79,7 +79,7 @@ export type AppMode = 'view' | 'edit';
 // =============================================================================
 
 /** Supported AI provider identifiers */
-export type ProviderType = 'gemini' | 'openrouter';
+export type ProviderType = 'gemini' | 'openrouter' | 'openai' | 'anthropic';
 
 // =============================================================================
 // DATA MODEL

@@ -6,6 +6,8 @@
 import type { AIResponse, ProviderMessage } from '../types';
 import { GeminiAdapter } from './gemini-adapter';
 import { OpenRouterAdapter } from './openrouter-adapter';
+import { OpenAIAdapter } from './openai-adapter';
+import { AnthropicAdapter } from './anthropic-adapter';
 
 // ============================================================================
 // PROVIDER INTERFACE
@@ -13,7 +15,7 @@ import { OpenRouterAdapter } from './openrouter-adapter';
 
 /**
  * AI Provider interface
- * Implementations: GeminiAdapter, (future: OpenAIAdapter, ClaudeAdapter)
+ * One implementation per vendor. Reply parsing is shared, in `response-parsing.ts`.
  */
 export interface AIProvider {
   /** Provider name for logging/debugging */
@@ -41,7 +43,8 @@ import type { ProviderType } from '../../core/main-types';
 export interface ProviderConfig {
   type: ProviderType;
   apiKey: string;
-  model?: string;  // Optional: override default model
+  /** Always resolved: `provider-resolution.ts` falls back to the factory default. */
+  model: string;
 }
 
 // ============================================================================
@@ -60,6 +63,12 @@ export function createProvider(config: ProviderConfig): AIProvider {
 
     case 'openrouter':
       return new OpenRouterAdapter(config.apiKey, config.model);
+
+    case 'openai':
+      return new OpenAIAdapter(config.apiKey, config.model);
+
+    case 'anthropic':
+      return new AnthropicAdapter(config.apiKey, config.model);
 
     default:
       throw new Error(`Unknown provider type: ${config.type}`);

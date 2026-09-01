@@ -65,6 +65,10 @@ export const MERMAID_IMPORT_KEY = 'knogra.mermaid.import';
 // landing on Design), reset to the default in a fresh tab.
 export const NODE_EDITOR_TAB_KEY = 'knogra.nodeEditor.tab';
 
+// Collapsed sections of the Settings tree: sticky while you work, back to the
+// declared defaults in a fresh tab.
+export const SETTINGS_TREE_KEY = 'knogra.settings.tree';
+
 // Workspace file envelope — see docs/workspace-architecture.md §5.2.
 // `WORKSPACE_FORMAT` is what identifies a workspace file: the reader matches on
 // it rather than on the extension, so a renamed file still opens and a foreign

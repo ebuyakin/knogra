@@ -7,6 +7,8 @@
  */
 
 import type { SettingKey } from './index';
+import type { ProviderType } from '../core/main-types';
+import { PROVIDER_REGISTRY } from './ai-providers';
 import { DESIGN_MANIFEST } from './design-manifest';
 import { AUTOLAYOUT_ALGORITHMS } from './autolayout-settings';
 
@@ -37,7 +39,89 @@ export interface SettingCategory {
   description?: string;
   children?: SettingCategory[];
   settings?: SettingDefinition[];
+  /** Start with children hidden in the tree. */
+  collapsed?: boolean;
 }
+
+// ============================================================================
+// PROVIDER PARAMETERS
+// ============================================================================
+
+/**
+ * Vendor-specific tuning, shown inside each provider's subsection.
+ *
+ * Kept here rather than on the registry descriptor: `ai-providers.ts` would have
+ * to import `SettingDefinition` from this file, closing an import cycle. A
+ * provider with nothing to tune simply has no entry.
+ */
+const PROVIDER_PARAMETERS: Partial<Record<ProviderType, SettingDefinition[]>> = {
+  gemini: [
+    {
+      key: 'ai.webSearchEnabled',
+      label: 'Web Search',
+      description: 'Ground answers with Google Search results',
+      type: 'boolean'
+    },
+    {
+      key: 'ai.thinkingLevel',
+      label: 'Thinking Level',
+      description: 'Reasoning depth vs speed',
+      type: 'select',
+      options: [
+        { value: 'minimal', label: 'Minimal — fastest' },
+        { value: 'low', label: 'Low' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'high', label: 'High — most thorough' }
+      ]
+    }
+  ],
+  openai: [
+    {
+      key: 'ai.webSearchEnabled',
+      label: 'Web Search',
+      description: 'Let the model search the web before answering. Shared with Gemini',
+      type: 'boolean'
+    },
+    {
+      key: 'ai.openaiReasoningEffort',
+      label: 'Reasoning Effort',
+      description: 'Reasoning depth vs speed. Not every model accepts every level',
+      type: 'select',
+      options: [
+        { value: 'none', label: 'None — no reasoning' },
+        { value: 'low', label: 'Low' },
+        { value: 'medium', label: 'Medium — OpenAI\'s default' },
+        { value: 'high', label: 'High' },
+        { value: 'xhigh', label: 'Extra high' },
+        { value: 'max', label: 'Max — most thorough' }
+      ]
+    }
+  ],
+  anthropic: [
+    {
+      key: 'ai.anthropicEffort',
+      label: 'Effort',
+      description: 'Caps total tokens spent, thinking included. Not every model accepts every level',
+      type: 'select',
+      options: [
+        { value: 'low', label: 'Low — fastest' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'high', label: 'High — Anthropic\'s default' },
+        { value: 'xhigh', label: 'Extra high' },
+        { value: 'max', label: 'Max — most thorough' }
+      ]
+    },
+    {
+      key: 'ai.anthropicMaxTokens',
+      label: 'Max Output Tokens',
+      description: 'Claude requires a reply cap. Counts thinking as well as visible text, so raise it alongside effort',
+      type: 'number',
+      min: 1024,
+      max: 32768,
+      step: 1024
+    }
+  ]
+};
 
 // ============================================================================
 // DEFINITIONS
@@ -694,62 +778,44 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
   },
 
   {
-    id: 'ai',
-    label: 'AI Assistant',
+    id: 'ai-providers',
+    label: 'AI Providers',
     icon: '◇',
+    collapsed: true,
     settings: [
       {
         key: 'ai.provider',
         label: 'AI Provider',
         description: 'Which AI service to use',
         type: 'select',
-        options: [
-          { value: 'gemini', label: 'Google Gemini' },
-          { value: 'openrouter', label: 'OpenRouter (multi-model)' }
-        ]
-      },
-      {
-        key: 'ai.geminiApiKey',
-        label: 'Gemini API Key',
-        description: 'Your Google Gemini API key',
-        type: 'string'
-      },
-      {
-        key: 'ai.geminiModel',
-        label: 'Gemini Model',
-        description: 'Gemini model name (e.g. gemini-3-flash-preview)',
-        type: 'string'
-      },
-      {
-        key: 'ai.openrouterApiKey',
-        label: 'OpenRouter API Key',
-        description: 'Your OpenRouter API key',
-        type: 'string'
-      },
-      {
-        key: 'ai.openrouterModel',
-        label: 'OpenRouter Model',
-        description: 'Model ID (e.g. anthropic/claude-sonnet-4)',
-        type: 'string'
-      },
-      {
-        key: 'ai.webSearchEnabled',
-        label: 'Web Search (Gemini)',
-        description: 'Enable web search grounding (Gemini only)',
-        type: 'boolean'
-      },
-      {
-        key: 'ai.thinkingLevel',
-        label: 'Thinking Level (Gemini)',
-        description: 'Reasoning depth vs speed (Gemini only)',
-        type: 'select',
-        options: [
-          { value: 'minimal', label: 'Minimal — fastest' },
-          { value: 'low', label: 'Low' },
-          { value: 'medium', label: 'Medium' },
-          { value: 'high', label: 'High — most thorough' }
-        ]
-      },
+        options: PROVIDER_REGISTRY.map(provider => ({ value: provider.type, label: provider.label }))
+      }
+    ],
+    children: PROVIDER_REGISTRY.map((provider): SettingCategory => ({
+      id: `ai-provider-${provider.type}`,
+      label: provider.label,
+      settings: [
+        {
+          key: provider.apiKeySettingKey,
+          label: provider.apiKeyLabel,
+          description: provider.apiKeyDescription,
+          type: 'string'
+        },
+        {
+          key: provider.modelSettingKey,
+          label: provider.modelLabel,
+          description: `Model name (e.g. ${provider.defaultModel})`,
+          type: 'string'
+        },
+        ...(PROVIDER_PARAMETERS[provider.type] ?? [])
+      ]
+    }))
+  },
+  {
+    id: 'ai-chat',
+    label: 'AI Chat',
+    icon: '◇',
+    settings: [
       {
         key: 'ai.chatScrollPosition',
         label: 'Chat Scroll Position',
@@ -822,29 +888,6 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         label: 'Store Found Images Offline',
         description: 'Keep a local copy of images found online so they work offline. Off: only the link is kept and the image is fetched each time its note is opened. Affects found images only.',
         type: 'boolean'
-      }
-    ]
-  },
-  {
-    id: 'files',
-    label: 'Files',
-    icon: '◇',
-    settings: [
-      {
-        key: 'file.namePrefix',
-        label: 'File Name',
-        description: 'Base name for saved workspace and document files, without the number or extension. Leave blank to have it named after the anchor node on the next save. Letters, digits, underscore and hyphen only — anything else becomes a hyphen.',
-        type: 'string',
-        placeholder: 'e.g. kg-calculus'
-      },
-      {
-        key: 'file.nextNumber',
-        label: 'Next File Number',
-        description: 'Version number stamped on the next saved file. Counts up on every save, shared by workspace and document files so a folder listing sorts in the order you exported. Numbered 01–99, then a00–z99. Set it back to 1 to restart the sequence.',
-        type: 'number',
-        min: 1,
-        max: 2699,
-        step: 1
       }
     ]
   },
@@ -974,6 +1017,29 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
             step: 100
           }
         ]
+      }
+    ]
+  },
+  {
+    id: 'files',
+    label: 'Files',
+    icon: '◇',
+    settings: [
+      {
+        key: 'file.namePrefix',
+        label: 'File Name',
+        description: 'Base name for saved workspace and document files, without the number or extension. Leave blank to have it named after the anchor node on the next save. Letters, digits, underscore and hyphen only — anything else becomes a hyphen.',
+        type: 'string',
+        placeholder: 'e.g. kg-calculus'
+      },
+      {
+        key: 'file.nextNumber',
+        label: 'Next File Number',
+        description: 'Version number stamped on the next saved file. Counts up on every save, shared by workspace and document files so a folder listing sorts in the order you exported. Numbered 01–99, then a00–z99. Set it back to 1 to restart the sequence.',
+        type: 'number',
+        min: 1,
+        max: 2699,
+        step: 1
       }
     ]
   }

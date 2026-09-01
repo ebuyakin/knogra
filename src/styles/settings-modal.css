@@ -142,14 +142,20 @@
 }
 
 .settings-tree-toggle {
-  font-size: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
   width: 12px;
   text-align: center;
-  transition: transform 0.15s;
+  opacity: 0.85;
 }
 
-.settings-tree-node.collapsed .settings-tree-toggle {
-  transform: rotate(-90deg);
+.settings-tree-toggle::before {
+  content: '−';
+}
+
+.settings-tree-node.collapsed .settings-tree-toggle::before {
+  content: '+';
 }
 
 .settings-tree-item:hover {

@@ -5,6 +5,8 @@
 
 import { SETTING_CATEGORIES, getAllSettings, type SettingCategory, type SettingDefinition } from '../../config/setting-definitions';
 import { getSetting, setSetting, resetSetting, FACTORY_DEFAULTS, type SettingKey } from '../../config';
+import { PROVIDER_API_KEY_SETTING_KEYS } from '../../config/ai-providers';
+import { readCollapseState, writeCollapsed, type TreeCollapseState } from './settings-tree-memory';
 import '../../styles/settings-modal.css';
 
 // ============================================================================
@@ -19,6 +21,7 @@ export class SettingsModal {
   #searchInput: HTMLInputElement | null = null;
   #scrollObserver: IntersectionObserver | null = null;
   #pendingChanges: Map<SettingKey, unknown> = new Map();
+  #collapseState: TreeCollapseState = {};
   #isOpen: boolean = false;
 
   /**
@@ -93,6 +96,7 @@ export class SettingsModal {
     // Tree panel
     this.#treeContainer = document.createElement('div');
     this.#treeContainer.className = 'settings-tree';
+    this.#collapseState = readCollapseState();
     this.#renderTree(SETTING_CATEGORIES, this.#treeContainer, 0);
 
     // Content panel
@@ -240,6 +244,9 @@ export class SettingsModal {
       // Wrapper for item + children
       const wrapper = document.createElement('div');
       wrapper.className = 'settings-tree-node';
+      if (hasChildren && (this.#collapseState[category.id] ?? category.collapsed ?? false)) {
+        wrapper.classList.add('collapsed');
+      }
       
       const item = document.createElement('div');
       item.className = 'settings-tree-item';
@@ -247,10 +254,9 @@ export class SettingsModal {
       item.style.paddingLeft = `${12 + depth * 16}px`;
 
       const icon = category.icon || '•';
-      const toggleIcon = hasChildren ? '▾' : '';
 
       item.innerHTML = `
-        ${hasChildren ? `<span class="settings-tree-toggle">${toggleIcon}</span>` : '<span style="width:12px"></span>'}
+        ${hasChildren ? '<span class="settings-tree-toggle"></span>' : '<span style="width:12px"></span>'}
         <span class="settings-tree-icon">${icon}</span>
         <span class="settings-tree-label">${category.label}</span>
       `;
@@ -258,7 +264,9 @@ export class SettingsModal {
       item.addEventListener('click', () => {
         // Toggle collapse if has children
         if (hasChildren) {
-          wrapper.classList.toggle('collapsed');
+          const collapsed = wrapper.classList.toggle('collapsed');
+          this.#collapseState[category.id] = collapsed;
+          writeCollapsed(category.id, collapsed);
         }
         
         // Scroll to section
@@ -639,13 +647,9 @@ export class SettingsModal {
     );
     if (!confirmed) return;
 
-    // Keys preserved across factory reset. Kept in sync with SENSITIVE_KEYS in
-    // src/storage/workspace/transfer.ts — if you add a new API key there, add
-    // it here too.
-    const PRESERVED_KEYS = new Set<SettingKey>([
-      'ai.geminiApiKey',
-      'ai.openrouterApiKey',
-    ]);
+    // Keys preserved across factory reset. Matches workspace export behavior:
+    // API keys are user-private and are never exported.
+    const PRESERVED_KEYS = new Set<SettingKey>(PROVIDER_API_KEY_SETTING_KEYS);
 
     for (const [domain, settings] of Object.entries(FACTORY_DEFAULTS)) {
       for (const [name, defaultValue] of Object.entries(settings)) {

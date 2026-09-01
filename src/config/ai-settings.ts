@@ -8,6 +8,12 @@ import type { ProviderType } from '../core/main-types';
 /** Thinking level for Gemini 3 models */
 export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
 
+/** Reasoning effort for OpenAI models. Which values a model accepts varies by model. */
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/** Effort for Claude models. Caps total token spend, thinking and tool calls included. */
+export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface AISettings {
   /** AI provider to use */
   provider: ProviderType;
@@ -21,8 +27,30 @@ export interface AISettings {
   openrouterApiKey: string;
   /** OpenRouter model */
   openrouterModel: string;
-  
-  /** Enable web search grounding (Gemini only) */
+
+  /** OpenAI API key */
+  openaiApiKey: string;
+  /** OpenAI model */
+  openaiModel: string;
+
+  /** Anthropic API key */
+  anthropicApiKey: string;
+  /** Anthropic model */
+  anthropicModel: string;
+
+  /** Reasoning effort for OpenAI models (depth vs latency and cost) */
+  openaiReasoningEffort: ReasoningEffort;
+
+  /** Effort for Claude models (depth vs latency and cost) */
+  anthropicEffort: ClaudeEffort;
+
+  /**
+   * Reply cap for Claude, which requires one. Counts thinking as well as visible
+   * text, so raising effort may need this raised too.
+   */
+  anthropicMaxTokens: number;
+
+  /** Enable web search grounding (Gemini and OpenAI) */
   webSearchEnabled: boolean;
   
   /** Thinking level for Gemini 3 models (controls reasoning depth vs latency) */
@@ -94,11 +122,20 @@ export interface AISettings {
 export const AI_DEFAULTS: AISettings = {
   provider: 'gemini',
   geminiApiKey: '',
-  geminiModel: 'gemini-3-flash-preview',
+  geminiModel: 'gemini-3.7-flash',
   openrouterApiKey: '',
-  openrouterModel: 'anthropic/claude-sonnet-4.6',
+  openrouterModel: 'anthropic/claude-sonnet-5',
+  openaiApiKey: '',
+  openaiModel: 'gpt-5.6-terra',
+  anthropicApiKey: '',
+  anthropicModel: 'claude-sonnet-5',
+  // Deliberately below each vendor's own default (OpenAI medium, Anthropic high):
+  // most requests here are short, and latency and cost matter more than depth.
+  openaiReasoningEffort: 'low',
+  anthropicEffort: 'low',
+  anthropicMaxTokens: 32768,
   webSearchEnabled: true,
-  thinkingLevel: 'low',
+  thinkingLevel: 'minimal',
   chatScrollPosition: 'bottom',
   imageResultCount: 3,
   storeRetrievedImages: true,
