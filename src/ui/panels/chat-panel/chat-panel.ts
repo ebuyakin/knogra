@@ -6,7 +6,7 @@
 
 import type { Core } from 'cytoscape';
 import type { NodeId, SceneId } from '../../../core/main-types';
-import type { ProposedAction } from '../../../ai/types';
+import type { ProposedAction, RelationshipSlot } from '../../../ai/types';
 import type { ChatMessage, MessageSource, ChatImageAttachment } from '../../../core/chat-types';
 import type { SceneContext } from '../../../ai/context-builder';
 
@@ -14,13 +14,15 @@ import { chatSession } from '../../../ai/chat-session';
 import { chatStore } from '../../../storage/chat-store';
 import { eventBus } from '../../../events/event-bus';
 import { localiseAttachment } from '../../../ai/image-search/image-search';
-import { QUICK_ACTIONS, resolveQuickActionMessage, type QuickActionId } from '../../../ai/prompts';
+import { QUICK_ACTIONS, resolveQuickActionMessage, isSlottableQuickActionId, type QuickAction, type QuickActionId } from '../../../ai/prompts';
+import { ANY_RELATIONSHIP, buildSlotGroups, stampSlot } from '../../../ai/relationship-slot';
 import { getSetting } from '../../../config';
 
 import {
   renderAIMessage, renderNote, renderError, renderHint, scrollToBottom
 } from './chat-message-renderer';
 import { showMessageContextMenu, showPanelContextMenu } from './chat-context-menu';
+import { attachQuickActionMenu } from './quick-action-menu';
 import { createNoteEditor, editNote } from './chat-note-editor';
 import type { ContextMenuActions } from './chat-context-menu';
 import type { MessageContextMenuHandler, NoteEditHandler } from './chat-message-renderer';
@@ -38,6 +40,8 @@ export class ChatPanel {
   #chatContainer: HTMLElement;
   #cy: Core;
   #onActionsReceived: ((actions: ProposedAction[]) => void) | null = null;
+  /** The relationship chosen for the request in flight. Only one can be in flight. */
+  #pendingSlot: RelationshipSlot | null = null;
 
   constructor(cy: Core) {
     this.#cy = cy;
@@ -187,14 +191,35 @@ export class ChatPanel {
         if (action.prompt === '__clear__') {
           this.#clearChat();
         } else {
-          const message = resolveQuickActionMessage(action);
-          const displayText = this.#quickActionDisplayText(action.id, message.displayText);
-          this.#sendQuickAction(message.prompt, displayText);
+          this.#sendSlottedQuickAction(action, ANY_RELATIONSHIP);
         }
       });
 
+      if (isSlottableQuickActionId(action.id)) {
+        attachQuickActionMenu(
+          button,
+          () => buildSlotGroups(this.#currentNodeTitle() || 'the central node'),
+          slot => this.#sendSlottedQuickAction(action, slot)
+        );
+      }
+
       this.#quickActionsContainer.appendChild(button);
     }
+  }
+
+  /** Records the chosen relationship so it can be stamped on the actions that come back. */
+  #sendSlottedQuickAction(action: QuickAction, slot: RelationshipSlot): void {
+    this.#pendingSlot = slot;
+
+    const message = resolveQuickActionMessage(action, slot.constraint);
+    const displayText = this.#quickActionDisplayText(action.id, message.displayText);
+    this.#sendQuickAction(message.prompt, this.#withSlotLabel(displayText, slot));
+  }
+
+  /** Two Suggest requests differ only by the relationship, so the timeline has to say which. */
+  #withSlotLabel(displayText: string | undefined, slot: RelationshipSlot): string | undefined {
+    if (!displayText || !slot.constraint) return displayText;
+    return `${displayText.replace(/\.$/, '')} — ${slot.label}.`;
   }
 
   #setupEventListeners(): void {
@@ -238,9 +263,12 @@ export class ChatPanel {
         void this.#localiseRetrievedImages(nodeId);
       },
       onActionsReceived: (actions) => {
-        this.#onActionsReceived?.(actions);
+        const slot = this.#pendingSlot;
+        this.#pendingSlot = null;
+        this.#onActionsReceived?.(slot ? stampSlot(actions, slot) : actions);
       },
       onError: (error) => {
+        this.#pendingSlot = null;
         renderError(error.message, this.#messagesContainer);
       }
     });
@@ -255,6 +283,9 @@ export class ChatPanel {
   async #sendMessage(): Promise<void> {
     const content = this.#input.value.trim();
     if (!content) return;
+
+    // A typed message carries no relationship choice; a stale one must not survive it.
+    this.#pendingSlot = null;
 
     const initialized = await chatSession.tryAutoInit();
     if (!initialized) {

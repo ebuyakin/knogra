@@ -37,4 +37,21 @@ Knogra has dev-only diagnostic surfaces; choose the lightest tool that can answe
 `.github/project-journal.md` is the official append-only record of project work, decisions, fixes, and remaining tasks. Read the newest relevant journal entries first, using workstream/tags once the journal format is updated. `todo.md` is the user-maintained active checklist and should checked by user, not you. At checkpoint/session close, update the journal (but not todo).  Be aware that `.github/project-journal.md` is in .gitignore, so you standard grep search won't return it. Read it directly.
 
 12. **Working Setup**
-The project is worked on through VS Code over SSH, with the repo on the Ubuntu VM at `~/pro/knogra/`. This matters mainly for paths, user-run commands, and explaining environment-specific steps; do not spend tokens on setup unless it affects the task.
+The project is worked on through VS Code over SSH, with the repo on the Ubuntu VM at `~/pro/knogra/`. This matters mainly for paths, user-run commands, and explaining environment-specific steps; do not spend tokens on setup unless it affects the task. Screenshots live in `~/shots/`, which is outside the repo. When the user mentions a screenshot without naming a file, list that directory and open the most recent one rather than asking which.
+
+13. **Chat Output Format**
+Naming a file or a code symbol in a reply. Use one of the two forms below and nothing else, in every part of the reply — running prose, fenced and indented code blocks, JSON and code snippets, diffs, example shell commands, quoted tool output — with no short form, no exception for a first mention, and no exception for brevity.
+
+    Files      Absolute path on the VM, in inline code: `~/pro/knogra/src/ai/node-shelf.ts`.
+               The `~/pro/knogra/` prefix is redundant and is the price of a path that
+               stays copy-pasteable.
+
+    Symbols    Repo-relative path without the extension, then the owning type or module,
+               then the member, dotted, in inline code:
+               `src/ai/types/CreateConnectedAction.edgeType`,
+               `src/ai/node-shelf/NodeShelf.placeNode()`,
+               `src/ai/context-builder/buildSystemPrompt()`.
+
+Never write: a markdown link to a file; a repo-relative or leading-slash path; a bare path in running prose; a bare basename; a bare symbol name; a plain-text list of files or symbols in a code block. Never paste a snippet that contains a real file or symbol name — describe it in prose, or write it to a file and name that file in the form above. Never type `_vscodecontentref_`.
+
+Why: before rendering, VS Code scans the reply for any string it can resolve to a workspace file or a known symbol and rewrites it into a markdown link — display text cut down to the basename or symbol, target replaced by an internal `http://_vscodecontentref_/N` URI. Where markdown renders, that becomes a badge with everything locating the file thrown away; inside a code block the link cannot render, so the raw markdown shows on screen. Backticks alone do not prevent it, and no VS Code setting disables it: the AI settings reference was read in full on 2026-09-10 and contains none. The two forms above survive only because the matcher cannot resolve them. Files read, edited, or attached during the session are the likeliest to be rewritten, which is exactly the set a reply tends to discuss. Tested 2026-09-09 and 2026-09-10.

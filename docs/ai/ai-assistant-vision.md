@@ -1,11 +1,18 @@
 # AI Assistant: Vision & Architecture
 
-> **Status:** Current  
-> **Last reviewed:** 2026-06-25  
-> **Authority:** Current AI assistant goals, behavior rules, provider model, and graph-action flow.  
-> **Related:** [Documentation map](README.md), [Chat panel architecture](chat-panel-architecture.md), [AI chat API call composition](ai-chat-api-call-composition.md), [Product vision](knogra-vision.md)
+> **Status:** Current
+>
+> **Last reviewed:** 2026-09-10
+>
+> **Authority:** What the assistant is for, how its capabilities are meant to behave, and how the
+> `src/ai` layer is organized. Deliberately holds no prompt text and no copy of the action schema:
+> the prompt is [ai-prompt-etalon.md](ai-prompt-etalon.md), how a call is assembled is
+> [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md), and vendor transport is
+> [ai-provider-architecture.md](ai-provider-architecture.md).
+>
+> **Related:** [Documentation map](../README.md), [Chat panel architecture](../chat-panel-architecture.md), [Product vision](../knogra-vision.md)
 
-> **Note:** The AI chat is one mode of the broader chat panel, which also serves as a notebook and tutorial content pane. See [Chat Panel Architecture](chat-panel-architecture.md) for the full panel design.
+> **Note:** The AI chat is one mode of the broader chat panel, which also serves as a notebook and tutorial content pane. See [Chat Panel Architecture](../chat-panel-architecture.md) for the full panel design.
 
 ## Overview
 
@@ -46,14 +53,19 @@ AI responses contain both:
 
 Preconfigured chat commands provide common starting points without changing provider mode:
 
-| Command | Purpose | Action bias |
+| Command | Purpose | Reply shape |
 |---|---|---|
-| **Scene** | Discuss the current scene as a whole around its central node. | Explanatory; graph actions only when useful. |
-| **Node** | Explain the currently selected node(s) in scene context; falls back to the central node when nothing is selected. | Explanatory; graph actions only when useful. |
-| **Suggest** | Propose brand-new concepts related to the current scene. | `create_connected` actions. |
+| **Scene** | Discuss the current scene as a whole around its central node. | Explanatory; actions forbidden. |
+| **Node** | Explain the currently selected node(s) in scene context; falls back to the central node when nothing is selected. | Explanatory; actions forbidden. |
+| **Suggest** | Propose brand-new concepts connected to the central node. | `create_connected` actions. |
 | **Connect** | Find existing graph nodes that belong in the current scene. | `include_existing` actions. |
 
-The visible timeline stores compact command text, while the provider receives the fuller hidden command prompt. Each command can have optional setting-driven additions appended to that hidden prompt. Exact command wording and API-call composition are defined in [AI chat API call composition](ai-chat-api-call-composition.md).
+Suggest and Connect can be directed by relationship. Clicking either button opens a menu built from
+the workspace's own edge types, grouped as Child, Parent and Any; picking a row constrains the
+request to that relationship, and the app then stamps the user's choice onto every action that comes
+back. Picking nothing leaves the model free to choose the relationship itself.
+
+The visible timeline stores compact command text, while the provider receives the fuller hidden command prompt. Each command can have optional setting-driven additions appended to that hidden prompt. Exact command wording is in [ai-prompt-etalon.md](ai-prompt-etalon.md); how a call is assembled is in [AI chat API call composition](ai-chat-api-call-composition.md).
 
 ### B. Node Shelf (Suggestion Panel)
 
@@ -64,13 +76,17 @@ A horizontal shelf at the bottom of the viewport showing AI-suggested nodes. Two
 | **Create New** | (none) | Creates new node + edge in graph & scene | AI generates title/properties |
 | **Include Existing** | ∃ badge | Adds existing node to scene + restores edges | AI references by title |
 
-**Create New** — AI suggests a new concept. Clicking creates the node connected to central.
+**Create New** — AI suggests a new concept. Clicking creates the node and one edge to the central node, with the relationship type and direction the action carries.
 
 **Include Existing** — AI suggests an existing graph node that isn't in the current scene. Clicking:
 1. Resolves the title to a `nodeId` in `graphStore`
-2. Calculates collision-free position (near selected node, or central if none selected)
+2. Calculates a collision-free position near the central node
 3. Adds node to scene and restores all edges to nodes already in scene
-4. If no edges exist, creates a fallback edge to selected or central node
+4. If no edges exist, creates a fallback edge to the central node
+
+Both paths anchor on the central node rather than the selection, because the request that produced
+the suggestion named the central node; anchoring elsewhere would assert a relationship nobody asked
+for.
 
 **Deduplication rules:**
 - `create_connected`: skip if title or equation already exists anywhere in graph
@@ -85,31 +101,29 @@ A horizontal shelf at the bottom of the viewport showing AI-suggested nodes. Two
 
 ### C. Context & Prompt Architecture
 
-The system prompt provides the AI with scene-aware graph context rather than a generic chat setup. It distinguishes:
+The system prompt gives the model scene-aware graph context rather than a generic chat setup. It
+distinguishes:
 
 - the scene central node
+- the workspace's own relationship vocabulary, so an edge reads as the sentence its type forms
 - currently selected node(s), when present
-- visible scene nodes and scene-included edges
-- direct graph neighbors of the central node
-- full-graph nodes already in the scene vs available to include
+- the scene's nodes and edges, and separately the edges that exist between scene nodes without being shown
+- the central node's neighbours that the scene does not hold
+- every remaining node in the graph
 
 This enables the AI to:
 - Avoid suggesting duplicates (`create_connected` for something that exists)
 - Suggest relevant existing nodes (`include_existing`) with exact title matching
+- Name a relationship type and direction for every action it proposes
 - Treat scene membership, runtime selection, and graph connectivity as different signals
 - Weight answers by scene richness instead of overfitting sparse scenes
 
-**Action schema in prompt:**
-```json
-[
-  { "type": "create_connected", "title": "...", "connectionType": "child", "properties": {...}, "reason": "..." },
-  { "type": "include_existing", "title": "Exact existing title", "reason": "..." }
-]
-```
+`include_existing` uses `title` rather than `nodeId` — the model does not know internal ids, and
+title-to-id resolution happens when the action reaches the shelf. Relationship type names resolve
+the same way, in `src/ai/edge-type-resolution.ts`.
 
-Note: `include_existing` uses `title` (not `nodeId`) — the AI doesn't know internal IDs. Title→nodeId resolution happens at parse time.
-
-The exact system-message text is intentionally not duplicated here; [AI chat API call composition](ai-chat-api-call-composition.md) is the implementation contract for prompt and provider-call details.
+The schema itself, the resolution rules and the exact prompt text are in
+[ai-prompt-etalon.md](ai-prompt-etalon.md) and are deliberately not repeated here.
 
 ### D. Equation Support
 - AI can generate/edit LaTeX equations
@@ -130,8 +144,9 @@ The exact system-message text is intentionally not duplicated here; [AI chat API
 ### Data Flow: include_existing
 
 ```
-AI Response → gemini-adapter.ts (parse JSON)
+AI Response → provider adapter (parse JSON)
   → chat-session.ts (emit actions)
+  → chat-panel.ts (stamp the chosen relationship, if any)
   → panel-api.ts (route to shelf)
   → node-shelf.ts (filter, store, emit change)
   → suggestion-panel.ts (render with badge)
@@ -139,89 +154,55 @@ AI Response → gemini-adapter.ts (parse JSON)
 User clicks →
   → node-shelf.ts placeNode()
     → resolve title → nodeId
-    → scene.includeExistingNode(nodeId)
+    → scene.includeExistingNode(nodeId, design, centralNodeId)
 ```
 
 ### Data Flow: create_connected
 
 ```
-AI Response → gemini-adapter.ts → chat-session.ts → panel-api.ts
+AI Response → provider adapter → chat-session.ts → chat-panel.ts → panel-api.ts
   → node-shelf.ts → suggestion-panel.ts
 
 User clicks →
   → node-shelf.ts placeNode()
-    → graph.addConnectedNode(centralId, direction, title, props, design)
+    → resolve edgeType + direction → edge type id, child/parent
+    → graph.addConnectedNode(centralId, direction, title, props, design, edgeTypeId)
 ```
 
-### Provider Layer (Vendor-Agnostic)
+### Provider Layer
 
-```
-src/ai/providers/
-├── provider.ts              # Interface, types, factory
-├── gemini-adapter.ts        # Google Gemini (direct API)
-└── openrouter-adapter.ts    # OpenRouter (OpenAI-compatible, multi-model)
-```
-
-**Interface:**
-```typescript
-interface AIProvider {
-  sendMessage(
-    messages: ChatMessage[],
-    systemPrompt: string
-  ): Promise<AIResponse>;
-}
-
-interface AIResponse {
-  content: string;
-  actions: ProposedAction[];
-}
-```
-
-**Provider configuration (stored in localStorage via settings):**
-```typescript
-type ProviderType = 'gemini' | 'openrouter';
-
-// Settings keys:
-// ai.provider   → 'gemini' | 'openrouter'
-// ai.model      → model identifier (e.g. 'gemini-2.0-flash', 'anthropic/claude-sonnet-4')
-// ai.apiKey     → user's API key (BYOK — never sent to our servers)
-```
-
-**OpenRouter integration:**
-- Endpoint: `https://openrouter.ai/api/v1/chat/completions` (OpenAI-compatible)
-- Model list: fetched from `https://openrouter.ai/api/v1/models` (public, no auth)
-- Supports all major models (GPT-4o, Claude, Gemini, Llama, Mistral, etc.)
-- Users bring their own OpenRouter API key
-
-**Settings UI flow:**
-1. User selects provider (Gemini / OpenRouter)
-2. Enters API key (masked, stored in localStorage)
-3. Selects model from dropdown (Gemini: 2-3 models; OpenRouter: fetched live)
-4. On app load, key is read from settings → `createProvider()` → chat ready
-
-**Key is loaded at startup** from localStorage (not from env variables).
-Build-time `VITE_GEMINI_API_KEY` is removed in favour of runtime user-provided keys.
+Four vendors are supported — Gemini, OpenAI, Anthropic and OpenRouter — behind one interface, with
+the user's own key and no proxy. The registry, resolution and fallback order, timeouts, shared reply
+parsing and the per-vendor facts are all in
+[ai-provider-architecture.md](ai-provider-architecture.md) and are not repeated here.
 
 ### Module Structure
 
+Folder granularity for the whole layer. The file-by-file map of the chat call chain is in
+[AI chat API call composition](ai-chat-api-call-composition.md).
+
 ```
 src/ai/
-├── types.ts              # ChatMessage, ProposedAction, ShelfAction, Conversation
-├── chat-session.ts       # Manages current conversation
-├── context-builder.ts    # Builds system prompt from graph state
-├── node-shelf.ts         # Maintains shelf items from AI responses
-├── shelf-design-selector.ts  # Selects visual design for shelf previews
-├── prompts.ts            # Prompt templates
-└── providers/            # (see above)
+├── types.ts                  # Chat, proposed-action and relationship-slot types
+├── chat-session.ts           # One conversation per node; builds context, sends calls
+├── context-builder.ts        # Assembles the system prompt from graph and scene state
+├── prompts.ts                # Prompt templates and quick-action assembly
+├── relationship-slot.ts      # Edge types → menu choices, constraint sentences, stamping
+├── edge-type-resolution.ts   # The model's words → edge type id and direction
+├── node-shelf.ts             # Shelf items from AI responses; placement on accept
+├── shelf-design-selector.ts  # Visual design for shelf previews
+├── equation-generator.ts     # Self-contained equation call, no graph context
+├── latex-sanitizer.ts        # Repairs LaTeX damaged by JSON escaping
+├── providers/                # Vendor adapters, resolution, timeouts, reply parsing
+├── node-image/               # SVG pictogram generation (own document set)
+└── image-search/             # Wikimedia image retrieval into chat
 
-src/storage/
-├── chat-store.ts         # IndexedDB for conversations
+src/storage/chat-store.ts     # IndexedDB conversations
 
-src/ui/
-├── panels/
-│   ├── chat-panel.ts     # Message history + input
-│   ├── suggestion-panel.ts # Shelf rendering
-│   └── panel-api.ts      # Routes actions between AI and UI
+src/ui/panels/
+├── chat-panel/               # Timeline, input, quick actions, relationship menu
+├── suggestion-panel.ts       # Shelf rendering
+└── panel-api.ts              # Routes actions between AI and UI
 ```
 
 ---
@@ -248,29 +229,19 @@ interface Conversation {
 ```
 
 ### ProposedAction
-```typescript
-type ProposedAction =
-  | { type: 'include_existing'; title: string; reason: string }
-  | { type: 'create_connected'; title: string; connectionType: 'child' | 'parent';
-      properties?: Record<string, string>; reason: string }
-  | { type: 'connect_nodes'; sourceId: NodeId; targetId: NodeId; reason: string }
-  | { type: 'update_property'; nodeId: NodeId; propertyKey: string;
-      propertyValue: string; reason: string }
-  | { type: 'add_tag'; nodeId: NodeId; tag: string; reason: string };
-```
+
+The union of everything the model may propose. Two members reach the node shelf,
+`create_connected` and `include_existing`; the rest are defined but not routed there. Each shelf
+action carries a relationship — a type name from the workspace vocabulary and a direction relative
+to the central node.
+
+The declarations are in `src/ai/types.ts` and are not copied here; the wire form the model writes,
+and how each field is resolved, are in [ai-prompt-etalon.md](ai-prompt-etalon.md).
 
 ### ShelfAction (subset routed to shelf)
 ```typescript
 type ShelfAction = CreateConnectedAction | IncludeExistingAction;
 ```
-
----
-
-## System Prompt Structure
-
-The context builder assembles one dynamic system prompt for typed messages and all AI commands. It summarizes the scene central node, currently selected node(s), current scene content, direct graph neighbors, and full-graph availability for shelf actions.
-
-The preconfigured commands differ by their hidden user message, not by separate system prompts or provider modes. Exact prompt text and provider-call shape are defined in [AI chat API call composition](ai-chat-api-call-composition.md).
 
 ---
 

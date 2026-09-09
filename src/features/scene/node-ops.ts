@@ -444,7 +444,8 @@ export class SceneNodeOps {
    */
   async includeExistingNode(
     nodeId: NodeId,
-    design?: { id: string; params: Record<string, unknown> }
+    design?: { id: string; params: Record<string, unknown> },
+    anchorNodeId?: NodeId
   ): Promise<number> {
     if (!isEditMode()) {
       console.warn('Cannot include existing nodes in View mode');
@@ -459,8 +460,8 @@ export class SceneNodeOps {
       return 0;
     }
 
-    // Resolve placement reference (active-in-scene else central).
-    const placementRef = this.resolvePlacementReference();
+    // Caller's anchor wins; otherwise active-in-scene else central.
+    const placementRef = anchorNodeId ?? this.resolvePlacementReference();
 
     if (!placementRef) {
       console.warn(`Cannot include node ${nodeId}: no placement reference (no active node and no central node)`);

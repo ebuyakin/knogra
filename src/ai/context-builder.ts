@@ -4,10 +4,14 @@
  * Uses templates from config/prompts.ts
  */
 
-import type { NodeId, SceneId, Node, Scene, Edge } from '../core/main-types';
+import type { NodeId, SceneId, Node, Scene, Edge, EdgeType } from '../core/main-types';
 import { graphStore } from '../storage/graph-store';
 import { SYSTEM_PROMPT } from './prompts';
 import { getSetting } from '../config';
+
+/** The roster is the only unbounded list in the prompt, so it is the only one capped. */
+const MAX_ROSTER_NODES = 200;
+const MAX_ROSTER_COMMENT_CHARS = 200;
 
 // ============================================================================
 // TYPES
@@ -39,69 +43,62 @@ export interface SceneContext {
 export function buildSystemPrompt(context: SceneContext): string {
   const { centralNodeId, sceneId, visibleNodeIds, selectedNodeIds } = context;
 
-  // Get central node
   const centralNode = graphStore.nodes.find(n => n.id === centralNodeId);
   if (!centralNode) {
     return SYSTEM_PROMPT.fallback;
   }
 
-  // Get scene
   const scene = graphStore.scenes.find(s => s.id === sceneId);
+  const sceneNodeIds = new Set(visibleNodeIds);
 
-  // Get connected nodes (parents and children)
-  const { parents, children } = getConnectedNodes(centralNodeId);
-
-  // Get visible nodes details
   const visibleNodes = visibleNodeIds
     .map(id => graphStore.nodes.find(n => n.id === id))
     .filter((n): n is Node => n !== undefined);
-  const sceneNodeIds = new Set(visibleNodeIds);
-  const sceneEdges = getSceneEdges(scene, sceneNodeIds);
   const selectedNodes = selectedNodeIds
     .map(id => graphStore.nodes.find(n => n.id === id))
     .filter((n): n is Node => n !== undefined);
 
-  // Build the prompt from sections
-  const sections: string[] = [];
+  const { sceneEdges, hiddenSceneEdges } = splitInSceneEdges(scene, sceneNodeIds);
+  const outsideConnections = getOutsideConnections(centralNodeId, sceneNodeIds);
 
-  // Role
-  sections.push(SYSTEM_PROMPT.role);
+  // The roster is the remainder, so anything already shown in full above is excluded.
+  const namedAbove = new Set<NodeId>(sceneNodeIds);
+  outsideConnections.forEach(connection => namedAbove.add(connection.neighbour.id));
 
-  // Scene central node
-  sections.push(renderCentralNodeSection(centralNode));
+  const sections: string[] = [
+    SYSTEM_PROMPT.role,
+    SYSTEM_PROMPT.workspaceIntro,
+    renderCentralNodeSection(centralNode),
+    renderRelationshipTypesSection(),
+    renderVisibleSceneSection(visibleNodes, centralNodeId, scene, sceneEdges, hiddenSceneEdges)
+  ];
 
-  // Runtime selection inside the scene
   if (selectedNodes.length > 0) {
     sections.push(renderSelectedNodesSection(selectedNodes, centralNodeId));
   }
 
-  // Current scene
-  sections.push(renderVisibleSceneSection(visibleNodes, centralNodeId, scene, sceneEdges));
-
-  // Directly connected nodes
-  if (parents.length > 0 || children.length > 0) {
-    sections.push(renderConnectedConceptsSection(parents, children, sceneNodeIds));
+  if (outsideConnections.length > 0) {
+    sections.push(renderConnectedConceptsSection(outsideConnections));
   }
 
-  // Full knowledge graph (for dedup and include_existing)
-  sections.push(renderKnowledgeGraphSection(visibleNodeIds));
+  sections.push(renderRestOfGraphSection(namedAbove));
 
-  // Action schema
+  sections.push(SYSTEM_PROMPT.responseIntro);
+  sections.push(SYSTEM_PROMPT.prose);
   sections.push(SYSTEM_PROMPT.actionSchema);
+  sections.push(SYSTEM_PROMPT.equations);
 
-  // Language instruction
-  const lang = getSetting('ai.responseLanguage') as string;
+  const lang = (getSetting('ai.responseLanguage') as string) ?? '';
   if (lang.trim()) {
-    sections.push(`## Language\nAlways respond in ${lang.trim()}. Use ${lang.trim()} for node titles and concept names in your suggestions.`);
+    sections.push(`### Language\nAlways respond in ${lang.trim()}. Use ${lang.trim()} for node titles and concept names in your suggestions.`);
   }
 
-  // Custom user instructions
-  const custom = getSetting('ai.customInstructions') as string;
+  const custom = (getSetting('ai.customInstructions') as string) ?? '';
   if (custom.trim()) {
-    sections.push(`## Custom Instructions\n${custom.trim()}`);
+    sections.push(`### Custom Instructions\n${custom.trim()}`);
   }
 
-  return sections.join('\n\n');
+  return sections.filter(section => section.length > 0).join('\n\n');
 }
 
 // ============================================================================
@@ -181,29 +178,51 @@ function formatSelectedNodeDetail(node: Node, centralNodeId: NodeId): string {
   return lines.join('\n');
 }
 
-function renderConnectedConceptsSection(
-  parents: Node[],
-  children: Node[],
-  sceneNodeIds: Set<NodeId>
-): string {
-  const data: Record<string, string> = {};
+/**
+ * The workspace's relationship vocabulary. The reading sentence uses the same
+ * label the edge lines use, so a label the model meets on an edge can always be
+ * traced back to a type here.
+ */
+function renderRelationshipTypesSection(): string {
+  return renderTemplate(SYSTEM_PROMPT.relationshipTypesTemplate, {
+    relationshipTypes: graphStore.edgeTypes.map(formatRelationshipType).join('\n')
+  });
+}
 
-  if (parents.length > 0) {
-    data.parents = parents.map(n => formatNodeForPrompt(n, { sceneNodeIds, includeComment: true })).join('\n');
-  }
+function formatRelationshipType(edgeType: EdgeType): string {
+  const parts = [`- ${edgeType.name}:`];
 
-  if (children.length > 0) {
-    data.children = children.map(n => formatNodeForPrompt(n, { sceneNodeIds, includeComment: true })).join('\n');
-  }
+  const description = edgeType.description?.trim();
+  if (description) parts.push(description);
 
-  return renderTemplate(SYSTEM_PROMPT.connectedConceptsTemplate, data);
+  const forward = forwardReading(edgeType);
+  const inverse = edgeType.inverseLabel?.trim();
+  parts.push(inverse
+    ? `Reads "A ${forward} B"; from the other end, "B ${inverse} A".`
+    : `Reads "A ${forward} B".`);
+
+  return parts.join(' ');
+}
+
+function renderConnectedConceptsSection(connections: OutsideConnection[]): string {
+  const lines = connections.map(({ edge, neighbour }) => {
+    const details = nodeDetailParts(neighbour).join(' — ');
+    return details
+      ? `- ${formatEdgeArrow(edge)} (${details})`
+      : `- ${formatEdgeArrow(edge)}`;
+  });
+
+  return renderTemplate(SYSTEM_PROMPT.connectedConceptsTemplate, {
+    connections: lines.join('\n')
+  });
 }
 
 function renderVisibleSceneSection(
   visibleNodes: Node[],
   centralNodeId: NodeId,
   scene: Scene | undefined,
-  sceneEdges: Edge[]
+  sceneEdges: Edge[],
+  hiddenSceneEdges: Edge[]
 ): string {
   const data: Record<string, string> = {
     sceneContextStrength: calculateSceneContextStrength(visibleNodes, sceneEdges, centralNodeId)
@@ -215,31 +234,36 @@ function renderVisibleSceneSection(
 
   if (visibleNodes.length > 0) {
     data.sceneConcepts = visibleNodes
-      .map(n => formatNodeForPrompt(n, { centralNodeId, includeComment: true }))
+      .map(n => formatNodeForPrompt(n, { centralNodeId }))
       .join('\n');
   }
 
   if (sceneEdges.length > 0) {
-    data.sceneRelationships = sceneEdges
-      .map(formatSceneRelationship)
-      .join('\n');
+    data.sceneRelationships = sceneEdges.map(edge => `- ${formatEdgeArrow(edge)}`).join('\n');
+  }
+
+  if (hiddenSceneEdges.length > 0) {
+    data.hiddenRelationships = hiddenSceneEdges.map(edge => `- ${formatEdgeArrow(edge)}`).join('\n');
   }
 
   return renderTemplate(SYSTEM_PROMPT.visibleSceneTemplate, data);
 }
 
-function renderKnowledgeGraphSection(visibleNodeIds: NodeId[]): string {
-  const visibleSet = new Set(visibleNodeIds);
-  const allNodes = graphStore.nodes;
+/** Empty when every node is already named above, in which case the section is dropped. */
+function renderRestOfGraphSection(namedAbove: Set<NodeId>): string {
+  const remaining = graphStore.nodes.filter(node => !namedAbove.has(node.id));
+  if (remaining.length === 0) return '';
 
-  const inScene = allNodes.filter(n => visibleSet.has(n.id)).map(n => formatNodeForPrompt(n));
-  const notInScene = allNodes.filter(n => !visibleSet.has(n.id)).map(n => formatNodeForPrompt(n));
+  const lines = remaining
+    .slice(0, MAX_ROSTER_NODES)
+    .map(node => formatNodeForPrompt(node, { maxCommentChars: MAX_ROSTER_COMMENT_CHARS }));
 
-  const data: Record<string, string> = {};
-  if (inScene.length > 0) data.inScene = inScene.join('\n');
-  if (notInScene.length > 0) data.notInScene = notInScene.slice(0, 200).join('\n');
+  const omitted = remaining.length - lines.length;
+  if (omitted > 0) {
+    lines.push(`- ...and ${omitted} further nodes not listed here.`);
+  }
 
-  return renderTemplate(SYSTEM_PROMPT.knowledgeGraphTemplate, data);
+  return renderTemplate(SYSTEM_PROMPT.knowledgeGraphTemplate, { remaining: lines.join('\n') });
 }
 
 // ============================================================================
@@ -277,38 +301,59 @@ function renderTemplate(template: string, data: Record<string, string>): string 
 // HELPERS
 // ============================================================================
 
-/**
- * Get parent and child nodes for a given node
- */
-function getConnectedNodes(nodeId: NodeId): { parents: Node[]; children: Node[] } {
-  const parents: Node[] = [];
-  const children: Node[] = [];
-  
-  for (const edge of graphStore.edges) {
-    if (edge.sourceId === nodeId) {
-      // This node is the source, so target is a child
-      const child = graphStore.nodes.find(n => n.id === edge.targetId);
-      if (child) children.push(child);
-    } else if (edge.targetId === nodeId) {
-      // This node is the target, so source is a parent
-      const parent = graphStore.nodes.find(n => n.id === edge.sourceId);
-      if (parent) parents.push(parent);
-    }
-  }
-  
-  return { parents, children };
+/** An edge on the central node whose other end the scene does not contain. */
+interface OutsideConnection {
+  edge: Edge;
+  neighbour: Node;
 }
 
-function getSceneEdges(scene: Scene | undefined, sceneNodeIds: Set<NodeId>): Edge[] {
-  if (!scene) return [];
+function getOutsideConnections(centralNodeId: NodeId, sceneNodeIds: Set<NodeId>): OutsideConnection[] {
+  const connections: OutsideConnection[] = [];
 
-  return Object.keys(scene.edges)
-    .map(edgeId => graphStore.edges.find(edge => edge.id === edgeId))
-    .filter((edge): edge is Edge =>
-      edge !== undefined &&
-      sceneNodeIds.has(edge.sourceId) &&
-      sceneNodeIds.has(edge.targetId)
-    );
+  for (const edge of graphStore.edges) {
+    const neighbourId = edge.sourceId === centralNodeId ? edge.targetId
+      : edge.targetId === centralNodeId ? edge.sourceId
+      : undefined;
+    if (!neighbourId || sceneNodeIds.has(neighbourId)) continue;
+
+    const neighbour = graphStore.nodes.find(node => node.id === neighbourId);
+    if (neighbour) connections.push({ edge, neighbour });
+  }
+
+  return connections;
+}
+
+/**
+ * Scene edge membership is its own list, so an edge can join two scene nodes and
+ * still not be part of the scene. Both halves reach the model: the second says so.
+ */
+function splitInSceneEdges(
+  scene: Scene | undefined,
+  sceneNodeIds: Set<NodeId>
+): { sceneEdges: Edge[]; hiddenSceneEdges: Edge[] } {
+  const bothEndsInScene = graphStore.edges.filter(
+    edge => sceneNodeIds.has(edge.sourceId) && sceneNodeIds.has(edge.targetId)
+  );
+  const includedEdgeIds = new Set(Object.keys(scene?.edges ?? {}));
+
+  return {
+    sceneEdges: bothEndsInScene.filter(edge => includedEdgeIds.has(edge.id)),
+    hiddenSceneEdges: bothEndsInScene.filter(edge => !includedEdgeIds.has(edge.id))
+  };
+}
+
+/** Falls back to the type name, then to a neutral verb, so an edge always reads. */
+function forwardReading(edgeType: EdgeType | undefined): string {
+  return edgeType?.forwardLabel?.trim() || edgeType?.name.trim() || 'relates to';
+}
+
+function formatEdgeArrow(edge: Edge): string {
+  const edgeType = graphStore.edgeTypes.find(type => type.id === edge.typeId);
+  const source = graphStore.nodes.find(node => node.id === edge.sourceId)?.title ?? edge.sourceId;
+  const target = graphStore.nodes.find(node => node.id === edge.targetId)?.title ?? edge.targetId;
+  const note = edge.title.trim() ? ` — note: ${edge.title.trim()}` : '';
+
+  return `${source} -[${forwardReading(edgeType)}]-> ${target}${note}`;
 }
 
 function calculateSceneContextStrength(
@@ -342,45 +387,44 @@ function calculateSceneContextStrength(
   return 'weak (limited scene structure)';
 }
 
+/**
+ * One line format for every node list. The central node is skipped because its
+ * own section already carries the same content in full.
+ */
 function formatNodeForPrompt(
   node: Node,
-  options: { centralNodeId?: NodeId; sceneNodeIds?: Set<NodeId>; includeComment?: boolean } = {}
+  options: { centralNodeId?: NodeId; maxCommentChars?: number } = {}
 ): string {
-  const details: string[] = [];
+  const isCentral = options.centralNodeId === node.id;
+  const marker = isCentral ? ' (central node)' : '';
+  const details = isCentral ? [] : nodeDetailParts(node, options.maxCommentChars);
 
-  if (options.centralNodeId === node.id) {
-    details.push('central node');
-  }
+  return details.length > 0
+    ? `- ${node.title}${marker} — ${details.join(' — ')}`
+    : `- ${node.title}${marker}`;
+}
 
-  if (options.sceneNodeIds) {
-    details.push(options.sceneNodeIds.has(node.id) ? 'in current scene' : 'not in current scene');
+function nodeDetailParts(node: Node, maxCommentChars?: number): string[] {
+  const parts: string[] = [];
+
+  if (node.tags && node.tags.length > 0) {
+    parts.push(`tags: ${node.tags.join(', ')}`);
   }
 
   const equation = node.properties?.equation;
   if (equation) {
-    details.push(String(equation));
+    parts.push(`equation: ${String(equation)}`);
   }
 
-  const suffix = details.length > 0 ? ` (${details.join('; ')})` : '';
-  let line = `- ${node.title}${suffix}`;
-
-  // The central node presents its comment in the dedicated central-node section,
-  // so skip it here to avoid duplicating the text within the same prompt.
-  if (options.includeComment && node.id !== options.centralNodeId) {
-    const comment = node.properties?.comment;
-    if (typeof comment === 'string' && comment.trim()) {
-      line += ` — comment: ${comment.trim()}`;
-    }
+  const comment = node.properties?.comment;
+  if (typeof comment === 'string' && comment.trim()) {
+    parts.push(`comment: ${truncateComment(comment.trim(), maxCommentChars)}`);
   }
 
-  return line;
+  return parts;
 }
 
-function formatSceneRelationship(edge: Edge): string {
-  const sourceTitle = graphStore.nodes.find(node => node.id === edge.sourceId)?.title ?? edge.sourceId;
-  const targetTitle = graphStore.nodes.find(node => node.id === edge.targetId)?.title ?? edge.targetId;
-  const title = edge.title.trim();
-  return title
-    ? `- ${sourceTitle} -> ${targetTitle}: ${title}`
-    : `- ${sourceTitle} -> ${targetTitle}`;
+function truncateComment(comment: string, maxChars?: number): string {
+  if (!maxChars || comment.length <= maxChars) return comment;
+  return `${comment.slice(0, maxChars).trimEnd()}…`;
 }

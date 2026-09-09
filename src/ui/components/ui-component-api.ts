@@ -4,6 +4,7 @@
  */
 
 import type { Core } from 'cytoscape';
+import type { Scene } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
 
 import { NodeEditor } from './node-editor/node-editor';
@@ -52,7 +53,8 @@ export class UIComponentAPI {
     this.nodeEditor = new NodeEditor();
     this.edgeEditor = new EdgeEditor();
     this.edgeTypeManager = new EdgeTypeManager({
-      onEdgeTypesChanged: () => this.#refreshCurrentEdgeTypeStyles(cy)
+      onEdgeTypesChanged: () => this.#refreshCurrentEdgeTypeStyles(cy),
+      resolveThemeId: () => this.#currentScene(cy)?.themeId || 'dark'
     });
     this.edgeTypeVisibilityModal = new EdgeTypeVisibilityModal(features);
     this.nodePicker = new NodePicker();
@@ -104,9 +106,13 @@ export class UIComponentAPI {
     this.transitionInputGuard = new TransitionInputGuard(cy);
   }
 
-  #refreshCurrentEdgeTypeStyles(cy: Core): void {
+  #currentScene(cy: Core): Scene | undefined {
     const currentSceneId = cy.scratch('currentSceneId') as string | undefined;
-    const currentScene = graphStore.scenes.find(scene => scene.id === currentSceneId);
+    return graphStore.scenes.find(scene => scene.id === currentSceneId);
+  }
+
+  #refreshCurrentEdgeTypeStyles(cy: Core): void {
+    const currentScene = this.#currentScene(cy);
     const themeId = currentScene?.themeId || 'dark';
     const stylesheet = (cy.style() as any).json();
     let updatedStylesheet = StyleGenerator.updateEdgeTypesInStylesheet(

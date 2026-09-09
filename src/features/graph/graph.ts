@@ -4,7 +4,7 @@
  */
 
 import type { Core, NodeSingular } from 'cytoscape';
-import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../../core/main-types';
+import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, EdgeTypeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../../core/main-types';
 import type { AnchorLinkResult } from './anchor-traversal';
 import type { GraphStatistics } from './statistics';
 import { graphStore } from '../../storage/graph-store';
@@ -205,13 +205,15 @@ export class Graph {
    * @param title - Optional title for the new node (defaults to "${existingTitle} ${direction}")
    * @param properties - Optional properties for the new node
    * @param design - Optional explicit design (e.g., from AI shelf). If provided, skips settings logic.
+   * @param edgeTypeId - Optional explicit edge type. Falls back to the remembered type.
    */
   async addConnectedNode(
     nodeId: NodeId,
     direction: 'child' | 'parent',
     title?: string,
     properties?: Record<string, unknown>,
-    design?: { id: DesignId; params: Record<string, unknown> }
+    design?: { id: DesignId; params: Record<string, unknown> },
+    edgeTypeId?: EdgeTypeId
   ): Promise<NodeId> {
     if (!isEditMode()) {
       throw new Error('Cannot add connected nodes in View mode');
@@ -263,10 +265,10 @@ export class Graph {
     // Create edge based on direction
     if (direction === 'child') {
       // Edge: existing → new (existing is parent)
-      this.addEdge(nodeId, newNodeId, '');
+      this.addEdge(nodeId, newNodeId, '', edgeTypeId);
     } else {
       // Edge: new → existing (new is parent)
-      this.addEdge(newNodeId, nodeId, '');
+      this.addEdge(newNodeId, nodeId, '', edgeTypeId);
     }
 
     return newNodeId;
@@ -278,7 +280,8 @@ export class Graph {
   addEdge(
     sourceId: NodeId,
     targetId: NodeId,
-    title: string = ''
+    title: string = '',
+    typeId?: EdgeTypeId
   ): EdgeId {
     if (!isEditMode()) {
       throw new Error('Cannot add edges in View mode');
@@ -286,10 +289,13 @@ export class Graph {
 
     const edgeId = `e${Date.now()}` as EdgeId;
 
+    // The remembered type is a user affordance; a caller that names a type means it.
     const rememberedEdgeTypeId = AppStateManager.getLastEdgeTypeId();
-    const edgeTypeId = rememberedEdgeTypeId && graphStore.edgeTypes.some(type => type.id === rememberedEdgeTypeId)
-      ? rememberedEdgeTypeId
-      : getDefaultEdgeTypeId();
+    const edgeTypeId = typeId ?? (
+      rememberedEdgeTypeId && graphStore.edgeTypes.some(type => type.id === rememberedEdgeTypeId)
+        ? rememberedEdgeTypeId
+        : getDefaultEdgeTypeId()
+    );
     const edge: EdgeData = {
       id: edgeId,
       title,

@@ -1,0 +1,56 @@
+/* Relationship picker on the Suggest and Connect buttons. Two levels, opened on
+   hover, anchored above the button. Submenus open leftwards because the chat
+   panel is docked to the right edge. */
+
+.qa-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 120px;
+  padding: 3px;
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+}
+
+.qa-menu-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.qa-menu-row:hover {
+  background-color: rgba(88, 166, 255, 0.18);
+}
+
+.qa-menu-arrow {
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+.qa-submenu {
+  position: absolute;
+  top: -3px;
+  right: 100%;
+  display: none;
+  min-width: 150px;
+  padding: 3px;
+  margin-right: 2px;
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.qa-menu-row--parent:hover > .qa-submenu {
+  display: block;
+}

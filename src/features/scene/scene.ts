@@ -205,18 +205,10 @@ export class Scene {
 
   async includeExistingNode(
     nodeId: NodeId,
-    design?: { id: string; params: Record<string, unknown> }
+    design?: { id: string; params: Record<string, unknown> },
+    anchorNodeId?: NodeId
   ): Promise<number> {
-    return this.#nodeOps.includeExistingNode(nodeId, design);
-  }
-
-  /**
-   * Resolve the placement reference (active-in-scene else central) for
-   * single-node adds. Exposed so the AI shelf can anchor a created node on the
-   * user's selection. See docs/node-placement.md §3.
-   */
-  resolvePlacementReference(): NodeId | null {
-    return this.#nodeOps.resolvePlacementReference();
+    return this.#nodeOps.includeExistingNode(nodeId, design, anchorNodeId);
   }
 
   async updateNodeStyle(

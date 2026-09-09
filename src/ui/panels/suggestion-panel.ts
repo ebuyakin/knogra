@@ -10,6 +10,7 @@ import type { Node } from '../../core/main-types';
 import type { Design } from '../../styles/designs/design-registry';
 import { getNodeStyle } from '../../styles/designs/design-registry';
 import { getTheme } from '../../styles/themes';
+import { describeRelationship } from '../../ai/edge-type-resolution';
 import { getSetting } from '../../config';
 import { eventBus } from '../../events/event-bus';
 import { isEditMode } from '../../storage/app-mode';
@@ -247,16 +248,26 @@ export class SuggestionPanel {
     }
   }
 
+  /** The model's description of the concept, then the edge placing it will create. */
+  #itemTooltip(shelfItem: ShelfItem): string {
+    const description = shelfItem.action.reason || shelfItem.action.title;
+    const relationship = describeRelationship(
+      shelfItem.action.edgeType,
+      shelfItem.action.direction
+    );
+
+    return `${description}\n${relationship}`;
+  }
+
   async #createSuggestionItem(
     shelfItem: ShelfItem,
     index: number
-  ): Promise<HTMLElement> {
-    const item = document.createElement('div');
+  ): Promise<HTMLElement> {    const item = document.createElement('div');
     const isExisting = shelfItem.action.type === 'include_existing';
     const editMode = isEditMode();
     item.className = isExisting ? 'suggestion-item suggestion-item--existing' : 'suggestion-item';
     item.title = editMode
-      ? shelfItem.action.reason || shelfItem.action.title
+      ? this.#itemTooltip(shelfItem)
       : 'Enable edit to place suggestions';
     item.style.cursor = editMode ? '' : 'not-allowed';
     item.style.opacity = editMode ? '' : '0.55';

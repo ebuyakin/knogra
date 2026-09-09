@@ -14,6 +14,7 @@ import type { CreateConnectedAction, IncludeExistingAction, ShelfAction, ShelfIt
 import type { FeatureAPI } from '../features/feature-api';
 import { eventBus } from '../events/event-bus';
 import { selectShelfDesign } from './shelf-design-selector';
+import { resolveEdgeDirection, resolveEdgeTypeId } from './edge-type-resolution';
 import { graphStore } from '../storage/graph-store';
 import { isEditMode } from '../storage/app-mode';
 import { getSetting } from '../config';
@@ -31,6 +32,22 @@ interface ShelfStorage {
     actions: ShelfAction[];
     timestamp: number;
   };
+}
+
+/** Field written by versions before edge types reached the shelf. */
+interface LegacyDirectionFields {
+  connectionType?: 'child' | 'parent';
+}
+
+/**
+ * Only 'parent' needs translating: an absent or 'child' value already falls
+ * through to "central -> new" in `resolveEdgeDirection`.
+ */
+function migrateLegacyDirection(action: ShelfAction): ShelfAction {
+  if (action.type !== 'create_connected' || action.direction) return action;
+
+  const legacy = (action as CreateConnectedAction & LegacyDirectionFields).connectionType;
+  return legacy === 'parent' ? { ...action, direction: 'new -> central' } : action;
 }
 
 /** Reason for shelf change */
@@ -228,12 +245,13 @@ export class NodeShelf {
     }
 
     const action = this.#items[index];
+    const centralNodeId = this.#currentNodeId;
 
     try {
       if (action.type === 'create_connected') {
-        await this.#placeCreateConnected(action);
+        await this.#placeCreateConnected(action, centralNodeId);
       } else {
-        await this.#placeIncludeExisting(action);
+        await this.#placeIncludeExisting(action, centralNodeId);
       }
 
       // Remove from shelf
@@ -247,9 +265,10 @@ export class NodeShelf {
     }
   }
 
-  async #placeCreateConnected(action: CreateConnectedAction): Promise<void> {
+  async #placeCreateConnected(action: CreateConnectedAction, centralNodeId: NodeId): Promise<void> {
     const design = selectShelfDesign(action);
-    const direction = action.connectionType === 'parent' ? 'parent' : 'child';
+    const direction = resolveEdgeDirection(action.direction);
+    const edgeTypeId = resolveEdgeTypeId(action.edgeType);
 
     // Preserve the AI's node description: its `reason` (the shelf tooltip) is a
     // short description of the concept, but only `properties` reach the created
@@ -260,20 +279,19 @@ export class NodeShelf {
       ? { ...action.properties, comment: reason }
       : action.properties;
 
-    // Anchor on the resolved placement reference (selected-in-scene else
-    // central), consistent with the add-child command. See docs/node-placement.md §3.
-    const reference = this.#features.scene.resolvePlacementReference() ?? this.#currentNodeId!;
-
+    // The request named the central node, so placement must use it. Anchoring on
+    // the selection instead would attach the edge to a node the model never saw.
     await this.#features.graph.addConnectedNode(
-      reference,
+      centralNodeId,
       direction,
       action.title,
       properties,
-      design
+      design,
+      edgeTypeId
     );
   }
 
-  async #placeIncludeExisting(action: IncludeExistingAction): Promise<void> {
+  async #placeIncludeExisting(action: IncludeExistingAction, centralNodeId: NodeId): Promise<void> {
     const node = graphStore.nodes.find(
       n => n.title.toLowerCase() === action.title.toLowerCase()
     );
@@ -289,7 +307,7 @@ export class NodeShelf {
       ? { id: getSetting('node.shelfDesignWithEquation'), params: {} }
       : { id: getSetting('node.shelfDesignBasic'), params: {} };
 
-    await this.#features.scene.includeExistingNode(node.id, design);
+    await this.#features.scene.includeExistingNode(node.id, design, centralNodeId);
   }
 
   /**
@@ -388,7 +406,7 @@ export class NodeShelf {
       if (!stored) return [];
 
       const data: ShelfStorage = JSON.parse(stored);
-      return data[nodeId]?.actions || [];
+      return (data[nodeId]?.actions ?? []).map(migrateLegacyDirection);
     } catch (error) {
       console.warn('[NodeShelf] Failed to load from storage:', error);
       return [];

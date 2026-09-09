@@ -1,9 +1,12 @@
 # Edge Types Architecture
 
-> **Status:** Current  
-> **Last reviewed:** 2026-06-20  
-> **Authority:** Current architecture and implementation guide for edge types, typed edge styling, and scene-local edge visibility.  
-> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Scene transitions](scene-transitions.md), [Theme architecture](theme-architecture.md), [AI chat API call composition](ai-chat-api-call-composition.md), [Workspace architecture](workspace-architecture.md)
+> **Status:** Current
+>
+> **Last reviewed:** 2026-09-10
+>
+> **Authority:** Current architecture and implementation guide for edge types, typed edge styling, and scene-local edge visibility. How edge types reach the AI assistant is summarized in §11 and specified in [ai-prompt-etalon.md](ai/ai-prompt-etalon.md).
+>
+> **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Scene transitions](scene-transitions.md), [Theme architecture](theme-architecture.md), [AI chat API call composition](ai/ai-chat-api-call-composition.md), [Workspace architecture](workspace-architecture.md)
 
 ## 1. Purpose
 
@@ -33,7 +36,7 @@ Current implementation facts that shape the feature:
 - The Edge Editor can enable or clear individual per-edge overrides.
 - Copy/paste edge style copies both `typeId` and optional individual override state.
 - Mermaid export/import now maps Mermaid labels to edge type names and creates edge types during import.
-- AI scene context currently remains unchanged; edge type semantics are intentionally deferred until their user-facing value is clearer.
+- The assistant reads the full type vocabulary — name, description, forward and inverse labels — and names a type and a direction in every action it proposes. See §11.
 
 The important architectural lesson from the visibility work is that edge types are not only a data and UI feature. They participate in scene style resolution, transition analysis, ghost rendering, open/close animations, fold/unfold behavior, GraphSaver persistence, workspace import/export, Mermaid conversion, and context menu affordances. Treating visibility as a late display patch makes the system fragile because transition code actively owns runtime opacity during animation.
 
@@ -45,18 +48,19 @@ These decisions define the current feature:
 
 - Edge types are workspace-specific.
 - Edge types are persisted in a dedicated `edgeTypes` object store inside `knogra-graph`, alongside the existing graph object stores for nodes, edges, scenes, and background images.
-- New and imported workspaces start with configurable starter edge types: `related`, `part-of`, and `example-of`.
+- New and imported workspaces start with configurable starter edge types, named Related, Composition and Generalization. Their ids are `related`, `part-of` and `example-of`: the ids no longer match the names, and deliberately so, because ids are persisted on every edge in every existing workspace and changing them would orphan those edges onto the default type.
+- Starter edges run from the broader end to the narrower one — whole to part, general to specific — so the source of an edge is the containing or more general thing. This matches the outward gesture of the radial layout and makes the app's own parent/child wording agree with the arrow. Existing workspaces were not migrated: reversing a user's edges would silently rewrite their meaning.
 - The UI remembers the last selected edge type and uses it as the default for newly created edges.
 - Users can create custom edge types.
 - Edge type deletion is not currently implemented. Existing types can be renamed and restyled.
-- Edge type visibility is a visual scene control only. It does not remove the edge from the scene and does not affect AI context.
+- Edge type visibility is a visual scene control only. It does not remove the edge from the scene, and it does not affect what the assistant is told.
 - Edge type visibility must be part of the scene's resolved edge visual state, not an after-the-fact stylesheet patch.
 - View mode may allow transient edge type visibility changes, but those changes must not be persisted.
 - Invisible edges are not intended to be selectable from the graph canvas.
 - Edge titles remain freeform metadata, but are not rendered on the canvas by default because labels would clutter the visual picture.
 - Edge types are managed in a dedicated Edge Type Manager overlay, not as ordinary scalar settings in the Settings modal.
 - Scene-local visibility controls should use the user-facing label **Edges visibility** and must be reachable from the empty canvas context menu. They may also be reachable from an edge context menu, but canvas access is required so users can recover after hiding all edges.
-- AI context may eventually include edge type semantics for scene edges, but that is deferred.
+- The four semantic fields on a type — name, description, forward label, inverse label — exist for the assistant to read, and the Edge Type Manager exposes all four for authoring. The manager shows no preview of the prompt: a type's meaning is one ingredient of a message composed from many sources, and how it is packed is not the user's concern.
 
 ---
 
@@ -400,16 +404,13 @@ The editor should not make users believe changing an individual edge style chang
 
 ### 10.2 Edge Type Manager
 
-The dedicated workspace-level Edge Type Manager overlay supports:
+The dedicated workspace-level Edge Type Manager is a two-pane modal in the shape of the node image preset editor: the type list on the left (with edge count per type), a tabbed detail pane on the right. Rebuilt 2026-09-08 from a single wide table, which had a column per style knob and no room for a description; see [ai-edge-type-semantics.md](ai-edge-type-semantics.md) phase 0.
 
-- Create type.
-- Rename type.
-- Choose one of the three thematic edge style slots.
-- Edit optional manual style override.
-- Show edge count per type.
-- Add new types.
+- Meaning tab: name, description, forward label, inverse label. These are what the assistant will read once edge types reach the prompt.
+- Style tab: thematic edge style slot, and the optional manual style override with its controls. Enabling the override seeds it from the chosen slot as the current scene's theme draws it, resolved through `resolveEdgeStyleSlot()`, so editing starts from what is on the canvas. The override is all-or-nothing: every key is written, and untouched values are thereby pinned to that theme's slot rather than following a later theme change.
+- Add type, immediate. Field edits are drafts committed on Save; blank description or labels save as absent.
 
-It currently does not support deletion, directional label editing, ontology tools, or complex validation.
+It currently does not support deletion, ontology tools, or complex validation.
 
 The Settings modal is not the primary editor for edge type records. Settings are best kept for scalar defaults and app/user preferences, while edge types are workspace graph data.
 
@@ -467,31 +468,29 @@ Destructive operations remain single-edge operations. `Exclude from scene` and `
 
 ## 11. AI Context
 
-AI context currently does not include edge type semantics. It can eventually include edge type for scene edges regardless of visibility mode. Visibility is a visual decluttering control, not a semantic/contextual exclusion mechanism.
+Edge types reach the assistant. This section states the boundary; the exact wording is in
+[ai-prompt-etalon.md](ai/ai-prompt-etalon.md).
 
-For example, instead of:
+The whole vocabulary is sent, once per request, as its own section: each type's name, description,
+forward label and inverse label. Every edge anywhere in the message is then written
+`Source -[label]-> Target`, using the forward label, so a label the model reads can always be traced
+back to a type it has been given. An edge title follows as a note, and remains optional metadata
+rather than the relationship itself.
 
-```text
-- Newton's laws -> Classical mechanics
-```
+Visibility is a decluttering control, not a semantic exclusion: a hidden edge type is described to
+the model exactly like a visible one.
 
-AI context could render:
+Scene membership is not quite the contextual boundary it was. Three cases are distinguished, because
+collapsing them loses information the user has recorded:
 
-```text
-- Newton's laws are part of Classical mechanics
-```
+- an edge the scene includes — sent as a scene edge;
+- an edge between two nodes of the scene that the scene does not include — sent separately, as structure the user has recorded but is not currently looking at;
+- an edge to a node outside the scene — sent with that node, as a candidate for inclusion.
 
-or, when no directional label exists:
-
-```text
-- Newton's laws -> Classical mechanics (type: Part of)
-```
-
-Edge title remains optional metadata or a note, not the primary relationship type. Edge titles are not rendered on the canvas by default because they would add clutter.
-
-Scene membership remains the contextual boundary. If an edge is in the graph but not in `scene.edges`, it should not be rendered as part of the Current Scene relationships, even if both endpoint nodes are visible for some reason. Existing Directly Connected and Full Graph sections can continue to provide broader graph awareness.
-
-AI integration is deliberately deferred. The visual correctness of typed edge styling and scene-local visibility is the current priority.
+In the other direction, the assistant names a type and a direction in every action it proposes, and
+the user can constrain a request to one relationship before it is sent. A type name written by the
+model resolves to an id by name first and forward label second, falling back to the default type;
+inverse labels are deliberately not matched.
 
 ---
 

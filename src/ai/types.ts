@@ -3,16 +3,50 @@
  * Types for chat, conversations, and AI-proposed actions
  */
 
-import type { NodeId } from '../core/main-types';
+import type { EdgeTypeId, NodeId } from '../core/main-types';
+
+// ============================================================================
+// RELATIONSHIP SLOT
+// ============================================================================
+
+/** Direction relative to the central node, independent of any action's own wording. */
+export type SlotDirection = 'central -> other' | 'other -> central';
+
+/**
+ * A user-chosen constraint on the relationship a Suggest or Connect request may
+ * propose. Either axis can be left free.
+ */
+export interface RelationshipSlot {
+  edgeTypeId?: EdgeTypeId;
+  direction?: SlotDirection;
+  /** The menu item's own text, shown in the chat timeline so two requests are distinguishable. */
+  label: string;
+  /**
+   * The sentence spliced into the request. Built alongside the menu item the user
+   * clicks, so what was picked and what the model is told are one string.
+   */
+  constraint: string;
+}
 
 // ============================================================================
 // PROPOSED ACTIONS
 // ============================================================================
 
+/**
+ * Which end of the edge the proposed node takes. Written by the model, so a value
+ * outside the union is possible; `src/ai/edge-type-resolution.ts` is where that is
+ * handled, not here.
+ */
+export type CreateConnectedDirection = 'new -> central' | 'central -> new';
+export type IncludeExistingDirection = 'existing -> central' | 'central -> existing';
+
 /** Include existing graph node in current scene */
 export interface IncludeExistingAction {
   type: 'include_existing';
   title: string;  // Exact title from Knowledge Graph — resolved to nodeId at shelf level
+  /** A relationship type name from the workspace vocabulary, or its forward label. */
+  edgeType?: string;
+  direction?: IncludeExistingDirection;
   reason: string;
 }
 
@@ -20,7 +54,9 @@ export interface IncludeExistingAction {
 export interface CreateConnectedAction {
   type: 'create_connected';
   title: string;
-  connectionType: 'child' | 'parent';
+  /** A relationship type name from the workspace vocabulary, or its forward label. */
+  edgeType?: string;
+  direction?: CreateConnectedDirection;
   properties?: Record<string, string>;  // Can include equation, derivation, etc.
   reason: string;
 }

@@ -1,8 +1,12 @@
 # Knogra Documentation Map
 
 > **Status:** Current index  
-> **Last reviewed:** 2026-08-20  
+> **Last reviewed:** 2026-09-10  
 > **Authority:** Use this file to orient within `docs/`. It classifies documents by current usefulness and points to the canonical sources when older documents overlap.
+
+> **Folder structure in progress.** The AI documents moved into `ai/` on 2026-09-10; other subject
+> folders are being introduced the same way. Cross-references inside documents and in code comments
+> have not all been repointed yet, so a relative link may be stale even when the target exists.
 
 ## Status Legend
 
@@ -39,10 +43,11 @@ recorded now lives in `.github/project-journal.md`.
 | [markdown-architecture.md](markdown-architecture.md) | Current | Implemented 2026-08-13. Canonical for the Knogra Markdown document and its three operations — Build (document → new graph), Update (document → open graph, content only), and Export — with the id-based identity model. |
 | [paths-architecture.md](paths-architecture.md) | Current | Paths feature model and implementation history. Part II covers navigation modes (history/path), the path manager, and the full-path generator. |
 | [chat-panel-architecture.md](chat-panel-architecture.md) | Current | Chat, notes, tutorial timeline, and chat storage model. |
-| [ai-assistant-vision.md](ai-assistant-vision.md) | Current | AI assistant behavior, architecture, graph-action flow, and preconfigured Scene/Node/Suggest/Connect command model. |
-| [ai-provider-architecture.md](ai-provider-architecture.md) | Current | Canonical for how AI providers are declared, resolved, and called: the provider registry, resolution and fallback order, shared reply parsing, request timeouts, and the per-vendor facts for Gemini, OpenAI, Anthropic, and OpenRouter. |
-| [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md) | Current | Authoritative AI chat API call composition, quick-action prompt contract, and scene/node request behavior. |
-| [edge-types-architecture.md](edge-types-architecture.md) | Current | Workspace-specific edge types, theme-aware type styles, scene-local edge visibility, selected-edge affordances, and current AI context boundary. |
+| [ai/ai-assistant-vision.md](ai/ai-assistant-vision.md) | Current | What the assistant is for, how its capabilities behave, and the `src/ai` module map. Carries no prompt text and no action schema. |
+| [ai/ai-provider-architecture.md](ai/ai-provider-architecture.md) | Current | Canonical for how AI providers are declared, resolved, and called: the provider registry, resolution and fallback order, shared reply parsing, request timeouts, and the per-vendor facts for Gemini, OpenAI, Anthropic, and OpenRouter. |
+| [ai/ai-chat-api-call-composition.md](ai/ai-chat-api-call-composition.md) | Current | Canonical for everything *around* the chat prompt: the call envelope, which code builds which section, conversation history, display text versus sent text, the two math pipelines, and shelf filtering and acceptance. Contains no prompt text. |
+| [ai/ai-prompt-etalon.md](ai/ai-prompt-etalon.md) | Current | The chat prompt rendered verbatim for one fixed graph fixture, plus the reply contract. The only verbatim prompt text in `docs/`; `prompts.ts` and `context-builder.ts` are the truth and this is their rendering. |
+| [edge-types-architecture.md](edge-types-architecture.md) | Current | Workspace-specific edge types, theme-aware type styles, scene-local edge visibility, selected-edge affordances, and (§11) the boundary at which types reach the assistant. |
 | [edge-curve-style-unbundling.md](edge-curve-style-unbundling.md) | Current | Design rationale and implementation record for separating per-edge curve/layout from visual style. |
 | [mermaid-fan-layout.md](mermaid-fan-layout.md) | Current | Canonical model for the Mermaid-import fan layout and the shared scene-composition / adjacency layer used by every Mermaid-import layout. |
 | [layout-architecture.md](layout-architecture.md) | Current | Canonical layout-domain terminology (§1.1), auto-layout feature structure, the pluggable scene-layout registry, and the radial outer-ring-spreading algorithm. Renamed from `autolayout-architecture.md`. |

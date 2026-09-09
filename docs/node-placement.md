@@ -1,7 +1,7 @@
 # Single-Node Placement — Specification
 
-**Status:** Current — implemented 2026-07-27.
-**Last updated:** 2026-07-27
+**Status:** Current — implemented 2026-07-27; §3 revised 2026-09-09 (shelf anchoring).
+**Last updated:** 2026-09-09
 **Authority:** Source of truth for `placeSingleNode` in
 `src/features/utils/pure/position-expansion.ts`, the shared reference resolver
 (`SceneNodeOps.resolvePlacementReference`), and the four single-node call sites in §9. It does
@@ -63,7 +63,7 @@ Cytoscape model coordinates are **y-down**. Angles are measured from the referen
 
 ## 3. Reference-node resolution
 
-All four in-scope operations resolve the reference the **same** way:
+Scene-internal adds (add child/parent, node manager) resolve the reference the **same** way:
 
 > `R = active node if it is present in the current scene, otherwise the scene's central node.`
 
@@ -71,10 +71,19 @@ All four in-scope operations resolve the reference the **same** way:
 - The **presence guard** (`getElementById(activeNodeId).length > 0`) is mandatory: the
   scratch value survives transitions, so it may reference a node absent from the current
   scene. When absent, fall back to the central node.
-- This makes shelf-created new nodes attach to the **selected** node when the user has one
-  selected in-scene (consistent with add-child), and to the central node by default.
-  Re-anchoring a central-context AI suggestion onto a peripheral selection is treated as a
-  deliberate user override, not an error.
+
+### Shelf placement is different: always the central node
+
+Revised 2026-09-09. Both shelf operations — `create_connected` and `include_existing` —
+anchor on the **scene's central node**, ignoring the selection. `NodeShelf` passes it
+explicitly; `scene.includeExistingNode` takes an optional `anchorNodeId` for this.
+
+The earlier rule re-anchored an AI suggestion onto the selection and called that a deliberate
+user override. That reading stopped being tenable when the assistant gained relationship slots:
+the request sent to the model names the central node by title — "every suggested concept X must
+fit this edge exactly: `Car -[has part]-> X`" — so anchoring the result anywhere else creates an
+edge asserting something the user never asked for and the model never saw. The prompt and the
+placement have to name the same node.
 
 **Known caveat (out of scope here):** because `activeNodeId` is never cleared, a stale value
 that *happens* to exist in a later scene reached via non-selecting navigation (back button,
@@ -221,7 +230,7 @@ edge handling:
 
 | # | Operation | Entry point | Edge created |
 |---|-----------|-------------|--------------|
-| A  | Shelf → new node (`create_connected`) | `graph.addConnectedNode` | new `R→N` or `N→R` per AI `connectionType` |
+| A  | Shelf → new node (`create_connected`) | `graph.addConnectedNode` | new `C→N` or `N→C` per the action's `direction`; `C` is the central node |
 | A′ | Add child / parent (keyboard, context menu) | `graph.addConnectedNode` | new `R→N` / `N→R` |
 | B  | Shelf → existing node (`include_existing`) | `scene.includeExistingNode` | reuse existing graph edge if any, else new |
 | B′ | Node manager → add to scene | `scene.includeExistingNode` | reuse existing edge if any, else new |
