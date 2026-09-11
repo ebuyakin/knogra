@@ -1,7 +1,6 @@
 import type { Edge, EdgeId, EdgeType, EdgeTypeId, Node, NodeId, Scene, SceneId } from '../../../core/main-types';
 import type { ChatMessage, Conversation, MessageSource } from '../../../core/chat-types';
 import { getSetting } from '../../../config';
-import { getDefaultEdgeTypeId } from '../../../config/edge-type-settings';
 import type { DocumentNote, KnograDocument } from '../document/document';
 import { layoutMermaidSceneNodes } from './layout';
 import { computeFanScenePositions, toFanSceneNodes } from './layout/fan';
@@ -78,12 +77,16 @@ export function buildGraphFromDocument(parsed: KnograDocument, selection: BuildS
     if (!sourceId || !targetId) {
       throw new Error(`Edge ${edge.sourceMermaidId} → ${edge.targetMermaidId} references an unknown node.`);
     }
+    const typeId = edgeTypeImportPlan.typeIdBySourceLabelKey.get(normalizeMermaidEdgeLabel(edge.title));
+    if (!typeId) {
+      throw new Error(`Edge label "${edge.title}" has no type mapping.`);
+    }
     const importedEdge: Edge = {
       id: `e-${prefix}-${index + 1}` as EdgeId,
       title: edge.title,
       sourceId,
       targetId,
-      typeId: edgeTypeImportPlan.typeIdBySourceLabelKey.get(normalizeMermaidEdgeLabel(edge.title)) ?? getDefaultEdgeTypeId(),
+      typeId,
       tags: [],
       properties: {},
       createdAt: now,
@@ -317,19 +320,20 @@ function createEdgeTypeImportPlan(selection: BuildSelection): {
   const typeIdByNormalizedTypeName = new Map<string, EdgeTypeId>();
   const typeIdBySourceLabelKey = new Map<string, EdgeTypeId>();
 
+  // Rows that share a type name merge into one type; the first row's label
+  // becomes its forward reading. The diagram cannot supply an inverse.
   for (const mapping of selection.edgeLabelMappings) {
-    const normalizedTypeName = normalizeEdgeTypeName(mapping.edgeTypeName) || 'related';
-    const typeName = mapping.edgeTypeName.trim().replace(/\s+/g, ' ') || 'related';
+    const normalizedTypeName = normalizeEdgeTypeName(mapping.edgeTypeName);
     let typeId = typeIdByNormalizedTypeName.get(normalizedTypeName);
 
     if (!typeId) {
-      typeId = normalizedTypeName === 'related'
-        ? getDefaultEdgeTypeId()
-        : createEdgeTypeId(typeName, typeIdByNormalizedTypeName);
+      typeId = `edge-type-${edgeTypes.length + 1}` as EdgeTypeId;
       typeIdByNormalizedTypeName.set(normalizedTypeName, typeId);
       edgeTypes.push({
         id: typeId,
-        name: typeName,
+        name: mapping.edgeTypeName,
+        order: edgeTypes.length,
+        forwardLabel: mapping.sourceLabelKey || undefined,
         thematicStyleSlotId: mapping.thematicStyleSlotId,
         createdAt: now,
         updatedAt: now,
@@ -339,33 +343,7 @@ function createEdgeTypeImportPlan(selection: BuildSelection): {
     typeIdBySourceLabelKey.set(mapping.sourceLabelKey, typeId);
   }
 
-  if (!typeIdByNormalizedTypeName.has('related')) {
-    edgeTypes.unshift({
-      id: getDefaultEdgeTypeId(),
-      name: 'related',
-      thematicStyleSlotId: 'edge-style-1',
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
   return { edgeTypes, typeIdBySourceLabelKey };
-}
-
-function createEdgeTypeId(typeName: string, usedTypeNames: Map<string, EdgeTypeId>): EdgeTypeId {
-  const base = typeName
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || 'edge-type';
-  let candidate = base;
-  let suffix = 2;
-  const usedIds = new Set(usedTypeNames.values());
-  while (usedIds.has(candidate as EdgeTypeId)) {
-    candidate = `${base}-${suffix}`;
-    suffix += 1;
-  }
-  return candidate as EdgeTypeId;
 }
 
 /** Approximate half-extent (graph units) of a node, used to keep node bodies

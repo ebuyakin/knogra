@@ -11,6 +11,7 @@ import type { Design } from '../../styles/designs/design-registry';
 import { getNodeStyle } from '../../styles/designs/design-registry';
 import { getTheme } from '../../styles/themes';
 import { describeRelationship } from '../../ai/edge-type-resolution';
+import { closeShelfContextMenu, showShelfContextMenu } from './shelf-context-menu';
 import { getSetting } from '../../config';
 import { eventBus } from '../../events/event-bus';
 import { isEditMode } from '../../storage/app-mode';
@@ -26,7 +27,8 @@ export class SuggestionPanel {
   #items: ShelfItem[] = [];
   #onItemClick: ((index: number) => void) | null = null;
   #onItemDismiss: ((index: number) => void) | null = null;
-  #contextMenu: HTMLDivElement | null = null;
+  #onItemRemoveAll: ((index: number) => void) | null = null;
+  #onClearShelf: (() => void) | null = null;
   /** True while the shelf is animating; suppresses item clicks and the context menu. */
   #isBlocked: () => boolean = () => false;
 
@@ -43,7 +45,7 @@ export class SuggestionPanel {
     this.#shelfContainer = this.#container.querySelector('.suggestion-shelf')!;
 
     // Close context menu on click outside
-    document.addEventListener('click', () => this.#closeContextMenu());
+    document.addEventListener('click', () => closeShelfContextMenu());
     eventBus.on('appModeChanged', () => {
       void this.#renderItems();
     });
@@ -61,6 +63,16 @@ export class SuggestionPanel {
    */
   onItemDismiss(handler: (index: number) => void): void {
     this.#onItemDismiss = handler;
+  }
+
+  /** Set handler for removing an item from every scene's shelf, not just this one. */
+  onItemRemoveAll(handler: (index: number) => void): void {
+    this.#onItemRemoveAll = handler;
+  }
+
+  /** Set handler for emptying the current scene's shelf. */
+  onClearShelf(handler: () => void): void {
+    this.#onClearShelf = handler;
   }
 
   /**
@@ -248,13 +260,10 @@ export class SuggestionPanel {
     }
   }
 
-  /** The model's description of the concept, then the edge placing it will create. */
+  /** The model's justification for this scene, then the edge placing it will create. */
   #itemTooltip(shelfItem: ShelfItem): string {
-    const description = shelfItem.action.reason || shelfItem.action.title;
-    const relationship = describeRelationship(
-      shelfItem.action.edgeType,
-      shelfItem.action.direction
-    );
+    const description = shelfItem.reason || shelfItem.title;
+    const relationship = describeRelationship(shelfItem.edgeType, shelfItem.direction);
 
     return `${description}\n${relationship}`;
   }
@@ -263,7 +272,7 @@ export class SuggestionPanel {
     shelfItem: ShelfItem,
     index: number
   ): Promise<HTMLElement> {    const item = document.createElement('div');
-    const isExisting = shelfItem.action.type === 'include_existing';
+    const isExisting = shelfItem.isExisting;
     const editMode = isEditMode();
     item.className = isExisting ? 'suggestion-item suggestion-item--existing' : 'suggestion-item';
     item.title = editMode
@@ -275,7 +284,7 @@ export class SuggestionPanel {
     // Create a mock node for SVG generation
     const mockNode: Node = {
       id: `suggestion-${index}`,
-      title: shelfItem.action.title,
+      title: shelfItem.title,
       tags: [],
       properties: shelfItem.properties
     };
@@ -311,69 +320,15 @@ export class SuggestionPanel {
       e.preventDefault();
       e.stopPropagation();
       if (this.#isBlocked()) return;
-      this.#showContextMenu(index, e.clientX, e.clientY);
+      showShelfContextMenu(index, e.clientX, e.clientY, {
+        onAdd: (i) => this.#onItemClick?.(i),
+        onRemoveHere: (i) => this.#onItemDismiss?.(i),
+        onRemoveEverywhere: (i) => this.#onItemRemoveAll?.(i),
+        onClearShelf: () => this.#onClearShelf?.()
+      });
     });
 
     return item;
-  }
-
-  // ==========================================================================
-  // CONTEXT MENU
-  // ==========================================================================
-
-  #showContextMenu(index: number, x: number, y: number): void {
-    this.#closeContextMenu();
-
-    const menu = document.createElement('div');
-    menu.style.position = 'fixed';
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-    menu.style.backgroundColor = 'var(--bg-secondary, #161b22)';
-    menu.style.border = '1px solid var(--border-primary, #30363d)';
-    menu.style.borderRadius = '6px';
-    menu.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.5)';
-    menu.style.padding = '4px';
-    menu.style.zIndex = '1000';
-    menu.style.minWidth = '160px';
-
-    const item = document.createElement('div');
-    item.textContent = 'Remove from shelf';
-    item.style.padding = '8px 12px';
-    item.style.cursor = 'pointer';
-    item.style.borderRadius = '4px';
-    item.style.color = 'var(--text-primary, #e6edf3)';
-    item.style.fontSize = '13px';
-    item.addEventListener('mouseenter', () => {
-      item.style.backgroundColor = 'var(--bg-tertiary, #1c2128)';
-    });
-    item.addEventListener('mouseleave', () => {
-      item.style.backgroundColor = 'transparent';
-    });
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.#onItemDismiss?.(index);
-      this.#closeContextMenu();
-    });
-
-    menu.appendChild(item);
-    document.body.appendChild(menu);
-    this.#contextMenu = menu;
-
-    // Adjust if overflows viewport
-    const rect = menu.getBoundingClientRect();
-    if (rect.bottom > window.innerHeight) {
-      menu.style.top = `${y - rect.height}px`;
-    }
-    if (rect.right > window.innerWidth) {
-      menu.style.left = `${x - rect.width}px`;
-    }
-  }
-
-  #closeContextMenu(): void {
-    if (this.#contextMenu) {
-      this.#contextMenu.remove();
-      this.#contextMenu = null;
-    }
   }
 
   /**

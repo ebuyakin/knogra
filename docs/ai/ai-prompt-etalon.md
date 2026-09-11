@@ -2,7 +2,7 @@
 
 > **Status:** Current. Implemented 2026-09-09, verified line by line against the code 2026-09-10.
 >
-> **Last updated:** 2026-09-10
+> **Last updated:** 2026-09-11
 >
 > **Authority:** The reference rendering of the chat prompt: one fixed graph fixture, the exact
 > system message that fixture produces, every user-message variant, and the reply contract. This is
@@ -34,7 +34,7 @@ THE SCENE (not part of the prompt)
                  BMW 3 Series     tags: model; comment: Compact executive line since 1975
   Scene edges    BMW -> Engine                 type: Composition
                  BMW -> BMW 3 Series           type: Generalization
-  Graph edges    BMW -> Audi                   type: Related, title "competitor"
+  Graph edges    BMW -> Audi                   type: Association, title "competitor"
   not in scene                                 Audi is in the scene; this edge is not
                  German car industry -> BMW    type: Composition
                  Engine -> Gearbox             type: Composition
@@ -82,9 +82,9 @@ The topic of this scene and the subject of this conversation.
 ### Relationship Types
 The kinds of relationship an edge can have in this workspace, as the user defined them. An edge runs from a source node to a target node and is written source -[label]-> target; the direction is part of its meaning, and what it means to be at either end depends on the type. The user, and the app's own menus, sometimes call the source end of an edge its parent and the target end its child. Those are names for the two ends of the arrow, not relationships in their own right: what it means to sit at either end is fixed by the type, in the readings below. Understand the words when the user uses them, and answer in the type's own words rather than repeating them. Each type is given below with its name, what it means, and how an edge A -[label]-> B of that type reads from A to B and, where the user gave one, from B back to A.
 
-- Related: General association, and the fallback when neither of the other categories fits. Use it for influence, cause, contrast, correspondence, or any connection that is not general-to-specific or whole-to-part. Reads "A relates to B".
-- Composition: Whole and part. The source is the whole; the target is a component, stage, region or constituent of it, and the whole is incomplete without its parts. Car has part Engine; Chapter has part Introduction. Reads "A has part B"; from the other end, "B is part of A".
 - Generalization: General and specific. The source is the general case; the target is a narrower one that carries its properties — a subtype, a variety, or a named instance. Car has kind Sedan; Metabolic pathway has kind Photosynthesis. Reads "A has kind B"; from the other end, "B is a kind of A".
+- Composition: Whole and part. The source is the whole; the target is a component, stage, region or constituent of it, and the whole is incomplete without its parts. Car has part Engine; Chapter has part Introduction. Reads "A has part B"; from the other end, "B is part of A".
+- Association: General association, and the fallback when neither of the other categories fits. Use it for influence, cause, contrast, correspondence, or any connection that is not general-to-specific or whole-to-part. Reads "A relates to B"; from the other end, "B is related to A".
 
 ### Current Scene
 The nodes and edges the user has gathered around the central node. The scene is evolving: it may hold only the central node, a loose context, or a detailed local structure.
@@ -124,6 +124,23 @@ Every remaining node: not in the current scene, and not already named above. The
 - Gearbox — tags: drivetrain — comment: Manual, automatic and dual-clutch transmissions
 - Drag coefficient — tags: aerodynamics — equation: C_d = \frac{2 F_d}{\rho v^2 A} — comment: Dimensionless resistance figure used in efficiency comparisons
 
+### Node Shelf
+Concepts you proposed earlier that the user has neither accepted nor discarded. Nothing listed here is in the graph or in any scene — each is waiting for the user's decision.
+
+**Already waiting for this scene:**
+- Turbocharger — the forced-induction step the scene's power discussion is missing
+
+Do not propose any of these again. The user is already looking at them for this scene, and a near-duplicate under a slightly different name is worse than a repeat, because it reads as a second idea.
+
+**Waiting in other scenes:**
+- Wastegate — valve that limits boost by bypassing exhaust gas around the turbine
+
+These were proposed for scenes other than this one. If one belongs here too, propose it: use `create_connected` with the title exactly as written above, and give a reason that says why it fits this scene rather than repeating why it existed. It will be attached to the concept already waiting, not duplicated. If none of them fit, ignore the list — do not propose one merely because it is available.
+
+The whole section is omitted when both lists are empty, and either list alone is dropped when empty.
+The other-scenes list is capped at 50 entries and announces the remainder. The shelf's own model is
+[shelf-architecture.md](shelf-architecture.md).
+
 ## Response
 
 A reply has up to two parts: prose, and an action block. The user's request says which it expects. An ordinary message allows both, and whether to add actions is your judgement; some requests ask for prose only, or for actions only, and say so. Earlier turns in this conversation may be of any kind.
@@ -141,15 +158,15 @@ Actions are proposals to change the graph. They go in one JSON code block at the
     "title": "New Concept Name",
     "edgeType": "A name from Relationship Types",
     "direction": "central -> new",
-    "properties": { "equation": "x = y^{2}" },
-    "reason": "Brief explanation"
+    "properties": { "comment": "One line saying what this concept is", "equation": "x = y^{2}" },
+    "reason": "Why this concept belongs in this scene"
   },
   {
     "type": "include_existing",
     "title": "Exact title of existing node",
     "edgeType": "A name from Relationship Types",
     "direction": "central -> existing",
-    "reason": "Brief explanation why this existing node belongs in the current scene"
+    "reason": "Why this existing node belongs in this scene"
   }
 ]
 ```
@@ -163,7 +180,8 @@ Rules:
 - Every concept you recommend must appear in the block: a brand-new one as `create_connected`, an existing one as `include_existing`. Do not present a recommended concept only in prose.
 - Use `create_connected` only for concepts that do not already exist anywhere in the graph.
 - For `include_existing`, choose only nodes named under "Central Node Connections Outside The Scene" or "Rest Of The Graph", and use the exact listed title.
-- For `create_connected`, the `reason` is stored as the new node's comment, so write it as a one-line description of the concept, not as a message to the user. For `include_existing` the `reason` is shown to the user on the shelf and is not stored.
+- For `create_connected`, include `properties.comment`: one line saying what the concept is, written as a definition rather than as a message to the user. Titles are short, so the comment is what tells the concept apart later, and it is the description of it that reaches you in future requests.
+- `reason` is why the concept belongs in this scene. It is shown to the user beside the suggestion and is never stored on the node, so the same concept proposed for a different scene should carry a different reason.
 
 ### Equations
 In prose, write mathematics in LaTeX, never in Unicode math characters such as ψ, ħ, ∇, ×, or ∑. Every mathematical expression must be wrapped in delimiters, down to a single symbol: $...$ for inline math, and $$...$$ on their own lines for a displayed equation. A bare LaTeX command outside delimiters, such as \frac{a}{b} written directly into a sentence, is displayed to the user as raw source and is a failure. Delimit every one.
@@ -262,9 +280,10 @@ Look at the nodes not in the current scene and find ones that belong in it becau
 
 Only existing nodes: do not create new ones. Return each suggested node as an include_existing action so it appears on the node shelf.
 
-Neither closing says "reply with the block only". That was proposed and declined: the model's prose
-is the only record of what it suggested that survives into the next turn, because the shelf is not
-in the prompt and an action-only reply would store an empty assistant turn.
+Neither closing says "reply with the block only", and the prose that comes back is not stored: a
+reply carrying accepted shelf items is replaced in the timeline, and in the history, by the shelf's
+own one-line-per-item summary. The earlier objection — that the prose was the only surviving record
+of what had been suggested — was settled by putting the shelf in the system message instead.
 
 ### The four middles
 
@@ -340,23 +359,24 @@ looks exactly like a right one.
 ```
 
 An action request asks for the block; it does not forbid prose, and models commonly wrap the block
-in a sentence or two. That prose is what enters the conversation history — the shelf does not — so
-it is the only trace of what was suggested that the model sees on the next turn. An ordinary typed
-message may return prose, a block, or both.
+in a sentence or two. That prose is discarded when the shelf accepts anything: the stored turn is
+the shelf's summary of what it took, one line per item, and that is what enters the conversation
+history. A reply whose actions were all rejected keeps its prose. An ordinary typed message may
+return prose, a block, or both.
 
 ### Resolving `edgeType`
 
 The model writes a type as a string; the app resolves it to an edge type id.
 
 ```text
-  1. Exact match on a type name, case-insensitive, trimmed     "Composition" -> part-of
-  2. Failing that, exact match on a forward label, same rules  "has part"    -> part-of
-  3. Failing that, or when the field is missing, the default   anything else -> related
+  1. Exact match on a type name, case-insensitive, trimmed     "Composition" -> edge-type-2
+  2. Failing that, exact match on a forward label, same rules  "has part"    -> edge-type-2
+  3. Failing that, or when the field is missing, the default   anything else -> first type in registry order
 ```
 
 Step 2 exists because every edge in the prompt is written with its label, not its name, so the label
 is the string the model has actually been reading. Without step 2 a model that answers "has part"
-falls through to Related and the created edge is quietly the wrong type.
+falls through to the default type and the created edge is quietly the wrong type.
 
 Inverse labels are deliberately not matched. "is part of" would mean the Composition type with its
 direction reversed, and there is no way to tell whether the model had already accounted for that in
@@ -387,9 +407,9 @@ is the model's.
   title        the new node's title, or the lookup key for an existing node
   edgeType     the created edge's type
   direction    which end of that edge the new node takes
-  properties   the new node's properties; `equation` is stored raw
-  reason       create_connected: the new node's comment
-               include_existing: shelf text only, not stored
+  properties   the new node's properties; `equation` is stored raw, `comment` is the
+               node's own description
+  reason       shelf text for one scene, never stored on the node
 ```
 
 ### Shelf items written before this change

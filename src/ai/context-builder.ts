@@ -6,12 +6,16 @@
 
 import type { NodeId, SceneId, Node, Scene, Edge, EdgeType } from '../core/main-types';
 import { graphStore } from '../storage/graph-store';
+import { getPendingElsewhere, getScenePlacements } from './shelf/shelf-store';
 import { SYSTEM_PROMPT } from './prompts';
 import { getSetting } from '../config';
 
 /** The roster is the only unbounded list in the prompt, so it is the only one capped. */
 const MAX_ROSTER_NODES = 200;
 const MAX_ROSTER_COMMENT_CHARS = 200;
+
+/** The shelf is unbounded too; this scene's own list is bounded by what fits on screen. */
+const MAX_SHELF_ELSEWHERE = 50;
 
 // ============================================================================
 // TYPES
@@ -82,6 +86,7 @@ export function buildSystemPrompt(context: SceneContext): string {
   }
 
   sections.push(renderRestOfGraphSection(namedAbove));
+  sections.push(renderNodeShelfSection(centralNodeId));
 
   sections.push(SYSTEM_PROMPT.responseIntro);
   sections.push(SYSTEM_PROMPT.prose);
@@ -264,6 +269,36 @@ function renderRestOfGraphSection(namedAbove: Set<NodeId>): string {
   }
 
   return renderTemplate(SYSTEM_PROMPT.knowledgeGraphTemplate, { remaining: lines.join('\n') });
+}
+
+/**
+ * What is already proposed and undecided. Read after the graph, so a pending
+ * concept is never mistaken for one the graph holds.
+ */
+function renderNodeShelfSection(centralNodeId: NodeId): string {
+  const sceneShelf = getScenePlacements(centralNodeId).map(({ entry, placement }) => {
+    const existing = entry.nodeId ? ' (already in the graph)' : '';
+    const reason = placement.reason.trim();
+    return `- ${entry.title}${existing}${reason ? ` — ${reason}` : ''}`;
+  });
+
+  const elsewhere = getPendingElsewhere(centralNodeId);
+  const otherShelf = elsewhere.slice(0, MAX_SHELF_ELSEWHERE).map(entry => {
+    const comment = entry.properties.comment?.trim();
+    return `- ${entry.title}${comment ? ` — ${comment}` : ''}`;
+  });
+
+  const omitted = elsewhere.length - otherShelf.length;
+  if (omitted > 0) {
+    otherShelf.push(`- ...and ${omitted} further concepts not listed here.`);
+  }
+
+  if (sceneShelf.length === 0 && otherShelf.length === 0) return '';
+
+  return renderTemplate(SYSTEM_PROMPT.nodeShelfTemplate, {
+    sceneShelf: sceneShelf.join('\n'),
+    otherShelf: otherShelf.join('\n')
+  });
 }
 
 // ============================================================================

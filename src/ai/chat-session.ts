@@ -27,7 +27,8 @@ export interface ChatSessionEvents {
   onStateChange?: (state: ChatSessionState) => void;
   onMessageAdded?: (message: ChatMessage) => void;
   onConversationLoaded?: (messages: ChatMessage[], nodeId: NodeId) => void;
-  onActionsReceived?: (actions: ProposedAction[]) => void;
+  /** Returns the summary to store in place of the model's prose, if the handler makes one. */
+  onActionsReceived?: (actions: ProposedAction[]) => string | void;
   onError?: (error: Error) => void;
 }
 
@@ -218,21 +219,22 @@ export class ChatSession {
       // Send to AI
       const response = await this.#provider.sendMessage(providerMessages, systemPrompt);
 
-      // Add assistant message
+      // Actions are routed before the message is stored: the shelf decides what it
+      // accepts, and the timeline records that rather than what was proposed.
+      let summary: string | void = undefined;
+      if (response.actions.length > 0) {
+        this.#pendingActions = response.actions;
+        summary = this.#events.onActionsReceived?.(response.actions);
+      }
+
       const assistantMessage = await chatStore.addMessage(
         this.#currentNodeId,
         'assistant',
-        response.content,
+        summary || response.content,
         'ai'
       );
       this.#messages.push(assistantMessage);
       this.#events.onMessageAdded?.(assistantMessage);
-
-      // Store and notify about actions
-      if (response.actions.length > 0) {
-        this.#pendingActions = response.actions;
-        this.#events.onActionsReceived?.(response.actions);
-      }
 
       this.#setState('idle');
       return response;

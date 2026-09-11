@@ -6,7 +6,6 @@
  * Extend this file to add new design selection rules.
  */
 
-import type { CreateConnectedAction } from './types';
 import { getSetting } from '../config';
 
 /** Design specification for a node */
@@ -19,9 +18,9 @@ export interface ShelfDesign {
  * Select appropriate design for a shelf item based on its properties
  * Uses settings for design selection
  */
-export function selectShelfDesign(action: CreateConnectedAction): ShelfDesign {
+export function selectShelfDesign(properties: Record<string, string>): ShelfDesign {
   // Rule 1: Has equation → use configured equation design
-  if (action.properties?.equation) {
+  if (properties.equation) {
     return { 
       id: getSetting('node.shelfDesignWithEquation'), 
       params: {} 

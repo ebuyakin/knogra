@@ -10,7 +10,6 @@
 import type { Core } from 'cytoscape';
 import type { Scene, Node, Edge, NodeId, EdgeId, SceneId } from '../core/main-types';
 import { graphStore } from './graph-store';
-import { getDefaultEdgeTypeId } from '../config/edge-type-settings';
 import { isDebug } from '../config/debug-flags';
 import { recordSaverEvent } from '../utils/diagnostics/recorder';
 
@@ -265,7 +264,7 @@ class GraphSaver {
       title: data.title || '',
       sourceId: data.source,
       targetId: data.target,
-      typeId: data.typeId || getDefaultEdgeTypeId(),
+      typeId: data.typeId || graphStore.defaultEdgeTypeId,
       tags: data.tags || [],
       properties: data.properties || {},
       createdAt: data.createdAt || new Date(),

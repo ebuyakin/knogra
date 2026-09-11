@@ -112,6 +112,15 @@ export interface Edge {
 export interface EdgeType {
   id: EdgeTypeId;
   name: string;
+  /**
+   * Position in the workspace's registry. The first type is the workspace's
+   * default: the type a new edge gets when nothing names one, and the type an
+   * edge is repaired onto when its own is unknown. Nothing in code names a
+   * type; the seed decides by position and the registry can be reordered.
+   * Records written before this field existed are filled in by
+   * `storage/legacy/edge-type-order.ts`.
+   */
+  order: number;
   description?: string;
   forwardLabel?: string;
   inverseLabel?: string;

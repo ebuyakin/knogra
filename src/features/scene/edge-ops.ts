@@ -13,7 +13,6 @@ import { StyleGenerator } from '../../styles/style-generator';
 import { pickCurveParams, pickVisualParams } from '../../styles/edge-visual-resolver';
 import { isDebug } from '../../config/debug-flags';
 import { getSetting } from '../../config';
-import { getDefaultEdgeTypeId } from '../../config/edge-type-settings';
 
 type EdgeBendCommand = 'strengthDown' | 'strengthUp' | 'positionTowardSource' | 'positionTowardTarget' | 'resetOverride';
 
@@ -99,7 +98,7 @@ export class SceneEdgeOps {
 
     const design = cyEdge.data('design') || { id: 'default', params: {} };
     const curveData = cyEdge.data('curve') as Record<string, unknown> | undefined;
-    const typeId = cyEdge.data('typeId') || getDefaultEdgeTypeId();
+    const typeId = cyEdge.data('typeId') || graphStore.defaultEdgeTypeId;
     const edgeType = graphStore.edgeTypes.find(type => type.id === typeId);
     const themeId = this.#getThemeId();
     const thematicStyle = edgeType

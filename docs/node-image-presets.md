@@ -252,9 +252,12 @@ The four permissions were `boolean` and could not express it: `false` says *forb
 instruction, not silence. They are now `NodeImagePermission` — unspecified · allowed · forbidden — and
 the registry normalises a stored `false` to *unspecified* rather than to an instruction.
 
-A fifth starter, **Open**, has everything unspecified and is the default selection. It is the baseline
-to judge against: with no descriptor firing, a bad image is the request's fault or the contract's, and
-every other starter is a departure from it that can be compared one field at a time.
+A fifth starter, **Basic** (named *Open* until 2026-09-11), has everything unspecified except the
+backdrop and is the default selection. It is the baseline to judge against: with almost no descriptor
+firing, a bad image is the request's fault or the contract's, and every other starter is a departure
+from it that can be compared one field at a time. The backdrop is set to *None* because it is not only
+a prompt line: the generator strips the full-bleed rect models emit regardless of instruction only when
+the preset says so, and a default that leaves it unspecified ships opaque boxes.
 
 The tension, stated so it is not rediscovered: **every unspecified descriptor is a degree of freedom
 the model resolves differently on every image**, and coherence is the whole argument for generating
@@ -297,8 +300,8 @@ database.
 ## 5. The editor
 
 `ui/components/node-image-preset-editor.ts` with `styles/node-image-preset-editor.css` — create,
-duplicate, rename, edit, delete, set default, and *restore starters* (additive, fresh copies, never
-overwriting).
+duplicate, rename, edit, delete, set default, and *add starters* (additive, fresh copies, never
+overwriting — the button was labelled *Restore* until 2026-09-11, which promised a reset it did not do).
 
 Shaped after `theme-picker.ts`: a draggable modal centred on the graph viewport, the preset list on
 the left, tabs on the right. Save semantics follow `edge-type-manager.ts` — field edits are drafts

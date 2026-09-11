@@ -64,12 +64,56 @@ export interface CreateConnectedAction {
 /** Action types that can appear on the node shelf */
 export type ShelfAction = CreateConnectedAction | IncludeExistingAction;
 
-/** Enriched shelf item ready for rendering */
+/**
+ * The intent to put one shelf entry in one scene. Everything here varies by scene:
+ * the same concept can be proposed in two scenes on different relationships and for
+ * different reasons.
+ */
+export interface ShelfPlacement {
+  centralNodeId: NodeId;
+  /** A relationship type name or forward label, as the model wrote it. Resolved at use. */
+  edgeType?: string;
+  /**
+   * As the model wrote it. The two action wordings ('new -> central', 'existing ->
+   * central') resolve identically, so this survives an entry changing mode.
+   */
+  direction?: string;
+  /** Why this concept belongs in this scene. Shown on the shelf, never stored on the node. */
+  reason: string;
+  /** Display order within a scene's shelf. */
+  addedAt: number;
+}
+
+/**
+ * A concept on the shelf, unique by title across the workspace. Holds only what is
+ * true of the concept everywhere; per-scene intent lives in `placements`.
+ */
+export interface ShelfEntry {
+  id: string;
+  title: string;
+  /** Includes `comment` and `equation`. Empty for an entry backed by a graph node. */
+  properties: Record<string, string>;
+  /**
+   * Set once the concept exists in the graph. Create-versus-include is derived from
+   * this rather than stored, so an entry can change mode without being rewritten.
+   */
+  nodeId?: NodeId;
+  placements: ShelfPlacement[];
+}
+
+/** One shelf entry as the current scene renders it. */
 export interface ShelfItem {
-  action: ShelfAction;
+  entryId: string;
+  title: string;
+  /** The concept already exists in the graph: accepting includes rather than creates. */
+  isExisting: boolean;
+  /** The placement's justification for this scene. */
+  reason: string;
+  edgeType?: string;
+  direction?: string;
   design: { id: string; params: Record<string, unknown> };
   themeId: string;
-  /** Node properties for rendering (pre-populated for both action types) */
+  /** Of the node when one backs the entry, of the entry otherwise. */
   properties: Record<string, string>;
 }
 

@@ -281,16 +281,21 @@ const { content: defaultContent, technical: defaultTechnical, colour: defaultCol
 
 const STARTER_NODE_IMAGE_PRESETS: NodeImagePresetDraft[] = [
   /**
-   * Everything unspecified, and the one selected by default.
+   * Everything unspecified except the backdrop, and the one selected by default.
    *
-   * A baseline to judge against: with no descriptor firing, a bad image is the
-   * request's fault or the contract's, not a knob's. Every other starter is a
-   * departure from it, and can be compared to it one field at a time.
+   * A baseline to judge against: with almost no descriptor firing, a bad image
+   * is the request's fault or the contract's, not a knob's. Every other starter
+   * is a departure from it, and can be compared to it one field at a time.
+   *
+   * The backdrop is the one exception because it is not only a prompt line:
+   * models draw a full-bleed background rect whatever they are told, and the
+   * generator strips it only when the preset says transparent. Leaving it
+   * unspecified makes the default preset the one that ships opaque boxes.
    */
   {
-    name: 'Open',
+    name: 'Basic',
     content: { ...defaultContent },
-    technical: { ...defaultTechnical },
+    technical: { ...defaultTechnical, backdrop: 'transparent' },
     colour: { ...defaultColour },
     extraInstructions: ''
   },

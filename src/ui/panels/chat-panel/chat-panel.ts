@@ -39,7 +39,7 @@ export class ChatPanel {
   #quickActionsContainer: HTMLElement;
   #chatContainer: HTMLElement;
   #cy: Core;
-  #onActionsReceived: ((actions: ProposedAction[]) => void) | null = null;
+  #onActionsReceived: ((actions: ProposedAction[]) => string | void) | null = null;
   /** The relationship chosen for the request in flight. Only one can be in flight. */
   #pendingSlot: RelationshipSlot | null = null;
 
@@ -90,7 +90,7 @@ export class ChatPanel {
   // PUBLIC API
   // ==========================================================================
 
-  onActionsReceived(callback: (actions: ProposedAction[]) => void): void {
+  onActionsReceived(callback: (actions: ProposedAction[]) => string | void): void {
     this.#onActionsReceived = callback;
   }
 
@@ -265,7 +265,7 @@ export class ChatPanel {
       onActionsReceived: (actions) => {
         const slot = this.#pendingSlot;
         this.#pendingSlot = null;
-        this.#onActionsReceived?.(slot ? stampSlot(actions, slot) : actions);
+        return this.#onActionsReceived?.(slot ? stampSlot(actions, slot) : actions);
       },
       onError: (error) => {
         this.#pendingSlot = null;

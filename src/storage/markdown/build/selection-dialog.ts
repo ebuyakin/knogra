@@ -401,7 +401,7 @@ export function showBuildSelectionDialog(
         const crossCb = row.querySelector('.mi-edge-cross') as HTMLInputElement | null;
         return {
           sourceLabelKey: labelKey,
-          edgeTypeName: sanitizeEdgeTypeName(nameInput?.value ?? '') || 'related',
+          edgeTypeName: sanitizeEdgeTypeName(nameInput?.value ?? '') || UNLABELED_EDGE_TYPE_NAME,
           thematicStyleSlotId: (styleSelect?.value || getDefaultEdgeStyleSlotId()) as EdgeStyleSlotId,
           includeChildren: childrenCb?.checked ?? true,
           includeParents: parentsCb?.checked ?? true,
@@ -566,7 +566,7 @@ function getEdgeLabelRows(parsed: KnograDocument): EdgeLabelRow[] {
       key,
       displayLabel: value.displayLabel,
       count: value.count,
-      defaultTypeName: key === '' ? 'related' : titleCaseEdgeTypeName(value.displayLabel),
+      defaultTypeName: key === '' ? UNLABELED_EDGE_TYPE_NAME : titleCaseEdgeTypeName(value.displayLabel),
       defaultStyleSlotId: key === ''
         ? getDefaultEdgeStyleSlotId()
         : styleSlots[index % styleSlots.length],
@@ -581,10 +581,11 @@ function sanitizeEdgeTypeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
 }
 
+/** Display default for the type of unlabelled edges, and for a name the author left blank. */
+const UNLABELED_EDGE_TYPE_NAME = 'Association';
+
 function titleCaseEdgeTypeName(label: string): string {
-  const sanitized = sanitizeEdgeTypeName(label);
-  if (!sanitized) return 'related';
-  return sanitized
+  return sanitizeEdgeTypeName(label)
     .split(' ')
     .map(word => word.length > 0 ? word[0].toUpperCase() + word.slice(1) : word)
     .join(' ');

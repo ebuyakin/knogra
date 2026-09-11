@@ -71,7 +71,7 @@ Two files carry data in and out of a workspace. They are unrelated formats with 
 **Knogra Markdown document** — A lossy, human- and AI-readable projection of a graph: an optional Mermaid diagram plus prose sections. Used to author a graph and to refresh its content. Carries no positions, scenes, designs or themes, and is never a backup. Canonical doc: [Markdown architecture](markdown-architecture.md).
 
 ### Shelf
-**Shelf** — Collection of AI-suggested nodes waiting to be placed on the graph. Managed by NodeShelf, displayed by SuggestionPanel.
+**Shelf** — Collection of AI-suggested concepts waiting for the user's decision. One workspace-wide set of entries, each able to wait in several scenes. Managed by NodeShelf over the shelf store, displayed by SuggestionPanel.
 
 ### Operation Verbs
 To distinguish between graph operations and scene operations:
@@ -407,7 +407,8 @@ AI-assisted learning companion. Provides contextual help, suggestions, and graph
 | `providers/request-timeout.ts` | Bounds every provider call so a stalled vendor cannot hang the UI |
 | `context-builder.ts` | Builds system prompt from graph state |
 | `chat-session.ts` | Manages conversation state |
-| `node-shelf.ts` | Suggestion state; orchestrates placement via FeatureAPI |
+| `shelf/node-shelf.ts` | Shelf orchestration for the current scene; placement via FeatureAPI |
+| `shelf/shelf-store.ts` | The shelf's persisted shape: entries, placements, reconciliation |
 | `shelf-design-selector.ts` | Selects designs for shelf items |
 
 **Provider layer.** Four vendors behind one narrow interface — `sendMessage(messages, systemPrompt)`, non-streaming, no tool loop. Adapters own only the **request** shape; every adapter is handed the same prompt contract and so gets back the same reply shape, which is why parsing is shared rather than per-vendor.
@@ -419,7 +420,7 @@ Three unrelated call sites resolve a provider, not just chat: `chat-session.ts`,
 **Bring your own key.** Every request goes from the browser straight to the vendor. No proxy, no relay, no server of ours in the path — which makes browser-callability (CORS) a hard constraint on which providers can be supported at all.
 
 **NodeShelf** is the AI→Features integration point. It:
-- Manages suggested nodes per scene, converts AI actions to shelf items, and calls FeatureAPI when the user approves placement
+- Loads the current scene's shelf, routes AI actions to the shelf store, and calls FeatureAPI when the user accepts one. The shelf is workspace-wide, not per scene; canonical doc: [Shelf architecture](ai/shelf-architecture.md).
 
 **Storage:**
 - ChatStore (`storage/chat-store.ts`) — Separate IndexedDB for conversations

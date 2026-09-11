@@ -14,7 +14,6 @@ import { cascadeNodeDeletion } from '../../storage/node-deletion';
 import { StyleGenerator } from '../../styles/style-generator';
 import { placeSingleNode, type SizedObstacle } from '../utils/pure/position-expansion';
 import { getSetting } from '../../config';
-import { getDefaultEdgeTypeId } from '../../config/edge-type-settings';
 import { AppStateManager } from '../../storage/app-state';
 import { isDebug } from '../../config/debug-flags';
 import { getAnchorDistances, getLinkToAnchor } from './anchor-traversal';
@@ -294,7 +293,7 @@ export class Graph {
     const edgeTypeId = typeId ?? (
       rememberedEdgeTypeId && graphStore.edgeTypes.some(type => type.id === rememberedEdgeTypeId)
         ? rememberedEdgeTypeId
-        : getDefaultEdgeTypeId()
+        : graphStore.defaultEdgeTypeId
     );
     const edge: EdgeData = {
       id: edgeId,

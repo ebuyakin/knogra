@@ -2,7 +2,7 @@
 
 > **Status:** Current
 >
-> **Last reviewed:** 2026-09-10
+> **Last reviewed:** 2026-09-11
 >
 > **Authority:** Current architecture and implementation guide for edge types, typed edge styling, and scene-local edge visibility. How edge types reach the AI assistant is summarized in §11 and specified in [ai-prompt-etalon.md](ai/ai-prompt-etalon.md).
 >
@@ -12,7 +12,7 @@
 
 Knogra supports edges as graph relationships. Edge types make those relationships semantically and visually distinct without requiring every individual edge to be styled by hand.
 
-The edge types feature provides workspace-specific relationship types such as `related`, `part of`, `example of`, `causes`, or `precedes`. Each type has centrally managed visual styling, and scenes can visually hide or dim edge types without removing those edges from the scene or graph.
+The edge types feature provides workspace-specific relationship types such as Generalization, Composition, Association, `causes`, or `precedes`. Each type has centrally managed visual styling, and scenes can visually hide or dim edge types without removing those edges from the scene or graph.
 
 The goal is to make relationship semantics first-class in the graph while preserving Knogra's scene model: scenes decide which relationships are contextually included, and visibility controls decide how visually prominent those included relationships are.
 
@@ -24,7 +24,7 @@ Current implementation facts that shape the feature:
 
 - `Edge` in `src/core/main-types.ts` now has a first-class `typeId`.
 - `EdgeType` records are workspace-level graph data stored in the `edgeTypes` object store.
-- New and imported workspaces seed or normalize starter edge types, including the default `related` type.
+- A new workspace is seeded with the starter edge types; an imported workspace keeps the types its file carries. The registry is ordered (`EdgeType.order`), and its first type is the workspace's default.
 - Edge type styles resolve from theme-owned `edgeStyleSlots`, optional edge type `styleOverride`, and optional per-edge scene override.
 - `Scene.edges[edgeId].design` remains the scene-specific per-edge override layer.
 - `Scene.edgeTypeVisibility` is scene-local display state and participates in the resolved visual state of each edge.
@@ -35,7 +35,7 @@ Current implementation facts that shape the feature:
 - The Edge Type Manager can rename types, choose thematic slots, and configure type-level visual overrides.
 - The Edge Editor can enable or clear individual per-edge overrides.
 - Copy/paste edge style copies both `typeId` and optional individual override state.
-- Mermaid export/import now maps Mermaid labels to edge type names and creates edge types during import.
+- Mermaid Build creates the workspace's registry from the diagram's labels: one type per distinct name the author gives in the import dialog, ids `edge-type-N` in row order, the label as the forward label, no inverse. The starter set is not involved; nothing is injected. Rows are ordered by label frequency, so the most frequent relationship is the imported workspace's default.
 - The assistant reads the full type vocabulary — name, description, forward and inverse labels — and names a type and a direction in every action it proposes. See §11.
 
 The important architectural lesson from the visibility work is that edge types are not only a data and UI feature. They participate in scene style resolution, transition analysis, ghost rendering, open/close animations, fold/unfold behavior, GraphSaver persistence, workspace import/export, Mermaid conversion, and context menu affordances. Treating visibility as a late display patch makes the system fragile because transition code actively owns runtime opacity during animation.
@@ -48,7 +48,9 @@ These decisions define the current feature:
 
 - Edge types are workspace-specific.
 - Edge types are persisted in a dedicated `edgeTypes` object store inside `knogra-graph`, alongside the existing graph object stores for nodes, edges, scenes, and background images.
-- New and imported workspaces start with configurable starter edge types, named Related, Composition and Generalization. Their ids are `related`, `part-of` and `example-of`: the ids no longer match the names, and deliberately so, because ids are persisted on every edge in every existing workspace and changing them would orphan those edges onto the default type.
+- New workspaces start with three starter edge types — Generalization, Composition, Association — seeded from `src/config/edge-type-settings.ts` and never consulted again: once a workspace exists, its registry in IndexedDB is the only source of type names, labels, descriptions and styles.
+- Edge type ids are opaque. No code reads a type by id or name; the seed uses `edge-type-1..3` and the Edge Type Manager continues the sequence. Workspaces created before 2026-09-11 keep their original ids (`example-of`, `part-of`, `related`) forever, since ids are persisted on every edge, and nothing cares.
+- The registry is ordered by `EdgeType.order`, and the first type is the workspace's default: what a new edge gets when nothing names a type, and what an edge is repaired onto when its `typeId` is unknown. The seed decides the initial order; the order is data and can change per workspace. Generalization leads because the default should draw in the theme's neutral first style slot, whose triangle is the UML generalization arrowhead.
 - Starter edges run from the broader end to the narrower one — whole to part, general to specific — so the source of an edge is the containing or more general thing. This matches the outward gesture of the radial layout and makes the app's own parent/child wording agree with the arrow. Existing workspaces were not migrated: reversing a user's edges would silently rewrite their meaning.
 - The UI remembers the last selected edge type and uses it as the default for newly created edges.
 - Users can create custom edge types.
@@ -70,7 +72,7 @@ These decisions define the current feature:
 |---|---|
 | **Edge type** | Workspace-defined semantic category for graph edges, for example `part of` or `example of`. |
 | **Type registry** | Workspace-level collection of available edge types and their visual styles. |
-| **Default edge type** | Fallback type assigned to existing, imported, or newly created edges when no explicit type is chosen. |
+| **Default edge type** | The first type in registry order. Assigned to new edges when nothing names a type, and to edges whose `typeId` is unknown. Not a fixed record: reorder the registry and the default changes. |
 | **Type style** | Centrally managed Cytoscape style parameters applied to every edge of a type. |
 | **Per-edge override** | Optional scene-specific style override for one edge, layered over its type style. |
 | **Included edge** | Edge exists in `scene.edges`; it is part of the scene's contextual structure. |
@@ -124,6 +126,7 @@ export type EdgeStyleSlotId = 'edge-style-1' | 'edge-style-2' | 'edge-style-3';
 export interface EdgeType {
   id: EdgeTypeId;
   name: string;
+  order: number;
   description?: string;
   forwardLabel?: string;
   inverseLabel?: string;
@@ -134,7 +137,7 @@ export interface EdgeType {
 }
 ```
 
-`thematicStyleSlotId` points to one of three theme-owned edge style slots. `styleOverride` is optional and stores manual deviations from the selected thematic style.
+`order` is the type's position in the registry; the first type is the workspace's default (§3). New types are appended. `thematicStyleSlotId` points to one of three theme-owned edge style slots. `styleOverride` is optional and stores manual deviations from the selected thematic style.
 
 `Edge.typeId` identifies the workspace edge type:
 
@@ -152,7 +155,7 @@ export interface Edge {
 }
 ```
 
-`forwardLabel` and `inverseLabel` are optional but useful because direction matters. For example, if `A -> B` has type `part-of`, the forward label might be `is part of`, and the inverse label might be `has part`.
+`forwardLabel` and `inverseLabel` are optional but useful because direction matters. For example, if `A -> B` has type Composition, the forward label is `has part` (A has part B) and the inverse label is `is part of` (B is part of A).
 
 ### 6.2 Scene Visibility State
 
@@ -207,7 +210,9 @@ export const GRAPH_DB_SCHEMA = {
 };
 ```
 
-`GRAPH_DB_VERSION` is `3`. `GraphStore` loads and caches edge types alongside graph data, seeds starter edge types when the store is empty, and normalizes existing edges to the default type when an edge has no valid `typeId`.
+`GRAPH_DB_VERSION` is `4`. `GraphStore` loads and caches edge types alongside graph data, seeds starter edge types when the store is empty, keeps the cached registry sorted by `order`, exposes the first type as `defaultEdgeTypeId`, and normalizes existing edges to it when an edge has no valid `typeId`.
+
+Records written before `order` existed are given one on first load by `src/storage/legacy/edge-type-order.ts` (oldest `createdAt` first, ties by `id`) and written back once. `order` is not indexed — the registry is sorted in memory — so the schema did not change.
 
 Because edge types are workspace-specific graph data, storing them in `knogra-graph` is the most coherent default. Their selected thematic style slot and optional manual override are part of the workspace relationship vocabulary, while the actual slot aesthetics belong to themes. Edge types should not live in `knogra.settings` because exported workspaces must carry their relationship vocabulary, and settings may be preserved independently from graph data during workspace flows.
 
@@ -215,21 +220,18 @@ Because edge types are workspace-specific graph data, storing them in `knogra-gr
 
 Workspace export/import includes edge types. Since edge types are stored in `knogra-graph`, `edgeTypes` is included inside the graph export payload with nodes, edges, and scenes.
 
-The import validator checks that every `edge.typeId` resolves to an existing edge type. Unknown or missing type IDs are reassigned to the default type during import/migration. This handles older workspaces that have no edge type data.
+The imported registry is exactly what the file carries; nothing is injected. A file with no edge types gets the starter set. Records without `order` are filled by the same legacy rule the store uses. Every `edge.typeId` is checked against that registry, and unknown or missing ids are reassigned to its first type.
 
 ### 7.3 New Workspace Defaults
 
-New workspace creation seeds the edge type registry from a configurable starter set defined in `src/config/edge-type-settings.ts`.
+New workspace creation seeds the edge type registry from the starter set in `src/config/edge-type-settings.ts`, in this order:
 
-Starter set:
+    id            name             forward label   inverse label   style slot
+    edge-type-1   Generalization   has kind        is a kind of    1  (triangle)
+    edge-type-2   Composition      has part        is part of      2  (diamond)
+    edge-type-3   Association      relates to      is related to   3  (circle)
 
-| ID | Name | Forward label | Notes |
-|---|---|---|---|
-| `related` | Related | relates to | Default fallback type. |
-| `part-of` | Part of | is part of | Useful for entity/attribute and whole/part structures. |
-| `example-of` | Example of | is example of | Useful for instance/class or example/concept structures. |
-
-`related` is the default fallback type.
+Arrowheads follow UML: triangle for generalization, diamond for composition; the circle carries no UML meaning and marks the type that is symmetric in meaning. Association still has two labels because the edge under it is directed and operations such as include-children act on that direction; the labels differ in voice only.
 
 ---
 
@@ -444,7 +446,8 @@ Implementation decisions:
 - The remembered type is stored in `knogra.state` as `lastEdgeTypeId` through `AppStateManager`.
 - `Graph.addEdge()` is the single defaulting point for new edges, so keyboard, context-menu, connected-node, and shelf-driven edge creation all inherit the same remembered type behavior.
 - `Edge.update()` records `lastEdgeTypeId` when a caller changes an edge's `typeId`.
-- `Graph.addEdge()` validates the remembered id against `graphStore.edgeTypes` before using it. If the stored id is absent from the current workspace, new edges fall back to the configured default edge type (`related`).
+- `Graph.addEdge()` validates the remembered id against `graphStore.edgeTypes` before using it. If the stored id is absent from the current workspace, new edges fall back to `graphStore.defaultEdgeTypeId`, the first type in registry order.
+- The remembered id lives in browser-wide `localStorage`, not in the workspace, so it carries across workspaces in the same browser as long as the id exists in the current registry.
 - This state is cleared with the rest of `knogra.state` on new workspace flows.
 
 ### 10.5 Edge Style Copy/Paste And Multi-Selection
@@ -502,11 +505,11 @@ Settled decisions:
 
 | Question | Decision |
 |---|---|
-| Initial starter set | `related`, `part-of`, `example-of`. |
+| Initial starter set | Generalization, Composition, Association (`edge-type-1..3`), in that order; see §7.3. |
 | View mode visibility changes | Allowed, but transient and not persisted. |
 | Hidden edge selectability | Hidden/invisible edges are not intended to be selectable from the canvas. |
 | Edge title rendering | Keep titles as metadata, but do not render them by default. |
-| Unknown edge type IDs on import | Reassign to the default type. |
+| Unknown edge type IDs on import | Reassign to the imported registry's first type. |
 | Storage location | Dedicated `edgeTypes` object store in `knogra-graph`. |
 | Type management UI | Dedicated Edge Type Manager overlay. |
 | Theme-aware styling | Three theme-owned thematic edge style slots; edge types reference a slot and may optionally override it. |

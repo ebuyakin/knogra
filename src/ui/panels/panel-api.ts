@@ -6,12 +6,12 @@
 import type { Core } from 'cytoscape';
 import type { FeatureAPI } from '../../features/feature-api';
 import type { ShelfAction, ShelfItem } from '../../ai/types';
-import type { ShelfChangeReason, RemovalMeta, AdditionMeta } from '../../ai/node-shelf';
+import type { ShelfChangeReason, RemovalMeta, AdditionMeta } from '../../ai/shelf/node-shelf';
 
 import { ChatPanel } from './chat-panel/chat-panel';
 import { SuggestionPanel } from './suggestion-panel';
 import { PathPanel } from './path-panel';
-import { NodeShelf } from '../../ai/node-shelf';
+import { NodeShelf } from '../../ai/shelf/node-shelf';
 import { ShelfInteractionGuard } from '../shelf-interaction-guard';
 
 export class PanelAPI {
@@ -38,12 +38,13 @@ export class PanelAPI {
     this.pathPanel = new PathPanel(cy, features, pathPanelContainer);
     this.nodeShelf = new NodeShelf(features);
 
-    // Wire: ChatPanel actions → NodeShelf
+    // Wire: ChatPanel actions → NodeShelf. The shelf's summary of what it took
+    // replaces the model's prose in the timeline.
     this.chatPanel.onActionsReceived((actions) => {
       const shelfActions = actions.filter(
         (a): a is ShelfAction => a.type === 'create_connected' || a.type === 'include_existing'
       );
-      this.nodeShelf.addItems(shelfActions);
+      return this.nodeShelf.addItems(shelfActions);
     });
 
     // Wire: NodeShelf items → SuggestionPanel (dispatch by reason)
@@ -100,6 +101,22 @@ export class PanelAPI {
       if (this.#shelfGuard.isBusy()) return;
       void this.#shelfGuard.runFullyBlocked(async () => {
         this.nodeShelf.removeItem(index);
+        await pendingShelfRender;
+      });
+    });
+
+    this.suggestionPanel.onItemRemoveAll((index) => {
+      if (this.#shelfGuard.isBusy()) return;
+      void this.#shelfGuard.runFullyBlocked(async () => {
+        this.nodeShelf.removeItemEverywhere(index);
+        await pendingShelfRender;
+      });
+    });
+
+    this.suggestionPanel.onClearShelf(() => {
+      if (this.#shelfGuard.isBusy()) return;
+      void this.#shelfGuard.runFullyBlocked(async () => {
+        this.nodeShelf.clear();
         await pendingShelfRender;
       });
     });

@@ -232,10 +232,10 @@ export class EdgeTypeManager {
   /**
    * What the type is. The description and labels are what the assistant will
    * read once edge types reach the prompt, so the placeholders show the shape
-   * that reads well as a sentence: "A is part of B", "B has part A".
+   * that reads well as a sentence: "A has part B", "B is part of A".
    */
   #meaningRows(edgeType: EdgeType): HTMLElement[] {
-    const name = this.#textInput(edgeType.name, 'e.g. Part of', (value) => {
+    const name = this.#textInput(edgeType.name, 'e.g. Composition', (value) => {
       edgeType.name = value;
       this.#markDirty(edgeType.id);
       this.#refreshList();
@@ -251,12 +251,12 @@ export class EdgeTypeManager {
       this.#markDirty(edgeType.id);
     });
 
-    const forwardLabel = this.#textInput(edgeType.forwardLabel ?? '', 'e.g. is part of', (value) => {
+    const forwardLabel = this.#textInput(edgeType.forwardLabel ?? '', 'e.g. has part', (value) => {
       edgeType.forwardLabel = value;
       this.#markDirty(edgeType.id);
     });
 
-    const inverseLabel = this.#textInput(edgeType.inverseLabel ?? '', 'e.g. has part', (value) => {
+    const inverseLabel = this.#textInput(edgeType.inverseLabel ?? '', 'e.g. is part of', (value) => {
       edgeType.inverseLabel = value;
       this.#markDirty(edgeType.id);
     });
@@ -266,7 +266,7 @@ export class EdgeTypeManager {
       this.#row('Description', description, 'etm-row--top'),
       this.#row('Forward label', forwardLabel),
       this.#row('Inverse label', inverseLabel),
-      this.#note('Forward reads from the edge’s source to its target: "Source is part of Target". Inverse reads the other way: "Target has part Source".')
+      this.#note('Forward reads from the edge’s source to its target: "Source has part Target". Inverse reads the other way: "Target is part of Source".')
     ];
   }
 
@@ -451,6 +451,7 @@ export class EdgeTypeManager {
     const edgeType: EdgeType = {
       id: this.#createUniqueEdgeTypeId('edge-type'),
       name: 'New type',
+      order: Math.max(-1, ...graphStore.edgeTypes.map(existing => existing.order)) + 1,
       thematicStyleSlotId: getDefaultEdgeStyleSlotId(),
       createdAt: now,
       updatedAt: now

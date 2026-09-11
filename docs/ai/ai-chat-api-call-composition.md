@@ -6,8 +6,9 @@
 >
 > **Authority:** How a chat request is assembled and what happens to the reply. Everything *around*
 > the prompt: the call envelope, which code builds which section of the system message, conversation
-> history, the difference between what the timeline shows and what is sent, the two math pipelines,
-> and the shelf's filtering and acceptance rules.
+> history, the difference between what the timeline shows and what is sent, and the two math
+> pipelines. The shelf's own model, filtering and acceptance rules are
+> [shelf-architecture.md](shelf-architecture.md).
 >
 > **No prompt text lives here.** The verbatim rendering is
 > [ai-prompt-etalon.md](ai-prompt-etalon.md), and it is the only copy in `docs/`. A second copy is
@@ -44,12 +45,13 @@ The user API key and selected provider/model come from local settings. Knogra do
 One provider call carries three things.
 
 - **system** — the system message, rebuilt from scratch on every call from the current scene. Never stored.
-- **history** — every earlier message of this node's conversation whose `source` is `ai` or absent, as role/content pairs. Assistant turns hold the cleaned prose only: the JSON action block is stripped before storage, so the model never re-reads its own actions.
+- **history** — every earlier message of this node's conversation whose `source` is `ai` or absent, as role/content pairs. Assistant turns hold the cleaned prose only: the JSON action block is stripped before storage, so the model never re-reads its own actions. A turn that produced shelf items holds the shelf's summary of what it accepted instead of the prose.
 - **user** — the latest user message: a quick-action prompt or free-typed text.
 
-The shelf is not in the envelope. An accepted suggestion changes the graph, and the graph reaches
-the next call through the system message; but what the assistant *proposed* survives only in its own
-prose. That is why action requests do not forbid prose.
+The shelf reaches the model through the system message, in its own section: what is pending for this
+scene, and what is pending elsewhere and not yet in the graph. Before that section existed, the
+assistant's prose was the only surviving trace of what it had proposed, which is why action requests
+did not forbid prose. That reason is gone.
 
 ## The System Message
 
@@ -184,7 +186,7 @@ The provider response may contain two parts:
 - conversational text for the chat timeline
 - an optional JSON action block
 
-Provider adapters parse the JSON block and return actions separately from cleaned conversational content. The cleaned assistant content is saved into the node's conversation.
+Provider adapters parse the JSON block and return actions separately from cleaned conversational content.
 
 Recommendations that should become graph or scene changes must be represented as JSON actions, not prose-only suggestions. The assistant may explain the rationale for an action in the conversational response, but the shelf will only show actions parsed from the final JSON block.
 
@@ -197,20 +199,12 @@ When the request carried a relationship slot, `stampSlot()` overwrites the model
 `direction` on every action — but only on the axis the user actually named — before the actions
 reach the shelf.
 
-The shelf filters invalid or duplicate actions before displaying them:
-
-- `create_connected` is skipped if the suggested title or equation already exists anywhere in the graph.
-- `include_existing` is skipped if the title is not found in the graph or the node is already in the current scene.
-- Either is skipped if an item with that title is already on the shelf. The filter runs again when a shelf is reloaded, because the graph may have gained the node in the meantime.
-
-When the user accepts a shelf item, both paths anchor on the central node of the scene that owns the
-conversation, never on the current selection: the request named the central node, so a selection
-anchor would create an edge asserting something the user never asked for.
-
-- `create_connected` creates a new node and one edge to the central node, with the type and direction resolved from the action by `src/ai/edge-type-resolution.ts`.
-- `include_existing` adds the existing node to the current scene and connects it to the central node, reusing an edge if the graph already has one.
-
-Where the accepted node lands on the canvas is in [node-placement.md](../node-placement.md).
+Actions are routed to the shelf *before* the assistant message is stored, and what the shelf accepts
+decides what the timeline records: one line per accepted item, replacing the model's prose. A reply
+that carried no actions, or whose actions were all rejected, stores its prose unchanged. What the
+shelf accepts, and what happens when the user acts on an item, are in
+[shelf-architecture.md](shelf-architecture.md); where an accepted node lands on the canvas is in
+[node-placement.md](../node-placement.md).
 
 ## AI, Notes, Tutorial, And Legacy Messages
 
@@ -240,7 +234,8 @@ This matters because `ChatSession` loads the node's full timeline into memory. F
 | `src/ai/edge-type-resolution.ts` | Turns the type name and direction a model wrote into what the graph stores. |
 | `src/ai/latex-sanitizer.ts` | Repairs LaTeX damaged by JSON escape collisions and normalizes equation values. |
 | `src/ai/providers/` | Vendor adapters, provider resolution, timeouts, and shared reply parsing. See [ai-provider-architecture.md](ai-provider-architecture.md). |
-| `src/ai/node-shelf.ts` | Filters and stores actionable node suggestions, then places accepted suggestions. |
+| `src/ai/shelf/node-shelf.ts` | Routes actions to the shelf store, summarizes what was accepted, and performs the edit when the user accepts an item. |
+| `src/ai/shelf/shelf-store.ts` | Owns the shelf's persisted shape, its entries and placements, and its reconciliation. |
 | `src/ui/panels/chat-panel/chat-panel.ts` | Renders quick-action buttons, supplies scene context to `ChatSession`, holds the pending slot. |
 | `src/ui/panels/chat-panel/quick-action-menu.ts` | The relationship menu that opens on the Suggest and Connect buttons. |
 | `src/ui/panels/panel-api.ts` | Routes parsed shelf actions from chat to the node shelf. |

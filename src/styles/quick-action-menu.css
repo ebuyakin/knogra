@@ -37,18 +37,33 @@
   opacity: 0.7;
 }
 
+/* The row's left edge sits 4px inside the menu (3px padding + 1px border);
+   --qa-submenu-offset places the submenu just outside that edge with a 2px
+   visual gap. */
 .qa-submenu {
+  --qa-submenu-offset: 6px;
   position: absolute;
   top: -3px;
-  right: 100%;
+  right: calc(100% + var(--qa-submenu-offset));
   display: none;
   min-width: 150px;
   padding: 3px;
-  margin-right: 2px;
   background: var(--bg-secondary, #161b22);
   border: 1px solid var(--border-primary, #30363d);
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Invisible bridge over the offset. The submenu is shown by row:hover, and a
+   pseudo-element is a descendant of the row, so the pointer crossing the gap
+   keeps the row hovered instead of dropping the submenu mid-move. */
+.qa-submenu::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: var(--qa-submenu-offset);
 }
 
 .qa-menu-row--parent:hover > .qa-submenu {

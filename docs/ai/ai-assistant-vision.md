@@ -69,35 +69,16 @@ The visible timeline stores compact command text, while the provider receives th
 
 ### B. Node Shelf (Suggestion Panel)
 
-A horizontal shelf at the bottom of the viewport showing AI-suggested nodes. Two categories:
+A horizontal shelf at the bottom of the viewport holding what the assistant has proposed and the
+user has not yet acted on. It is where the "suggests, never executes" principle is enforced rather
+than promised: the assistant can only put concepts on a shelf, and only the user can accept one into
+the graph or discard it.
 
-| Type | Badge | Click Action | Source |
-|------|-------|-------------|--------|
-| **Create New** | (none) | Creates new node + edge in graph & scene | AI generates title/properties |
-| **Include Existing** | ∃ badge | Adds existing node to scene + restores edges | AI references by title |
-
-**Create New** — AI suggests a new concept. Clicking creates the node and one edge to the central node, with the relationship type and direction the action carries.
-
-**Include Existing** — AI suggests an existing graph node that isn't in the current scene. Clicking:
-1. Resolves the title to a `nodeId` in `graphStore`
-2. Calculates a collision-free position near the central node
-3. Adds node to scene and restores all edges to nodes already in scene
-4. If no edges exist, creates a fallback edge to the central node
-
-Both paths anchor on the central node rather than the selection, because the request that produced
-the suggestion named the central node; anchoring elsewhere would assert a relationship nobody asked
-for.
-
-**Deduplication rules:**
-- `create_connected`: skip if title or equation already exists anywhere in graph
-- `include_existing`: skip if node is already in current scene or already on shelf
-- Re-filter on scene load (stale localStorage items get cleaned up)
-
-**Right-click** on any shelf item shows a context menu with "Remove from shelf".
-
-**UI distinction for existing nodes:**
-- Small badge overlay (∃) on the shelf item, visually similar to the hidden-connections badge
-- The preview renders the node's **actual design** from the database (not shelf design settings)
+The shelf is workspace-wide. A concept is one entry, unique by title, which can be waiting in
+several scenes at once; accepting it in one scene creates the node once, and the same entry then
+offers to include that node elsewhere. The model, the lifecycle, the reconciliation rules, the
+persisted shape and the management commands are all in
+[shelf-architecture.md](shelf-architecture.md).
 
 ### C. Context & Prompt Architecture
 
@@ -110,6 +91,7 @@ distinguishes:
 - the scene's nodes and edges, and separately the edges that exist between scene nodes without being shown
 - the central node's neighbours that the scene does not hold
 - every remaining node in the graph
+- what is already waiting on the shelf, for this scene and for others
 
 This enables the AI to:
 - Avoid suggesting duplicates (`create_connected` for something that exists)
@@ -189,7 +171,7 @@ src/ai/
 ├── prompts.ts                # Prompt templates and quick-action assembly
 ├── relationship-slot.ts      # Edge types → menu choices, constraint sentences, stamping
 ├── edge-type-resolution.ts   # The model's words → edge type id and direction
-├── node-shelf.ts             # Shelf items from AI responses; placement on accept
+├── shelf/                    # Workspace-wide shelf: store, orchestration, placement
 ├── shelf-design-selector.ts  # Visual design for shelf previews
 ├── equation-generator.ts     # Self-contained equation call, no graph context
 ├── latex-sanitizer.ts        # Repairs LaTeX damaged by JSON escaping
@@ -202,6 +184,7 @@ src/storage/chat-store.ts     # IndexedDB conversations
 src/ui/panels/
 ├── chat-panel/               # Timeline, input, quick actions, relationship menu
 ├── suggestion-panel.ts       # Shelf rendering
+├── shelf-context-menu.ts     # The shelf item's right-click commands
 └── panel-api.ts              # Routes actions between AI and UI
 ```
 

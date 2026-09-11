@@ -7,15 +7,16 @@
  * - Edges (remove incident edge inclusions from scenes; callers delete graph edges)
  * - Paths (remove deleted scenes)
  * - Chat (delete conversation)
- * - Shelf (clear suggestions)
  * - Node images (delete owned SVG pictograms)
+ *
+ * The shelf is deliberately absent: it lives in localStorage, owns its own format,
+ * and drops suggestions referring to a missing node when it next reconciles.
  */
 
 import type { EdgeId, FoldedNodeEntry, NodeId, Scene, SceneId } from '../core/main-types';
 import { graphStore } from './graph-store';
 import { chatStore } from './chat-store';
 import { pathStore } from './path-store';
-import { SHELF_KEY } from '../config/storage-config';
 import { isDebug } from '../config/debug-flags';
 
 export interface CascadeNodeDeletionResult {
@@ -62,11 +63,7 @@ export async function cascadeNodeDeletion(nodeId: NodeId): Promise<CascadeNodeDe
   await chatStore.deleteConversation(nodeId);
   if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Deleted chat for node: ${nodeId}`);
   
-  // 6. Clear shelf suggestions for this node
-  clearShelfForNode(nodeId);
-  if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Cleared shelf for node: ${nodeId}`);
-  
-  // 7. Delete SVG images owned by this node. Images are owned 1:1, never shared,
+  // 6. Delete SVG images owned by this node. Images are owned 1:1, never shared,
   //    which is what makes this unconditional and orphans impossible.
   await graphStore.deleteNodeImagesForNode(nodeId);
   if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Deleted images for node: ${nodeId}`);
@@ -172,23 +169,5 @@ async function removeDeletedScenesFromPaths(deletedSceneIds: SceneId[]): Promise
         if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Updated path: ${path.name}`);
       }
     }
-  }
-}
-
-/**
- * Clear shelf suggestions for a node from localStorage
- */
-function clearShelfForNode(nodeId: NodeId): void {
-  try {
-    const stored = localStorage.getItem(SHELF_KEY);
-    if (!stored) return;
-    
-    const shelf = JSON.parse(stored);
-    if (shelf[nodeId]) {
-      delete shelf[nodeId];
-      localStorage.setItem(SHELF_KEY, JSON.stringify(shelf));
-    }
-  } catch (e) {
-    console.warn('[cascadeNodeDeletion] Failed to clear shelf:', e);
   }
 }

@@ -4,7 +4,8 @@ import Dexie from 'dexie'
 import type { Node, Edge, EdgeType, EdgeTypeId, Scene, SceneId, NodeId, EdgeId, BackgroundImage, BackgroundImageId, NodeImageId } from '../core/main-types'
 import type { NodeImage } from '../core/node-image-types'
 import { GRAPH_DB_NAME, GRAPH_DB_VERSION, GRAPH_DB_SCHEMA } from '../config/storage-config'
-import { createStarterEdgeTypes, getDefaultEdgeTypeId } from '../config/edge-type-settings'
+import { createStarterEdgeTypes } from '../config/edge-type-settings'
+import { assignMissingEdgeTypeOrder, type StoredEdgeType } from './legacy/edge-type-order'
 import { isDebug } from '../config/debug-flags'
 import { recordPersistedPositions } from '../utils/diagnostics/recorder'
 
@@ -35,10 +36,16 @@ class GraphDataStore {
 
     async init(): Promise<void> {
         this.nodes = await this.#db.table('nodes').toArray();
-        this.edgeTypes = await this.#db.table('edgeTypes').toArray();
-        if (this.edgeTypes.length === 0) {
+        const storedEdgeTypes = await this.#db.table('edgeTypes').toArray() as StoredEdgeType[];
+        if (storedEdgeTypes.length === 0) {
             this.edgeTypes = createStarterEdgeTypes();
             await this.#db.table('edgeTypes').bulkPut(this.edgeTypes);
+        } else {
+            const { edgeTypes, changed } = assignMissingEdgeTypeOrder(storedEdgeTypes);
+            this.edgeTypes = sortEdgeTypes(edgeTypes);
+            if (changed) {
+                await this.#db.table('edgeTypes').bulkPut(this.edgeTypes);
+            }
         }
 
         const rawEdges = await this.#db.table('edges').toArray() as Edge[];
@@ -108,20 +115,23 @@ class GraphDataStore {
         }
     }
 
+    /** The first type in registry order: what a new edge gets when nothing names a type, and what a broken edge is repaired onto. */
+    get defaultEdgeTypeId(): EdgeTypeId {
+        const first = this.edgeTypes[0];
+        if (!first) throw new Error('Edge type registry is empty');
+        return first.id;
+    }
+
     async createEdgeType(edgeType: EdgeType): Promise<EdgeTypeId> {
         await this.#db.table('edgeTypes').add(edgeType);
-        this.edgeTypes.push(edgeType);
+        this.edgeTypes = sortEdgeTypes([...this.edgeTypes, edgeType]);
         return edgeType.id;
     }
 
     async updateEdgeType(edgeType: EdgeType): Promise<void> {
         await this.#db.table('edgeTypes').put(edgeType);
-        const index = this.edgeTypes.findIndex(existing => existing.id === edgeType.id);
-        if (index >= 0) {
-            this.edgeTypes[index] = edgeType;
-        } else {
-            this.edgeTypes.push(edgeType);
-        }
+        const others = this.edgeTypes.filter(existing => existing.id !== edgeType.id);
+        this.edgeTypes = sortEdgeTypes([...others, edgeType]);
     }
 
     // Scene methods
@@ -204,13 +214,17 @@ class GraphDataStore {
 
     #withValidEdgeType(edge: Edge): Edge {
         if (this.#isKnownEdgeType(edge.typeId)) return edge;
-        return { ...edge, typeId: getDefaultEdgeTypeId() };
+        return { ...edge, typeId: this.defaultEdgeTypeId };
     }
 
     #isKnownEdgeType(edgeTypeId: EdgeTypeId | undefined): boolean {
         return !!edgeTypeId && this.edgeTypes.some(edgeType => edgeType.id === edgeTypeId);
     }
 
+}
+
+function sortEdgeTypes(edgeTypes: EdgeType[]): EdgeType[] {
+    return [...edgeTypes].sort((a, b) => a.order - b.order);
 }
 
 const graphStore = new GraphDataStore();

@@ -2,8 +2,9 @@ import Dexie from 'dexie';
 import type { EdgeType, EdgeTypeId } from '../../core/main-types';
 import type { ChatImageAttachment, Conversation } from '../../core/chat-types';
 import { getSetting, setSetting } from '../../config';
-import { createStarterEdgeTypes, getDefaultEdgeStyleSlotId, getDefaultEdgeTypeId, isEdgeStyleSlotId } from '../../config/edge-type-settings';
+import { createStarterEdgeTypes, getDefaultEdgeStyleSlotId, isEdgeStyleSlotId } from '../../config/edge-type-settings';
 import { FILE_DEFAULTS } from '../../config/file-settings';
+import { assignMissingEdgeTypeOrder, type StoredEdgeType } from '../legacy/edge-type-order';
 
 import {
   GRAPH_DB_NAME,
@@ -381,7 +382,8 @@ export async function importGraphData(graph: GraphData, images: unknown[]): Prom
 
   const edgeTypes = normalizeEdgeTypes(graph.edgeTypes);
   const edgeTypeIds = new Set(edgeTypes.map(edgeType => edgeType.id));
-  const edges = graph.edges.map(edge => normalizeImportedEdge(edge, edgeTypeIds));
+  const defaultEdgeTypeId = edgeTypes[0].id;
+  const edges = graph.edges.map(edge => normalizeImportedEdge(edge, edgeTypeIds, defaultEdgeTypeId));
 
   if (graph.nodes.length > 0) {
     await db.table('nodes').bulkPut(graph.nodes);
@@ -407,7 +409,7 @@ function normalizeEdgeTypes(edgeTypes: unknown[] | undefined): EdgeType[] {
   const starterTypes = createStarterEdgeTypes();
   if (!edgeTypes || edgeTypes.length === 0) return starterTypes;
 
-  const normalized: EdgeType[] = [];
+  const normalized: StoredEdgeType[] = [];
   const seenIds = new Set<EdgeTypeId>();
   const now = new Date();
 
@@ -421,6 +423,7 @@ function normalizeEdgeTypes(edgeTypes: unknown[] | undefined): EdgeType[] {
     normalized.push({
       id: edgeTypeId,
       name: value.name,
+      order: typeof value.order === 'number' ? value.order : undefined,
       description: typeof value.description === 'string' ? value.description : undefined,
       forwardLabel: typeof value.forwardLabel === 'string' ? value.forwardLabel : undefined,
       inverseLabel: typeof value.inverseLabel === 'string' ? value.inverseLabel : undefined,
@@ -434,19 +437,15 @@ function normalizeEdgeTypes(edgeTypes: unknown[] | undefined): EdgeType[] {
     seenIds.add(edgeTypeId);
   }
 
-  const defaultEdgeTypeId = getDefaultEdgeTypeId();
-  if (!seenIds.has(defaultEdgeTypeId)) {
-    normalized.unshift(starterTypes.find(edgeType => edgeType.id === defaultEdgeTypeId)!);
-  }
-
-  return normalized.length > 0 ? normalized : starterTypes;
+  if (normalized.length === 0) return starterTypes;
+  return assignMissingEdgeTypeOrder(normalized).edgeTypes.sort((a, b) => a.order - b.order);
 }
 
-function normalizeImportedEdge(edge: unknown, edgeTypeIds: Set<EdgeTypeId>): unknown {
+function normalizeImportedEdge(edge: unknown, edgeTypeIds: Set<EdgeTypeId>, defaultEdgeTypeId: EdgeTypeId): unknown {
   if (!isPlainRecord(edge)) return edge;
   const typeId = typeof edge.typeId === 'string' && edgeTypeIds.has(edge.typeId as EdgeTypeId)
     ? edge.typeId
-    : getDefaultEdgeTypeId();
+    : defaultEdgeTypeId;
   return { ...edge, typeId };
 }
 

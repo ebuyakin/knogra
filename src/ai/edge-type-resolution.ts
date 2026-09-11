@@ -14,7 +14,6 @@
 
 import type { EdgeTypeId } from '../core/main-types';
 import { graphStore } from '../storage/graph-store';
-import { getDefaultEdgeTypeId } from '../config/edge-type-settings';
 
 /** Direction in the feature layer's words: 'child' means the new node is the edge's target. */
 export type ProposedEdgeDirection = 'child' | 'parent';
@@ -34,7 +33,7 @@ function normalize(value: string | undefined): string {
  */
 export function resolveEdgeTypeId(written: string | undefined): EdgeTypeId {
   const needle = normalize(written);
-  if (!needle) return getDefaultEdgeTypeId();
+  if (!needle) return graphStore.defaultEdgeTypeId;
 
   const byName = graphStore.edgeTypes.find(edgeType => normalize(edgeType.name) === needle);
   if (byName) return byName.id;
@@ -42,7 +41,7 @@ export function resolveEdgeTypeId(written: string | undefined): EdgeTypeId {
   const byForwardLabel = graphStore.edgeTypes.find(
     edgeType => normalize(edgeType.forwardLabel) === needle
   );
-  return byForwardLabel?.id ?? getDefaultEdgeTypeId();
+  return byForwardLabel?.id ?? graphStore.defaultEdgeTypeId;
 }
 
 /**
@@ -69,4 +68,23 @@ export function describeRelationship(
   const role = resolveEdgeDirection(direction) === 'parent' ? 'parent' : 'child';
 
   return typeName ? `(${typeName}, ${role})` : `(${role})`;
+}
+
+/**
+ * The proposed edge read outward from the central node, for the chat summary:
+ * the arrow is the edge's real direction, and the label is the one that reads in
+ * that direction, so an inbound edge shows the type's inverse wording.
+ */
+export function formatRelationshipOutward(
+  edgeType: string | undefined,
+  direction: string | undefined
+): string {
+  const typeId = resolveEdgeTypeId(edgeType);
+  const type = graphStore.edgeTypes.find(candidate => candidate.id === typeId);
+  const outward = resolveEdgeDirection(direction) === 'child';
+
+  const arrow = outward ? '→' : '←';
+  const label = outward ? type?.forwardLabel : type?.inverseLabel ?? type?.forwardLabel;
+
+  return label ? `${arrow} ${label}` : `${arrow} ${type?.name ?? ''}`.trim();
 }

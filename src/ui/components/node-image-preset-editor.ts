@@ -234,7 +234,7 @@ export class NodeImagePresetEditor {
     if (!preset) {
       const empty = document.createElement('p');
       empty.className = 'preset-editor-empty';
-      empty.textContent = 'No presets. Create one, or restore the starters.';
+      empty.textContent = 'No presets. Create one, or add the starters.';
       this.#pane.replaceChildren(empty);
       return;
     }
@@ -514,7 +514,7 @@ export class NodeImagePresetEditor {
       this.#actionButton('Duplicate', () => this.#duplicatePreset()),
       this.#actionButton('Delete', () => this.#deleteSelected()),
       this.#actionButton('Set default', () => this.#makeDefault()),
-      this.#actionButton('Restore', () => this.#restoreStarters(), 'Add fresh copies of the starter presets'),
+      this.#actionButton('Add starters', () => this.#restoreStarters(), 'Add fresh copies of the starter presets; existing presets are not touched'),
       status,
       this.#actionButton('Cancel', () => this.#close()),
       this.#actionButton('Save', () => this.#save())

@@ -240,6 +240,24 @@ Every remaining node: not in the current scene, and not already named above. The
 {{remaining}}`,
 
   /**
+   * What the model has already proposed and the user has not acted on. The two
+   * lists carry opposite instructions, so each keeps its own paragraph.
+   * Placeholders: {{sceneShelf}}, {{otherShelf}}
+   */
+  nodeShelfTemplate: `### Node Shelf
+Concepts you proposed earlier that the user has neither accepted nor discarded. Nothing listed here is in the graph or in any scene — each is waiting for the user's decision.
+
+{{#if sceneShelf}}**Already waiting for this scene:**
+{{sceneShelf}}
+
+Do not propose any of these again. The user is already looking at them for this scene, and a near-duplicate under a slightly different name is worse than a repeat, because it reads as a second idea.{{/if}}
+
+{{#if otherShelf}}**Waiting in other scenes:**
+{{otherShelf}}
+
+These were proposed for scenes other than this one. If one belongs here too, propose it: use \`create_connected\` with the title exactly as written above, and give a reason that says why it fits this scene rather than repeating why it existed. It will be attached to the concept already waiting, not duplicated. If none of them fit, ignore the list — do not propose one merely because it is available.{{/if}}`,
+
+  /**
    * Opens the Response half. States the two regimes once, so a request can pick
    * one without the contract itself changing per request kind.
    */
@@ -266,15 +284,15 @@ Actions are proposals to change the graph. They go in one JSON code block at the
     "title": "New Concept Name",
     "edgeType": "A name from Relationship Types",
     "direction": "central -> new",
-    "properties": { "equation": "x = y^{2}" },
-    "reason": "Brief explanation"
+    "properties": { "comment": "One line saying what this concept is", "equation": "x = y^{2}" },
+    "reason": "Why this concept belongs in this scene"
   },
   {
     "type": "include_existing",
     "title": "Exact title of existing node",
     "edgeType": "A name from Relationship Types",
     "direction": "central -> existing",
-    "reason": "Brief explanation why this existing node belongs in the current scene"
+    "reason": "Why this existing node belongs in this scene"
   }
 ]
 \`\`\`
@@ -288,7 +306,8 @@ Rules:
 - Every concept you recommend must appear in the block: a brand-new one as \`create_connected\`, an existing one as \`include_existing\`. Do not present a recommended concept only in prose.
 - Use \`create_connected\` only for concepts that do not already exist anywhere in the graph.
 - For \`include_existing\`, choose only nodes named under "Central Node Connections Outside The Scene" or "Rest Of The Graph", and use the exact listed title.
-- For \`create_connected\`, the \`reason\` is stored as the new node's comment, so write it as a one-line description of the concept, not as a message to the user. For \`include_existing\` the \`reason\` is shown to the user on the shelf and is not stored.`,
+- For \`create_connected\`, include \`properties.comment\`: one line saying what the concept is, written as a definition rather than as a message to the user. Titles are short, so the comment is what tells the concept apart later, and it is the description of it that reaches you in future requests.
+- \`reason\` is why the concept belongs in this scene. It is shown to the user beside the suggestion and is never stored on the node, so the same concept proposed for a different scene should carry a different reason.`,
 
   /**
    * Math rules for both halves. Prose needs delimiters; a stored equation value
