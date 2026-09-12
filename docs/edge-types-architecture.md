@@ -4,7 +4,7 @@
 >
 > **Last reviewed:** 2026-09-11
 >
-> **Authority:** Current architecture and implementation guide for edge types, typed edge styling, and scene-local edge visibility. How edge types reach the AI assistant is summarized in §11 and specified in [ai-prompt-etalon.md](ai/ai-prompt-etalon.md).
+> **Authority:** Current architecture and implementation guide for edge types, typed edge styling, and scene-local edge visibility. How edge types reach the AI assistant is summarized in §11; the wording is in `src/ai/prompts/` and the resolution rules in [ai-chat-api-call-composition.md](ai/ai-chat-api-call-composition.md).
 >
 > **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Scene transitions](scene-transitions.md), [Theme architecture](theme-architecture.md), [AI chat API call composition](ai/ai-chat-api-call-composition.md), [Workspace architecture](workspace-architecture.md)
 
@@ -472,7 +472,9 @@ Destructive operations remain single-edge operations. `Exclude from scene` and `
 ## 11. AI Context
 
 Edge types reach the assistant. This section states the boundary; the exact wording is in
-[ai-prompt-etalon.md](ai/ai-prompt-etalon.md).
+`src/ai/prompts/workspace.md` (Relationship Types) and `src/ai/prompts/edge-type.md`, and how a
+type the model names is resolved back to an id is in
+[ai-chat-api-call-composition.md](ai/ai-chat-api-call-composition.md), "The Reply Contract".
 
 The whole vocabulary is sent, once per request, as its own section: each type's name, description,
 forward label and inverse label. Every edge anywhere in the message is then written

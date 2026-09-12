@@ -38,13 +38,12 @@ export class PanelAPI {
     this.pathPanel = new PathPanel(cy, features, pathPanelContainer);
     this.nodeShelf = new NodeShelf(features);
 
-    // Wire: ChatPanel actions → NodeShelf. The shelf's summary of what it took
-    // replaces the model's prose in the timeline.
+    // Wire: ChatPanel actions → NodeShelf
     this.chatPanel.onActionsReceived((actions) => {
       const shelfActions = actions.filter(
         (a): a is ShelfAction => a.type === 'create_connected' || a.type === 'include_existing'
       );
-      return this.nodeShelf.addItems(shelfActions);
+      this.nodeShelf.addItems(shelfActions);
     });
 
     // Wire: NodeShelf items → SuggestionPanel (dispatch by reason)

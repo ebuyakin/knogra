@@ -14,11 +14,7 @@ import type { ShelfAction, ShelfEntry, ShelfItem } from '../types';
 import type { FeatureAPI } from '../../features/feature-api';
 import { eventBus } from '../../events/event-bus';
 import { selectShelfDesign } from '../shelf-design-selector';
-import {
-  formatRelationshipOutward,
-  resolveEdgeDirection,
-  resolveEdgeTypeId
-} from '../edge-type-resolution';
+import { resolveEdgeDirection, resolveEdgeTypeId } from '../edge-type-resolution';
 import * as shelfStore from './shelf-store';
 import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
@@ -90,26 +86,21 @@ export class NodeShelf {
   }
 
   /**
-   * Route model actions to the store, then report what actually arrived on this
+   * Route model actions to the store, then animate what actually arrived on this
    * scene's shelf — a title already pending here, or already in the scene, adds
    * nothing.
-   *
-   * Returns one line per accepted item, which the chat stores in place of the
-   * model's prose. Empty when nothing was accepted, so the prose stands.
    */
-  addItems(actions: ShelfAction[]): string {
+  addItems(actions: ShelfAction[]): void {
     if (!this.#currentNodeId) {
       console.warn('[NodeShelf] No current node, cannot add items');
-      return '';
+      return;
     }
 
     const added = shelfStore.addSuggestions(this.#currentNodeId, actions);
     if (added.length === 0) {
       if (isDebug('d_shelf')) console.log('[NodeShelf] Nothing new to add');
-      return '';
+      return;
     }
-
-    const summary = this.#summarise(added, this.#currentNodeId);
 
     const addedIds = new Set(added.map(entry => entry.id));
     this.#refresh();
@@ -118,25 +109,6 @@ export class NodeShelf {
     if (count > 0) {
       this.#notifyChange('addition', { startIndex: this.#entries.length - count, count });
     }
-
-    return summary;
-  }
-
-  /**
-   * One line per accepted item, as a snapshot: both markers can stop being true
-   * later, and the timeline records what was so when it happened.
-   */
-  #summarise(added: ShelfEntry[], centralNodeId: NodeId): string {
-    return added
-      .map(entry => {
-        const placement = shelfStore.getPlacement(entry.id, centralNodeId);
-        const relationship = formatRelationshipOutward(placement?.edgeType, placement?.direction);
-        const marker = entry.nodeId
-          ? ' ∃'
-          : entry.placements.length > 1 ? ' *' : '';
-        return `${entry.title} (${relationship})${marker}`;
-      })
-      .join('\n');
   }
 
   /**

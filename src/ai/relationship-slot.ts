@@ -4,16 +4,16 @@
  * Turns the workspace's edge types into the choices offered on the Suggest and
  * Connect buttons, and stamps the chosen one onto the actions that come back.
  *
- * The menu item's text and the sentence the model receives are built here
- * together and never separately, because the moment they are composed in two
- * places they can disagree and nothing would show it.
- *
- * See docs/ai-prompt-etalon.md, "The user messages" and "The reply".
+ * The menu item's text and the data behind the sentence the model receives are
+ * built here together and never separately, because the moment they are
+ * composed in two places they can disagree and nothing would show it. The
+ * sentence itself is `prompts/edge-type.md`.
  */
 
 import type { EdgeType } from '../core/main-types';
 import type {
   CreateConnectedDirection,
+  EdgeTypeConstraint,
   IncludeExistingDirection,
   ProposedAction,
   RelationshipSlot,
@@ -34,10 +34,17 @@ export interface SlotOption {
   slot: RelationshipSlot;
 }
 
-/** The placeholder the constraint sentences use for the node being proposed. */
+/**
+ * The letter standing for the node being proposed. The arrows and readings
+ * built here use it, and so do the sentences in `prompts/edge-type.md`; the two
+ * have to agree.
+ */
 const PROPOSED = 'X';
 
-export const ANY_RELATIONSHIP: RelationshipSlot = { label: 'any relationship', constraint: '' };
+export const ANY_RELATIONSHIP: RelationshipSlot = {
+  label: 'any relationship',
+  constraint: { ...emptyConstraint(''), anyRelationship: true }
+};
 
 /**
  * Menu rows name what is being asked for — a child, a parent — rather than which
@@ -97,35 +104,54 @@ function normalizeTitle(title: string): string {
 }
 
 // ============================================================================
-// CONSTRAINT SENTENCES
+// CONSTRAINT DATA
 // ============================================================================
+
+/** Every key present, every flag off; each form switches one flag on and fills what it uses. */
+function emptyConstraint(centralTitle: string): EdgeTypeConstraint {
+  return {
+    anyRelationship: false,
+    bothAxes: false,
+    directionOnly: false,
+    typeOnly: false,
+    arrow: '',
+    forwardReading: '',
+    inverseReading: '',
+    centralTitle,
+    typeName: ''
+  };
+}
 
 function fullConstraint(
   edgeType: EdgeType,
   direction: SlotDirection,
   centralTitle: string
-): string {
-  const arrow = arrowFor(edgeType, direction, centralTitle);
-  const forward = forwardReading(edgeType, direction, centralTitle);
-  const inverse = inverseReading(edgeType, direction, centralTitle);
-
-  const readings = inverse
-    ? `read it as "${forward}", or from the other end, "${inverse}"`
-    : `read it as "${forward}"`;
-
-  return `Every suggested concept ${PROPOSED} must fit this edge exactly:  ${arrow}  — ${readings}. Do not suggest concepts related to ${centralTitle} in any other way, however relevant they seem.`;
+): EdgeTypeConstraint {
+  return {
+    ...emptyConstraint(centralTitle),
+    bothAxes: true,
+    arrow: arrowFor(edgeType, direction, centralTitle),
+    forwardReading: forwardReading(edgeType, direction, centralTitle),
+    inverseReading: inverseReading(edgeType, direction, centralTitle)
+  };
 }
 
-function directionOnlyConstraint(direction: SlotDirection, centralTitle: string): string {
-  const arrow = direction === 'central -> other'
-    ? `${centralTitle} -> ${PROPOSED}`
-    : `${PROPOSED} -> ${centralTitle}`;
-
-  return `Every suggested concept ${PROPOSED} must sit at this end of its edge:  ${arrow}. The relationship type is yours to choose from the vocabulary above, but the direction is not.`;
+function directionOnlyConstraint(direction: SlotDirection, centralTitle: string): EdgeTypeConstraint {
+  return {
+    ...emptyConstraint(centralTitle),
+    directionOnly: true,
+    arrow: direction === 'central -> other'
+      ? `${centralTitle} -> ${PROPOSED}`
+      : `${PROPOSED} -> ${centralTitle}`
+  };
 }
 
-function typeOnlyConstraint(edgeType: EdgeType, centralTitle: string): string {
-  return `Every suggested concept ${PROPOSED} must be related to ${centralTitle} by the ${edgeType.name} relationship, in whichever direction fits it. Do not use any other relationship type.`;
+function typeOnlyConstraint(edgeType: EdgeType, centralTitle: string): EdgeTypeConstraint {
+  return {
+    ...emptyConstraint(centralTitle),
+    typeOnly: true,
+    typeName: edgeType.name
+  };
 }
 
 // ============================================================================

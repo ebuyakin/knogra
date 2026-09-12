@@ -8,7 +8,7 @@
 > **Authority:** The shelf's data model, lifecycle, validity rules, storage and management
 > commands. Takes over shelf filtering and acceptance from `~/pro/knogra/docs/ai/ai-chat-api-call-composition.md`
 > and the shelf section of `~/pro/knogra/docs/ai/ai-assistant-vision.md`. Placement geometry stays
-> with `~/pro/knogra/docs/node-placement.md`; the prompt text stays with `~/pro/knogra/docs/ai/ai-prompt-etalon.md`.
+> with `~/pro/knogra/docs/node-placement.md`; the prompt text is `src/ai/prompts/workspace.md`, Node Shelf section.
 
 ## 1. Segregation of duties
 
@@ -94,12 +94,13 @@ can create a placement — an entry could never reach a second scene, so the uni
 function. The section lists the entries placed in the current scene, and separately the entries
 placed elsewhere that are not yet in the graph, which the model may propose here.
 
-In the other direction, the shelf decides what the chat timeline records. Actions reach the shelf
-before the assistant message is stored, and what the shelf accepts becomes the stored turn: one line
-per item, giving the title, the edge read outward from the central node, and a marker for a concept
-already in the graph or already waiting elsewhere. The model's prose is discarded, which is possible
-only because the section above now carries what the prose used to. A reply whose actions were all
-rejected keeps its prose.
+In the other direction the shelf decides nothing about the timeline. Actions reach the shelf before
+the assistant message is stored, and the stored turn is the model's prose, whatever the shelf
+accepted. Between 2026-09-10 and 2026-09-12 the shelf's one-line-per-item summary replaced the prose
+on any reply with accepted actions; that was withdrawn because it broke the dialogue's rhythm,
+duplicated what the shelf itself shows, and, on a typed message that came back with both prose and
+actions, threw away the answer. The section above is what carries the memory of proposals; the
+prose does not need to.
 
 ## 7. Module layout
 

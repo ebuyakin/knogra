@@ -405,7 +405,9 @@ AI-assisted learning companion. Provides contextual help, suggestions, and graph
 | `providers/provider-resolution.ts` | Which provider, key, and model answer a request |
 | `providers/response-parsing.ts` | Shared reply parsing: action block, LLM-JSON repair, prose extraction |
 | `providers/request-timeout.ts` | Bounds every provider call so a stalled vendor cannot hang the UI |
-| `context-builder.ts` | Builds system prompt from graph state |
+| `prompts/*.md` | The prompt text: system message, workspace sections, the four quick-action messages, the relationship constraint. The only copy. |
+| `prompts.ts` | Renders the `.md` files with data records; the quick-action table |
+| `context-builder.ts` | Fills the system prompt's data record from graph, scene, shelf and settings |
 | `chat-session.ts` | Manages conversation state |
 | `shelf/node-shelf.ts` | Shelf orchestration for the current scene; placement via FeatureAPI |
 | `shelf/shelf-store.ts` | The shelf's persisted shape: entries, placements, reconciliation |

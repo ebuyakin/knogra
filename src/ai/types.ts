@@ -13,6 +13,26 @@ import type { EdgeTypeId, NodeId } from '../core/main-types';
 export type SlotDirection = 'central -> other' | 'other -> central';
 
 /**
+ * What the model is told about the relationship wanted, as the data record for
+ * `prompts/edge-type.md`. Exactly one of the four form flags is true; the file
+ * says the sentence for that form and reads the values it needs. A type alias
+ * rather than an interface so it is assignable to the renderer's record type.
+ */
+export type EdgeTypeConstraint = {
+  anyRelationship: boolean;
+  bothAxes: boolean;
+  directionOnly: boolean;
+  typeOnly: boolean;
+  /** `BMW -[has part]-> X`, or `BMW -> X` when the type is free. */
+  arrow: string;
+  forwardReading: string;
+  /** Empty when the type has no inverse label. */
+  inverseReading: string;
+  centralTitle: string;
+  typeName: string;
+};
+
+/**
  * A user-chosen constraint on the relationship a Suggest or Connect request may
  * propose. Either axis can be left free.
  */
@@ -22,10 +42,10 @@ export interface RelationshipSlot {
   /** The menu item's own text, shown in the chat timeline so two requests are distinguishable. */
   label: string;
   /**
-   * The sentence spliced into the request. Built alongside the menu item the user
-   * clicks, so what was picked and what the model is told are one string.
+   * Built alongside the menu item the user clicks, so what was picked and what
+   * the model is told come from one place.
    */
-  constraint: string;
+  constraint: EdgeTypeConstraint;
 }
 
 // ============================================================================

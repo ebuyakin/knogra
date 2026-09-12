@@ -23,12 +23,14 @@ import { isDebug } from '../config/debug-flags';
 
 export type ChatSessionState = 'idle' | 'loading' | 'sending' | 'error';
 
+/** Stands in for the prose when a reply carried nothing but an action block. */
+const BLOCK_ONLY_REPLY = 'Suggestions added to the node shelf.';
+
 export interface ChatSessionEvents {
   onStateChange?: (state: ChatSessionState) => void;
   onMessageAdded?: (message: ChatMessage) => void;
   onConversationLoaded?: (messages: ChatMessage[], nodeId: NodeId) => void;
-  /** Returns the summary to store in place of the model's prose, if the handler makes one. */
-  onActionsReceived?: (actions: ProposedAction[]) => string | void;
+  onActionsReceived?: (actions: ProposedAction[]) => void;
   onError?: (error: Error) => void;
 }
 
@@ -197,6 +199,13 @@ export class ChatSession {
     this.#setState('sending');
 
     try {
+      // Built before the user's message is stored, so a refused send leaves no
+      // unanswered turn behind.
+      const systemPrompt = buildSystemPrompt(this.#buildContext());
+      if (!systemPrompt) {
+        throw new Error('The node this conversation belongs to is no longer in the graph. Open another scene to continue.');
+      }
+
       // Add user message (displayText shown in chat/stored, content sent to LLM)
       const userMessage = await chatStore.addMessage(
         this.#currentNodeId,
@@ -209,28 +218,27 @@ export class ChatSession {
       this.#messages.push(llmMessage);
       this.#events.onMessageAdded?.(userMessage);
 
-      // Build context
-      const context = this.#buildContext();
-      const systemPrompt = buildSystemPrompt(context);
-
       // Convert messages to provider format
       const providerMessages = this.#toProviderMessages();
+      if (isDebug('d_chat')) logRequest(systemPrompt, providerMessages);
 
       // Send to AI
       const response = await this.#provider.sendMessage(providerMessages, systemPrompt);
 
-      // Actions are routed before the message is stored: the shelf decides what it
-      // accepts, and the timeline records that rather than what was proposed.
-      let summary: string | void = undefined;
+      if (isDebug('d_chat')) logResponse(response.rawContent ?? response.content);
+
       if (response.actions.length > 0) {
         this.#pendingActions = response.actions;
-        summary = this.#events.onActionsReceived?.(response.actions);
+        this.#events.onActionsReceived?.(response.actions);
       }
 
+      // The prose is stored as the model wrote it, whatever the request was. A
+      // block-only reply would store an empty turn, which providers reject when it
+      // is replayed as history, so it gets a fixed line instead.
       const assistantMessage = await chatStore.addMessage(
         this.#currentNodeId,
         'assistant',
-        summary || response.content,
+        response.content || BLOCK_ONLY_REPLY,
         'ai'
       );
       this.#messages.push(assistantMessage);
@@ -316,6 +324,33 @@ export class ChatSession {
       this.loadForNode(centralNodeId, sceneId);
     });
   }
+}
+
+// ============================================================================
+// DIAGNOSTICS
+// ============================================================================
+
+/**
+ * The request as handed to the provider: the system prompt, then every message
+ * in the order sent. Every adapter passes both through unchanged, so this is the
+ * text the model reads; only the provider's envelope around it is not shown —
+ * the Network tab has that.
+ */
+function logRequest(systemPrompt: string, messages: ProviderMessage[]): void {
+  const size = `system ${systemPrompt.length} chars, ${messages.length} message${messages.length === 1 ? '' : 's'}`;
+  console.group(`[ChatSession] Request → provider (${size})`);
+  console.log('──── system ────\n' + systemPrompt);
+  messages.forEach((message, index) => {
+    console.log(`──── message ${index + 1} of ${messages.length}: ${message.role} ────\n` + message.content);
+  });
+  console.groupEnd();
+}
+
+/** The model's reply before the app splits it into prose and actions. */
+function logResponse(rawResponse: string): void {
+  console.group(`[ChatSession] Response ← provider (${rawResponse.length} chars)`);
+  console.log(rawResponse);
+  console.groupEnd();
 }
 
 // Singleton instance

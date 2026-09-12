@@ -39,7 +39,7 @@ export class ChatPanel {
   #quickActionsContainer: HTMLElement;
   #chatContainer: HTMLElement;
   #cy: Core;
-  #onActionsReceived: ((actions: ProposedAction[]) => string | void) | null = null;
+  #onActionsReceived: ((actions: ProposedAction[]) => void) | null = null;
   /** The relationship chosen for the request in flight. Only one can be in flight. */
   #pendingSlot: RelationshipSlot | null = null;
 
@@ -90,7 +90,7 @@ export class ChatPanel {
   // PUBLIC API
   // ==========================================================================
 
-  onActionsReceived(callback: (actions: ProposedAction[]) => string | void): void {
+  onActionsReceived(callback: (actions: ProposedAction[]) => void): void {
     this.#onActionsReceived = callback;
   }
 
@@ -184,11 +184,11 @@ export class ChatPanel {
       const button = document.createElement('button');
       button.className = 'quick-action-btn';
       button.dataset.action = action.id;
-      button.title = action.id === 'clear' ? 'Clear chat history' : (action.displayText ?? action.prompt);
+      button.title = action.id === 'clear' ? 'Clear chat history' : (action.displayText ?? action.label);
       button.innerHTML = `<span class="quick-action-label">${action.label}</span>`;
 
       button.addEventListener('click', () => {
-        if (action.prompt === '__clear__') {
+        if (action.id === 'clear') {
           this.#clearChat();
         } else {
           this.#sendSlottedQuickAction(action, ANY_RELATIONSHIP);
@@ -218,7 +218,7 @@ export class ChatPanel {
 
   /** Two Suggest requests differ only by the relationship, so the timeline has to say which. */
   #withSlotLabel(displayText: string | undefined, slot: RelationshipSlot): string | undefined {
-    if (!displayText || !slot.constraint) return displayText;
+    if (!displayText || slot.constraint.anyRelationship) return displayText;
     return `${displayText.replace(/\.$/, '')} — ${slot.label}.`;
   }
 
@@ -265,7 +265,7 @@ export class ChatPanel {
       onActionsReceived: (actions) => {
         const slot = this.#pendingSlot;
         this.#pendingSlot = null;
-        return this.#onActionsReceived?.(slot ? stampSlot(actions, slot) : actions);
+        this.#onActionsReceived?.(slot ? stampSlot(actions, slot) : actions);
       },
       onError: (error) => {
         this.#pendingSlot = null;

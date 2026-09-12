@@ -9,7 +9,7 @@
  * Resolution never rejects. An unrecognised value falls back, because a dropped
  * suggestion is a worse outcome than a suggestion on the default type.
  *
- * See docs/ai-prompt-etalon.md, "The reply", for the contract this implements.
+ * See docs/ai/ai-chat-api-call-composition.md, "The Reply Contract", for the contract this implements.
  */
 
 import type { EdgeTypeId } from '../core/main-types';
@@ -68,23 +68,4 @@ export function describeRelationship(
   const role = resolveEdgeDirection(direction) === 'parent' ? 'parent' : 'child';
 
   return typeName ? `(${typeName}, ${role})` : `(${role})`;
-}
-
-/**
- * The proposed edge read outward from the central node, for the chat summary:
- * the arrow is the edge's real direction, and the label is the one that reads in
- * that direction, so an inbound edge shows the type's inverse wording.
- */
-export function formatRelationshipOutward(
-  edgeType: string | undefined,
-  direction: string | undefined
-): string {
-  const typeId = resolveEdgeTypeId(edgeType);
-  const type = graphStore.edgeTypes.find(candidate => candidate.id === typeId);
-  const outward = resolveEdgeDirection(direction) === 'child';
-
-  const arrow = outward ? '→' : '←';
-  const label = outward ? type?.forwardLabel : type?.inverseLabel ?? type?.forwardLabel;
-
-  return label ? `${arrow} ${label}` : `${arrow} ${type?.name ?? ''}`.trim();
 }

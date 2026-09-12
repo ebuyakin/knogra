@@ -5,8 +5,18 @@
 
 import { createProvider } from './providers/provider';
 import { resolveProviderConfig } from './providers/provider-resolution';
-import { NODE_EQUATION_VALUE_RULES } from './prompts';
 import { repairLatexControlEscapes, stripMathDelimiters } from './latex-sanitizer';
+
+/**
+ * Contract for a LaTeX value stored directly as a node's equation property. Node
+ * designs compile it with `tex2svgPromise`, which treats the string as TeX
+ * source, so delimiters are literal input rather than markers.
+ *
+ * The chat prompt states the same contract in prompts/system-prompt.md, under
+ * Equations. Kept as two copies on purpose: this generator is independent of the
+ * chat and may come to say something different about equations.
+ */
+const NODE_EQUATION_VALUE_RULES = 'The value must be a MathJax-compatible LaTeX body: no dollar or bracket delimiters, no code fences, no explanations, no Unicode math symbols, and no alternatives. Because the value sits inside JSON, escape every command backslash as a double backslash: write "\\\\frac{a}{b}", never "\\frac{a}{b}". The parsed value must contain ordinary LaTeX commands, not control characters or Unicode lookalikes.';
 
 export interface EquationGenerationRequest {
   title: string;

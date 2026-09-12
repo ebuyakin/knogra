@@ -1,13 +1,18 @@
 /**
  * Context Builder
- * Builds situational system prompt from graph/scene state
- * Uses templates from config/prompts.ts
+ *
+ * Reads the graph, the scene, the shelf and the settings, and fills the system
+ * prompt's data record; prompts.ts renders it from prompts/system-prompt.md and
+ * the files it includes. Every sentence is in those files. This module produces
+ * values only: titles, one-line lists, counts, and the flags that decide which
+ * sections exist.
  */
 
 import type { NodeId, SceneId, Node, Scene, Edge, EdgeType } from '../core/main-types';
+import type { ShelfEntry, ShelfPlacement } from './types';
 import { graphStore } from '../storage/graph-store';
 import { getPendingElsewhere, getScenePlacements } from './shelf/shelf-store';
-import { SYSTEM_PROMPT } from './prompts';
+import { renderSystemPrompt, type RelationshipTypeLine } from './prompts';
 import { getSetting } from '../config';
 
 /** The roster is the only unbounded list in the prompt, so it is the only one capped. */
@@ -42,15 +47,15 @@ export interface SceneContext {
 // ============================================================================
 
 /**
- * Build system prompt from scene context
+ * The system prompt for the current scene, or null when the central node is not
+ * in the graph — a session still loaded for a node deleted underneath it. Nothing
+ * should be sent in that case; the caller refuses rather than degrading.
  */
-export function buildSystemPrompt(context: SceneContext): string {
+export function buildSystemPrompt(context: SceneContext): string | null {
   const { centralNodeId, sceneId, visibleNodeIds, selectedNodeIds } = context;
 
   const centralNode = graphStore.nodes.find(n => n.id === centralNodeId);
-  if (!centralNode) {
-    return SYSTEM_PROMPT.fallback;
-  }
+  if (!centralNode) return null;
 
   const scene = graphStore.scenes.find(s => s.id === sceneId);
   const sceneNodeIds = new Set(visibleNodeIds);
@@ -68,85 +73,74 @@ export function buildSystemPrompt(context: SceneContext): string {
   // The roster is the remainder, so anything already shown in full above is excluded.
   const namedAbove = new Set<NodeId>(sceneNodeIds);
   outsideConnections.forEach(connection => namedAbove.add(connection.neighbour.id));
+  const remaining = graphStore.nodes.filter(node => !namedAbove.has(node.id));
+  const roster = remaining.slice(0, MAX_ROSTER_NODES);
 
-  const sections: string[] = [
-    SYSTEM_PROMPT.role,
-    SYSTEM_PROMPT.workspaceIntro,
-    renderCentralNodeSection(centralNode),
-    renderRelationshipTypesSection(),
-    renderVisibleSceneSection(visibleNodes, centralNodeId, scene, sceneEdges, hiddenSceneEdges)
-  ];
+  const shelfHere = getScenePlacements(centralNodeId);
+  const shelfElsewhere = getPendingElsewhere(centralNodeId);
+  const shelfElsewhereListed = shelfElsewhere.slice(0, MAX_SHELF_ELSEWHERE);
 
-  if (selectedNodes.length > 0) {
-    sections.push(renderSelectedNodesSection(selectedNodes, centralNodeId));
-  }
-
-  if (outsideConnections.length > 0) {
-    sections.push(renderConnectedConceptsSection(outsideConnections));
-  }
-
-  sections.push(renderRestOfGraphSection(namedAbove));
-  sections.push(renderNodeShelfSection(centralNodeId));
-
-  sections.push(SYSTEM_PROMPT.responseIntro);
-  sections.push(SYSTEM_PROMPT.prose);
-  sections.push(SYSTEM_PROMPT.actionSchema);
-  sections.push(SYSTEM_PROMPT.equations);
-
-  const lang = (getSetting('ai.responseLanguage') as string) ?? '';
-  if (lang.trim()) {
-    sections.push(`### Language\nAlways respond in ${lang.trim()}. Use ${lang.trim()} for node titles and concept names in your suggestions.`);
-  }
-
-  const custom = (getSetting('ai.customInstructions') as string) ?? '';
-  if (custom.trim()) {
-    sections.push(`### Custom Instructions\n${custom.trim()}`);
-  }
-
-  return sections.filter(section => section.length > 0).join('\n\n');
-}
-
-// ============================================================================
-// SECTION RENDERERS
-// ============================================================================
-
-function renderCentralNodeSection(node: Node): string {
-  const data: Record<string, string> = {
-    title: node.title
-  };
-
-  if (node.tags && node.tags.length > 0) {
-    data.tags = node.tags.join(', ');
-  }
-
-  if (node.properties) {
-    if (node.properties.equation) {
-      data.equation = String(node.properties.equation);
-    }
-
-    if (node.properties.comment) {
-      data.comment = String(node.properties.comment);
-    }
-
-    const otherProps = Object.entries(node.properties)
-      .filter(([key]) => key !== 'equation' && key !== 'comment')
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('; ');
-
-    if (otherProps) {
-      data.properties = otherProps;
-    }
-  }
-
-  return renderTemplate(SYSTEM_PROMPT.centralNodeTemplate, data);
-}
-
-function renderSelectedNodesSection(selectedNodes: Node[], centralNodeId: NodeId): string {
-  return renderTemplate(SYSTEM_PROMPT.selectedNodesTemplate, {
-    selectedNodes: selectedNodes
-      .map(n => formatSelectedNodeDetail(n, centralNodeId))
-      .join('\n\n')
+  return renderSystemPrompt({
+    centralTitle: centralNode.title,
+    centralTags: centralNode.tags && centralNode.tags.length > 0 ? centralNode.tags.join(', ') : undefined,
+    centralComment: stringProperty(centralNode, 'comment'),
+    centralEquation: stringProperty(centralNode, 'equation'),
+    centralProperties: otherProperties(centralNode) || undefined,
+    relationshipTypes: graphStore.edgeTypes.map(relationshipTypeLine),
+    sceneDescription: scene?.description || undefined,
+    sceneContextStrength: calculateSceneContextStrength(visibleNodes, sceneEdges, centralNodeId),
+    sceneNodes: lines(visibleNodes.map(node => formatNodeForPrompt(node, { centralNodeId }))),
+    sceneEdges: lines(sceneEdges.map(edge => `- ${formatEdgeArrow(edge)}`)),
+    hiddenEdges: lines(hiddenSceneEdges.map(edge => `- ${formatEdgeArrow(edge)}`)),
+    selectedNodes: selectedNodes.map(node => formatSelectedNodeDetail(node, centralNodeId)).join('\n\n'),
+    outsideConnections: lines(outsideConnections.map(formatOutsideConnection)),
+    remainingNodes: lines(roster.map(node => formatNodeForPrompt(node, { maxCommentChars: MAX_ROSTER_COMMENT_CHARS }))),
+    omittedNodeCount: remaining.length - roster.length,
+    shelf: shelfHere.length > 0 || shelfElsewhere.length > 0,
+    sceneShelf: lines(shelfHere.map(formatScenePlacement)),
+    otherShelf: lines(shelfElsewhereListed.map(formatPendingEntry)),
+    omittedShelfCount: shelfElsewhere.length - shelfElsewhereListed.length,
+    language: settingText('ai.responseLanguage'),
+    customInstructions: settingText('ai.customInstructions')
   });
+}
+
+// ============================================================================
+// VALUES
+// ============================================================================
+
+function lines(items: string[]): string {
+  return items.join('\n');
+}
+
+function settingText(key: 'ai.responseLanguage' | 'ai.customInstructions'): string {
+  const value = getSetting(key);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function stringProperty(node: Node, key: 'comment' | 'equation'): string | undefined {
+  const value = node.properties?.[key];
+  return value ? String(value) : undefined;
+}
+
+function otherProperties(node: Node): string {
+  return Object.entries(node.properties ?? {})
+    .filter(([key]) => key !== 'equation' && key !== 'comment')
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ');
+}
+
+/**
+ * The reading sentence uses the same label the edge lines use, so a label the
+ * model meets on an edge can always be traced back to a type here.
+ */
+function relationshipTypeLine(edgeType: EdgeType): RelationshipTypeLine {
+  return {
+    name: edgeType.name,
+    description: edgeType.description?.trim() || undefined,
+    forwardLabel: forwardReading(edgeType),
+    inverseLabel: edgeType.inverseLabel?.trim() || undefined
+  };
 }
 
 /**
@@ -155,181 +149,46 @@ function renderSelectedNodesSection(selectedNodes: Node[], centralNodeId: NodeId
  * other properties — instead of the one-line list form used elsewhere.
  */
 function formatSelectedNodeDetail(node: Node, centralNodeId: NodeId): string {
-  const lines: string[] = [`- **${node.title}**${node.id === centralNodeId ? ' (central node)' : ''}`];
+  const detail: string[] = [`- **${node.title}**${node.id === centralNodeId ? ' (central node)' : ''}`];
 
   if (node.tags && node.tags.length > 0) {
-    lines.push(`  - Tags: ${node.tags.join(', ')}`);
+    detail.push(`  - Tags: ${node.tags.join(', ')}`);
   }
 
   const comment = node.properties?.comment;
   if (typeof comment === 'string' && comment.trim()) {
-    lines.push(`  - Comment: ${comment.trim()}`);
+    detail.push(`  - Comment: ${comment.trim()}`);
   }
 
   const equation = node.properties?.equation;
   if (equation) {
-    lines.push(`  - Equation: ${String(equation)}`);
+    detail.push(`  - Equation: ${String(equation)}`);
   }
 
-  const otherProperties = Object.entries(node.properties ?? {})
-    .filter(([key]) => key !== 'equation' && key !== 'comment')
-    .map(([key, value]) => `${key}: ${value}`)
-    .join('; ');
-
-  if (otherProperties) {
-    lines.push(`  - Other properties: ${otherProperties}`);
+  const other = otherProperties(node);
+  if (other) {
+    detail.push(`  - Other properties: ${other}`);
   }
 
-  return lines.join('\n');
+  return detail.join('\n');
 }
 
-/**
- * The workspace's relationship vocabulary. The reading sentence uses the same
- * label the edge lines use, so a label the model meets on an edge can always be
- * traced back to a type here.
- */
-function renderRelationshipTypesSection(): string {
-  return renderTemplate(SYSTEM_PROMPT.relationshipTypesTemplate, {
-    relationshipTypes: graphStore.edgeTypes.map(formatRelationshipType).join('\n')
-  });
+function formatOutsideConnection({ edge, neighbour }: OutsideConnection): string {
+  const details = nodeDetailParts(neighbour).join(' — ');
+  return details
+    ? `- ${formatEdgeArrow(edge)} (${details})`
+    : `- ${formatEdgeArrow(edge)}`;
 }
 
-function formatRelationshipType(edgeType: EdgeType): string {
-  const parts = [`- ${edgeType.name}:`];
-
-  const description = edgeType.description?.trim();
-  if (description) parts.push(description);
-
-  const forward = forwardReading(edgeType);
-  const inverse = edgeType.inverseLabel?.trim();
-  parts.push(inverse
-    ? `Reads "A ${forward} B"; from the other end, "B ${inverse} A".`
-    : `Reads "A ${forward} B".`);
-
-  return parts.join(' ');
+function formatScenePlacement({ entry, placement }: { entry: ShelfEntry; placement: ShelfPlacement }): string {
+  const existing = entry.nodeId ? ' (already in the graph)' : '';
+  const reason = placement.reason.trim();
+  return `- ${entry.title}${existing}${reason ? ` — ${reason}` : ''}`;
 }
 
-function renderConnectedConceptsSection(connections: OutsideConnection[]): string {
-  const lines = connections.map(({ edge, neighbour }) => {
-    const details = nodeDetailParts(neighbour).join(' — ');
-    return details
-      ? `- ${formatEdgeArrow(edge)} (${details})`
-      : `- ${formatEdgeArrow(edge)}`;
-  });
-
-  return renderTemplate(SYSTEM_PROMPT.connectedConceptsTemplate, {
-    connections: lines.join('\n')
-  });
-}
-
-function renderVisibleSceneSection(
-  visibleNodes: Node[],
-  centralNodeId: NodeId,
-  scene: Scene | undefined,
-  sceneEdges: Edge[],
-  hiddenSceneEdges: Edge[]
-): string {
-  const data: Record<string, string> = {
-    sceneContextStrength: calculateSceneContextStrength(visibleNodes, sceneEdges, centralNodeId)
-  };
-
-  if (scene?.description) {
-    data.sceneDescription = scene.description;
-  }
-
-  if (visibleNodes.length > 0) {
-    data.sceneConcepts = visibleNodes
-      .map(n => formatNodeForPrompt(n, { centralNodeId }))
-      .join('\n');
-  }
-
-  if (sceneEdges.length > 0) {
-    data.sceneRelationships = sceneEdges.map(edge => `- ${formatEdgeArrow(edge)}`).join('\n');
-  }
-
-  if (hiddenSceneEdges.length > 0) {
-    data.hiddenRelationships = hiddenSceneEdges.map(edge => `- ${formatEdgeArrow(edge)}`).join('\n');
-  }
-
-  return renderTemplate(SYSTEM_PROMPT.visibleSceneTemplate, data);
-}
-
-/** Empty when every node is already named above, in which case the section is dropped. */
-function renderRestOfGraphSection(namedAbove: Set<NodeId>): string {
-  const remaining = graphStore.nodes.filter(node => !namedAbove.has(node.id));
-  if (remaining.length === 0) return '';
-
-  const lines = remaining
-    .slice(0, MAX_ROSTER_NODES)
-    .map(node => formatNodeForPrompt(node, { maxCommentChars: MAX_ROSTER_COMMENT_CHARS }));
-
-  const omitted = remaining.length - lines.length;
-  if (omitted > 0) {
-    lines.push(`- ...and ${omitted} further nodes not listed here.`);
-  }
-
-  return renderTemplate(SYSTEM_PROMPT.knowledgeGraphTemplate, { remaining: lines.join('\n') });
-}
-
-/**
- * What is already proposed and undecided. Read after the graph, so a pending
- * concept is never mistaken for one the graph holds.
- */
-function renderNodeShelfSection(centralNodeId: NodeId): string {
-  const sceneShelf = getScenePlacements(centralNodeId).map(({ entry, placement }) => {
-    const existing = entry.nodeId ? ' (already in the graph)' : '';
-    const reason = placement.reason.trim();
-    return `- ${entry.title}${existing}${reason ? ` — ${reason}` : ''}`;
-  });
-
-  const elsewhere = getPendingElsewhere(centralNodeId);
-  const otherShelf = elsewhere.slice(0, MAX_SHELF_ELSEWHERE).map(entry => {
-    const comment = entry.properties.comment?.trim();
-    return `- ${entry.title}${comment ? ` — ${comment}` : ''}`;
-  });
-
-  const omitted = elsewhere.length - otherShelf.length;
-  if (omitted > 0) {
-    otherShelf.push(`- ...and ${omitted} further concepts not listed here.`);
-  }
-
-  if (sceneShelf.length === 0 && otherShelf.length === 0) return '';
-
-  return renderTemplate(SYSTEM_PROMPT.nodeShelfTemplate, {
-    sceneShelf: sceneShelf.join('\n'),
-    otherShelf: otherShelf.join('\n')
-  });
-}
-
-// ============================================================================
-// TEMPLATE ENGINE
-// ============================================================================
-
-/**
- * Simple template renderer
- * Supports: {{key}}, {{#if key}}...{{/if}}
- */
-function renderTemplate(template: string, data: Record<string, string>): string {
-  let result = template;
-
-  // Handle conditionals: {{#if key}}content{{/if}}
-  result = result.replace(
-    /\{\{#if (\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
-    (_, key, content) => {
-      return data[key] ? content : '';
-    }
-  );
-
-  // Handle simple placeholders: {{key}}
-  result = result.replace(
-    /\{\{(\w+)\}\}/g,
-    (_, key) => data[key] ?? ''
-  );
-
-  // Clean up multiple blank lines
-  result = result.replace(/\n{3,}/g, '\n\n').trim();
-
-  return result;
+function formatPendingEntry(entry: ShelfEntry): string {
+  const comment = entry.properties.comment?.trim();
+  return `- ${entry.title}${comment ? ` — ${comment}` : ''}`;
 }
 
 // ============================================================================

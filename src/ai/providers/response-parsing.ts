@@ -9,7 +9,6 @@
 
 import type { ProposedAction } from '../types';
 import { escapeInvalidUnicodeEscapes, normalizeActionEquation } from '../latex-sanitizer';
-import { isDebug } from '../../config/debug-flags';
 
 /** Action types the shelf can render. Anything else in the block is dropped. */
 const VALID_ACTION_TYPES = [
@@ -34,8 +33,6 @@ export function parseProposedActions(content: string, providerName: string): Pro
     if (!jsonMatch) return [];
 
     const jsonStr = jsonMatch[1] ?? jsonMatch[0];
-
-    if (isDebug('d_chat')) console.log(`[${providerName}] Raw JSON block:`, jsonStr);
 
     const parsed = JSON.parse(sanitizeLlmJson(jsonStr));
 

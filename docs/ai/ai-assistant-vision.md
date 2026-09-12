@@ -6,7 +6,7 @@
 >
 > **Authority:** What the assistant is for, how its capabilities are meant to behave, and how the
 > `src/ai` layer is organized. Deliberately holds no prompt text and no copy of the action schema:
-> the prompt is [ai-prompt-etalon.md](ai-prompt-etalon.md), how a call is assembled is
+> the prompt is the Markdown files in `src/ai/prompts/`, how a call is assembled is
 > [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md), and vendor transport is
 > [ai-provider-architecture.md](ai-provider-architecture.md).
 >
@@ -65,7 +65,7 @@ the workspace's own edge types, grouped as Child, Parent and Any; picking a row 
 request to that relationship, and the app then stamps the user's choice onto every action that comes
 back. Picking nothing leaves the model free to choose the relationship itself.
 
-The visible timeline stores compact command text, while the provider receives the fuller hidden command prompt. Each command can have optional setting-driven additions appended to that hidden prompt. Exact command wording is in [ai-prompt-etalon.md](ai-prompt-etalon.md); how a call is assembled is in [AI chat API call composition](ai-chat-api-call-composition.md).
+The visible timeline stores compact command text, while the provider receives the fuller hidden command prompt. Each command can have optional setting-driven additions appended to that hidden prompt. Exact command wording is in `src/ai/prompts/scene.md`, `node.md`, `suggest.md` and `connect.md`; how a call is assembled is in [AI chat API call composition](ai-chat-api-call-composition.md).
 
 ### B. Node Shelf (Suggestion Panel)
 
@@ -104,8 +104,9 @@ This enables the AI to:
 title-to-id resolution happens when the action reaches the shelf. Relationship type names resolve
 the same way, in `src/ai/edge-type-resolution.ts`.
 
-The schema itself, the resolution rules and the exact prompt text are in
-[ai-prompt-etalon.md](ai-prompt-etalon.md) and are deliberately not repeated here.
+The schema itself and the exact prompt text are in `src/ai/prompts/system-prompt.md`; the resolution
+rules are in [ai-chat-api-call-composition.md](ai-chat-api-call-composition.md), "The Reply
+Contract". Neither is repeated here.
 
 ### D. Equation Support
 - AI can generate/edit LaTeX equations
@@ -167,9 +168,10 @@ Folder granularity for the whole layer. The file-by-file map of the chat call ch
 src/ai/
 ├── types.ts                  # Chat, proposed-action and relationship-slot types
 ├── chat-session.ts           # One conversation per node; builds context, sends calls
-├── context-builder.ts        # Assembles the system prompt from graph and scene state
-├── prompts.ts                # Prompt templates and quick-action assembly
-├── relationship-slot.ts      # Edge types → menu choices, constraint sentences, stamping
+├── context-builder.ts        # Fills the system prompt's data record from graph and scene state
+├── prompts.ts                # Renders the prompt files; quick-action table
+├── prompts/                  # The prompt text: seven Markdown files, the only copy
+├── relationship-slot.ts      # Edge types → menu choices, constraint records, stamping
 ├── edge-type-resolution.ts   # The model's words → edge type id and direction
 ├── shelf/                    # Workspace-wide shelf: store, orchestration, placement
 ├── shelf-design-selector.ts  # Visual design for shelf previews
@@ -218,8 +220,9 @@ The union of everything the model may propose. Two members reach the node shelf,
 action carries a relationship — a type name from the workspace vocabulary and a direction relative
 to the central node.
 
-The declarations are in `src/ai/types.ts` and are not copied here; the wire form the model writes,
-and how each field is resolved, are in [ai-prompt-etalon.md](ai-prompt-etalon.md).
+The declarations are in `src/ai/types.ts` and are not copied here; the wire form the model writes
+is in `src/ai/prompts/system-prompt.md` under Actions, and how each field is resolved is in
+[ai-chat-api-call-composition.md](ai-chat-api-call-composition.md), "The Reply Contract".
 
 ### ShelfAction (subset routed to shelf)
 ```typescript
