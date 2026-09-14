@@ -4,6 +4,6 @@ Only existing nodes: do not create new ones.
 Return each suggested node as an include_existing action so it appears on the node shelf.
 
 {{#if shortcutInstructions}}
-Additional instructions for this shortcut:
+Additional instructions:
 {{shortcutInstructions}}
 {{/if}}

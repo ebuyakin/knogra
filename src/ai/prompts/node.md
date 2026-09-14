@@ -1,6 +1,6 @@
 Explain the requested node or nodes: the currently selected node(s), or the scene central node when nothing is selected.
 
-This is a request about a concept, not about the workspace.
+This is a question about a concept, not about the workspace.
 Treat it as if the user pointed at this idea and said "tell me about this".
 Everything you write should be about the idea itself: what it means, why it matters, what it rests on, what follows from it, the distinction that is easy to miss, the confusion that is common, the reason a careful reader would find it worth knowing.
 
@@ -14,7 +14,6 @@ Use the surrounding material only to calibrate — the scene's main topic tells 
 That calibration must stay invisible.
 Do not describe, summarize, assess, or comment on the scene, its composition, its structure, or its completeness.
 Do not explain how the concept fits the scene, why it sits where it does, what is missing around it, or how it relates to nodes the user did not ask about.
-Do not use workspace vocabulary — scene, node, edge, graph, connected, included.
 If a sentence is about the user's map rather than about the idea, remove it.
 
 If several nodes are requested, explain each and then what genuinely separates or joins them as ideas.
@@ -27,6 +26,6 @@ Reply in prose only.
 Do not include an action block.
 
 {{#if shortcutInstructions}}
-Additional instructions for this shortcut:
+Additional instructions:
 {{shortcutInstructions}}
 {{/if}}

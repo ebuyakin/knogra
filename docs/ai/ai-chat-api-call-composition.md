@@ -60,9 +60,13 @@ Every sentence the model reads is in a Markdown file under `src/ai/prompts/`. Co
 titles, one-line lists, counts, settings, and the flags that decide which blocks exist. Nothing in
 TypeScript is prose, with two exceptions noted below.
 
-    system-prompt.md   the system message: role, {{> workspace}}, the Response contract, Language, Custom Instructions
-    workspace.md       the Workspace half: central node, relationship types, current scene, selected nodes,
-                       outside connections, rest of the graph, node shelf
+    system-prompt.md   the system message: identity, the Knogra section (workspace, graph, node, edge with the
+                       edge type list, scene, shelf), {{> current-state}}, the Response contract, Language,
+                       Custom Instructions
+    current-state.md   the Current State section: central node, current scene composition, selected nodes,
+                       outside connections, rest of the graph, node shelf. Holds no explanation of what these
+                       things are; that is the Knogra section. Its sentences are the key to each list and the
+                       instructions about it.
     scene.md           the Scene button's message
     node.md            the Node button's message
     suggest.md         the Suggest button's message: opening, {{> edge-type}}, closing, shortcut additions
@@ -174,8 +178,9 @@ distinguishable in the timeline. The label never goes to the model.
 ### Shortcut additions
 
 Each of the four quick actions has a setting for additional instructions. When non-empty, the text
-is appended to that action's message under "Additional instructions for this shortcut:", by the
-file's own `{{#if shortcutInstructions}}` block. It never reaches the system prompt, and the visible
+is appended to that action's message under "Additional instructions:", by the file's own
+`{{#if shortcutInstructions}}` block. The word "shortcut" is the setting's name and the UI's; the
+model never reads it, since nothing it is sent distinguishes a button's message from a typed one. It never reaches the system prompt, and the visible
 chat text stays the base display text. The additions are meant to bias or narrow the shortcut, not
 replace it.
 

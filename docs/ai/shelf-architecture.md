@@ -8,7 +8,7 @@
 > **Authority:** The shelf's data model, lifecycle, validity rules, storage and management
 > commands. Takes over shelf filtering and acceptance from `~/pro/knogra/docs/ai/ai-chat-api-call-composition.md`
 > and the shelf section of `~/pro/knogra/docs/ai/ai-assistant-vision.md`. Placement geometry stays
-> with `~/pro/knogra/docs/node-placement.md`; the prompt text is `src/ai/prompts/workspace.md`, Node Shelf section.
+> with `~/pro/knogra/docs/node-placement.md`; the prompt text is `src/ai/prompts/system-prompt.md` (Shelf, under Knogra) and `src/ai/prompts/current-state.md` (Node Shelf section).
 
 ## 1. Segregation of duties
 

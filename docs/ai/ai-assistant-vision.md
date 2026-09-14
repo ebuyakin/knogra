@@ -137,7 +137,9 @@ AI Response → provider adapter (parse JSON)
 User clicks →
   → node-shelf.ts placeNode()
     → resolve title → nodeId
-    → scene.includeExistingNode(nodeId, design, centralNodeId)
+    → resolve edgeType + direction → edge type id, child/parent
+    → scene.includeExistingNode(nodeId, design, centralNodeId, { direction, edgeTypeId })
+      (an edge already in the graph between the two is reused as is)
 ```
 
 ### Data Flow: create_connected
@@ -273,7 +275,7 @@ When user accepts a suggestion:
 
 ### Feature API Connection
 Suggestions execute via existing features:
-- `include_existing` → `scene.includeExistingNode(nodeId)`
+- `include_existing` → `scene.includeExistingNode(nodeId, design, centralNodeId, connection)`
 - `create_connected` → `graph.addConnectedNode()`
 - `connect_nodes` → `graph.addEdge()`
 - `update_property` → `features.node.update()`

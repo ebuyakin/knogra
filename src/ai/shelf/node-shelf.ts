@@ -131,10 +131,17 @@ export class NodeShelf {
         shelfStore.removePlacement(entry.id, centralNodeId);
         if (isDebug('d_shelf')) console.log(`[NodeShelf] Stale entry consumed: ${entry.title}`);
       } else if (entry.nodeId) {
+        // Same resolution as #createFromEntry: the edge the user was shown on the
+        // shelf is the edge they get, unless the graph already has one.
+        const placement = shelfStore.getPlacement(entry.id, centralNodeId);
         await this.#features.scene.includeExistingNode(
           entry.nodeId,
           selectShelfDesign(this.#entryProperties(entry)),
-          centralNodeId
+          centralNodeId,
+          {
+            direction: resolveEdgeDirection(placement?.direction),
+            edgeTypeId: resolveEdgeTypeId(placement?.edgeType)
+          }
         );
         shelfStore.removePlacement(entry.id, centralNodeId);
       } else {

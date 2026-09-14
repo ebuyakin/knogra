@@ -472,12 +472,14 @@ Destructive operations remain single-edge operations. `Exclude from scene` and `
 ## 11. AI Context
 
 Edge types reach the assistant. This section states the boundary; the exact wording is in
-`src/ai/prompts/workspace.md` (Relationship Types) and `src/ai/prompts/edge-type.md`, and how a
-type the model names is resolved back to an id is in
+`src/ai/prompts/system-prompt.md` (the Edge section under Knogra) and `src/ai/prompts/edge-type.md`,
+and how a type the model names is resolved back to an id is in
 [ai-chat-api-call-composition.md](ai/ai-chat-api-call-composition.md), "The Reply Contract".
 
-The whole vocabulary is sent, once per request, as its own section: each type's name, description,
-forward label and inverse label. Every edge anywhere in the message is then written
+The whole vocabulary is sent, once per request, as the list closing the Edge section: each type's
+name, description, forward label and inverse label. It sits with the concepts, not with the current
+state, because the vocabulary is a modelling decision for the whole workspace and does not change
+while a scene is worked on. Every edge anywhere in the message is then written
 `Source -[label]-> Target`, using the forward label, so a label the model reads can always be traced
 back to a type it has been given. An edge title follows as a note, and remains optional metadata
 rather than the relationship itself.

@@ -166,14 +166,14 @@ Adds an **existing graph node** to the current scene.
 4. Adds stylesheet rule via `StyleGenerator`
 5. **GraphSaver** persists updated scene
 
-**`SceneNodeOps.includeExistingNode(nodeId, anchorNodeId?, design?)`**  
-Includes existing node with automatic edge restoration.
+**`SceneNodeOps.includeExistingNode(nodeId, design?, anchorNodeId?, connection?)`**  
+Includes existing node and connects it to its anchor.
 
 1. Determines anchor (explicit → active/selected → central)
 2. Calculates collision-free position near anchor
 3. Calls `includeNode()`
-4. `SceneEdgeOps.showAllEdges(nodeId)` — restores edges that already belong to the current scene and whose endpoints are currently present
-5. If no edges added, creates fallback edge to anchor
+4. If the graph already has an edge between the node and the anchor, adds that edge to the scene as it is
+5. Otherwise creates one: direction and type from `connection` (the shelf passes the entry's), else anchor → node on the default type
 
 ### 3.2 Scene Destruction (Removing Nodes from a Scene)
 

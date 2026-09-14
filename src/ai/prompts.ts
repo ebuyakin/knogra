@@ -37,7 +37,7 @@ export type TemplateScalar = string | number | boolean | undefined;
 export type TemplateValue = TemplateScalar | TemplateRecord[];
 export type TemplateRecord = Record<string, TemplateValue>;
 
-/** One line under Relationship Types. */
+/** One line of the edge type list under Edge. */
 export type RelationshipTypeLine = {
   name: string;
   description: string | undefined;
@@ -46,7 +46,7 @@ export type RelationshipTypeLine = {
 };
 
 /**
- * Everything system-prompt.md and workspace.md can name. Lists arrive already
+ * Everything system-prompt.md and current-state.md can name. Lists arrive already
  * rendered one line each; the file owns the sentences around them. Empty strings
  * and zero counts drop their blocks.
  */

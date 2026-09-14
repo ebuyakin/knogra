@@ -226,6 +226,10 @@ export function renderMarkdown(text: string): string {
   // Inline code (`...`)
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
+  // Thematic break (---, ***, ___; three or more, spaces allowed). Before lists,
+  // or "- - -" would read as a list item.
+  html = html.replace(/^ {0,3}([-*_])(?: *\1){2,} *$/gm, '<hr>');
+
   // Headers (## ...)
   html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
@@ -254,7 +258,9 @@ export function renderMarkdown(text: string): string {
   // Single newlines to <br> (but not inside pre/code/table)
   html = html.replace(/([^>\n])\n([^<])/g, '$1<br>$2');
 
-  // Clean up empty paragraphs
+  // Clean up empty paragraphs, and a rule that landed alone in one: <hr> may not
+  // sit inside <p>, and the browser would otherwise split it into two empty ones.
+  html = html.replace(/<p>\s*<hr>\s*<\/p>/g, '<hr>');
   html = html.replace(/<p>\s*<\/p>/g, '');
 
   // Restore math spans verbatim so MathJax can typeset them

@@ -24,14 +24,14 @@ import { resolveScenePan } from '../utils/cy/viewport-utils';
 import type { Direction } from '../utils/pure/directional-search';
 
 // scene sub-modules
-import { SceneNodeOps } from './node-ops';
+import { SceneNodeOps, type IncludeConnection } from './node-ops';
 import { SceneEdgeOps } from './edge-ops';
 import { FoldManager } from './fold-manager';
 import { moveSelectionDirectional } from './navigation';
 import type { TagStyleParams, TagStylePlan } from './tag-style-plan';
 
 // re-export types for external consumers
-export type { NodeEditContext } from './node-ops';
+export type { NodeEditContext, IncludeConnection } from './node-ops';
 export type { EdgeEditContext } from './edge-ops';
 export type { TagStyleParams, TagStylePlan } from './tag-style-plan';
 export type { Direction } from '../utils/pure/directional-search';
@@ -206,9 +206,10 @@ export class Scene {
   async includeExistingNode(
     nodeId: NodeId,
     design?: { id: string; params: Record<string, unknown> },
-    anchorNodeId?: NodeId
+    anchorNodeId?: NodeId,
+    connection?: IncludeConnection
   ): Promise<number> {
-    return this.#nodeOps.includeExistingNode(nodeId, design, anchorNodeId);
+    return this.#nodeOps.includeExistingNode(nodeId, design, anchorNodeId, connection);
   }
 
   async updateNodeStyle(

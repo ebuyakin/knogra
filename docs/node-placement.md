@@ -232,8 +232,8 @@ edge handling:
 |---|-----------|-------------|--------------|
 | A  | Shelf → new node (`create_connected`) | `graph.addConnectedNode` | new `C→N` or `N→C` per the action's `direction`; `C` is the central node |
 | A′ | Add child / parent (keyboard, context menu) | `graph.addConnectedNode` | new `R→N` / `N→R` |
-| B  | Shelf → existing node (`include_existing`) | `scene.includeExistingNode` | reuse existing graph edge if any, else new |
-| B′ | Node manager → add to scene | `scene.includeExistingNode` | reuse existing edge if any, else new |
+| B  | Shelf → existing node (`include_existing`) | `scene.includeExistingNode` | reuse existing graph edge if any, else new `C→N` or `N→C` on the type the shelf entry carries (2026-09-13; before, always `C→N`, untyped) |
+| B′ | Node manager → add to scene | `scene.includeExistingNode` | reuse existing edge if any, else new `R→N` on the default type |
 
 Notes:
 - A is being changed so its reference is resolved by §3 (was: always central).

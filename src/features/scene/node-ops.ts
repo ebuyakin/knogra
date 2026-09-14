@@ -5,7 +5,7 @@
  */
 
 import type { Core, NodeSingular } from 'cytoscape';
-import type { SceneId, Node, NodeId, EdgeId, DesignId } from '../../core/main-types';
+import type { SceneId, Node, NodeId, EdgeId, EdgeTypeId, DesignId } from '../../core/main-types';
 
 import { graphStore } from '../../storage/graph-store';
 import { isEditMode } from '../../storage/app-mode';
@@ -433,7 +433,9 @@ export class SceneNodeOps {
    *   the scene's central node.
    * - If a real edge already exists in the graph between the included
    *   node and the placement reference, that existing edge is added to
-   *   the scene. Otherwise a fresh edge is created.
+   *   the scene as it is. Otherwise a fresh edge is created, with the
+   *   direction and type in `connection`, or reference → node on the
+   *   default type when none is given.
    * - Edges between the included node and other scene members are NOT
    *   auto-imported — scene membership stays curated.
    *
@@ -445,7 +447,8 @@ export class SceneNodeOps {
   async includeExistingNode(
     nodeId: NodeId,
     design?: { id: string; params: Record<string, unknown> },
-    anchorNodeId?: NodeId
+    anchorNodeId?: NodeId,
+    connection?: IncludeConnection
   ): Promise<number> {
     if (!isEditMode()) {
       console.warn('Cannot include existing nodes in View mode');
@@ -512,16 +515,23 @@ export class SceneNodeOps {
       return 1;
     }
 
+    // 'child' puts the included node at the target end, as in Graph.addConnectedNode.
+    // An edge saved without a type is read back as the default type anyway
+    // (graph-saver), so setting it here changes nothing for callers that give none.
+    const [sourceId, targetId] = connection?.direction === 'parent'
+      ? [nodeId, placementRef]
+      : [placementRef, nodeId];
     const edgeId = `e${Date.now()}` as EdgeId;
     this.#cy.add({
       group: 'edges',
       data: {
         id: edgeId,
         title: '',
-        sourceId: placementRef,
-        targetId: nodeId,
-        source: placementRef,
-        target: nodeId,
+        sourceId,
+        targetId,
+        typeId: connection?.edgeTypeId ?? graphStore.defaultEdgeTypeId,
+        source: sourceId,
+        target: targetId,
         tags: [],
         properties: {},
         design: { id: 'default', params: {} },
@@ -529,9 +539,19 @@ export class SceneNodeOps {
         updatedAt: new Date()
       }
     });
-    if (isDebug('d_scene')) console.log(`Scene: Created new edge ${placementRef} → ${nodeId}`);
+    if (isDebug('d_scene')) console.log(`Scene: Created new edge ${sourceId} → ${targetId}`);
     return 1;
   }
+}
+
+/**
+ * The edge to create between an included node and its placement reference when
+ * the graph has none. 'child' means the included node is the edge's target,
+ * the vocabulary Graph.addConnectedNode uses. Ignored when an edge already exists.
+ */
+export interface IncludeConnection {
+  direction: 'child' | 'parent';
+  edgeTypeId: EdgeTypeId;
 }
 
 /**

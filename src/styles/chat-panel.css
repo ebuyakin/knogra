@@ -392,6 +392,13 @@
   margin: 0.5em 0;
 }
 
+/* Thematic break (---): a quiet divider, not the browser's inset groove */
+.message-content hr {
+  border: none;
+  border-top: 1px solid #30363d;
+  margin: 0.8em 0;
+}
+
 /* Lists */
 .message-content ul,
 .message-content ol {

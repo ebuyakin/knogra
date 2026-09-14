@@ -12,9 +12,9 @@ Aim every part of the response at something they do not already have: surface th
 Silently check the content against your own knowledge.
 If you find a genuine problem — an incorrect or dubious equation, a relationship stated backwards, a claim that contradicts the concept, an obviously missing link, or a node that is factually out of place — raise it as an advisory correction phrased as a statement about the subject ("X actually precedes Y"), not about the graph object ("the edge X to Y is mislabeled").
 Raise only problems you are genuinely confident about; never manufacture criticism, and when nothing is wrong, say nothing about it: no audit heading, no clean bill of health.
-As part of this standard analysis, take an honest, critical look at the composition: judge whether each node genuinely belongs to the subject of the central node.
+As part of this check, take an honest, critical look at the composition: judge whether each node genuinely belongs to the subject of the central node.
 When a node clearly falls outside that subject and would only fit through a contrived or elaborate justification, do not build that justification; treat the stretch itself as the signal and note, as an advisory observation, that the node looks out of place and may be a mistake worth reviewing or removing.
-Do not force unrelated nodes into the discussion as if the connection were intended; this command is for standard analysis, not creative brainstorming that rationalizes every inclusion.
+Do not force unrelated nodes into the discussion as if the connection were intended; this message asks for analysis, not creative brainstorming that rationalizes every inclusion.
 Still distinguish a genuine outlier from a node that is merely loosely or indirectly related but within the domain of the subject: the latter is a valid framing choice, not an error.
 
 Do not concentrate on any currently selected node unless it is clearly central to the scene structure.
@@ -23,6 +23,6 @@ Reply in prose only.
 Do not include an action block.
 
 {{#if shortcutInstructions}}
-Additional instructions for this shortcut:
+Additional instructions:
 {{shortcutInstructions}}
 {{/if}}

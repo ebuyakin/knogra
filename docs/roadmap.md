@@ -21,4 +21,5 @@
 - [ ] Keyboard handler second refactoring - code deduplication, leader key support.
 - [ ] UI theme (panels, modals). potentially matching the graph theme. Unified styling for UI elements.
 - [ ] Markdown export/import redesign: extract UI code, extract layout - use feature. Node properties file.
+- [ ] Chat markdown rendering: replace the regex pipeline in `chat-message-renderer.ts` with a Markdown library (markdown-it or similar), keeping the math-span lifting around it. Known gaps of the pipeline (2026-09-13): ordered lists never wrapped in `<ol>`, no nested lists, headings/lists/rules transformed inside code blocks, no escapes, thematic break added by hand. Each surfaces one at a time as model output varies; a parser closes the class. Re-verify the math path (`$`, `$$`, `\[ \]`, `\( \)`, `\begin`) after the switch.
 
