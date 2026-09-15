@@ -7,7 +7,14 @@ import { SHORTCUT_CATEGORIES } from '../../config/shortcut-definitions';
 import '../../styles/shortcut-overlay.css';
 
 export class ShortcutOverlay {
-  #overlay: HTMLDivElement | null = null;
+  /**
+   * Open state lives in the DOM, not the instance. Each opener holds its own
+   * ShortcutOverlay (keyboard handler for F1 and Escape, path panel for the ?
+   * button), and all of them must agree on whether the one dialog is showing.
+   */
+  get #overlay(): HTMLElement | null {
+    return document.querySelector('.shortcut-overlay');
+  }
 
   toggle(): void {
     if (this.#overlay) {
@@ -93,7 +100,6 @@ export class ShortcutOverlay {
     dialog.appendChild(content);
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
-    this.#overlay = overlay;
 
     // Center on the Cytoscape viewport.
     const cy = document.getElementById('cy');
@@ -131,9 +137,6 @@ export class ShortcutOverlay {
   }
 
   hide(): void {
-    if (this.#overlay) {
-      this.#overlay.remove();
-      this.#overlay = null;
-    }
+    this.#overlay?.remove();
   }
 }

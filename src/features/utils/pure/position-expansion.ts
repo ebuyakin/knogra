@@ -5,6 +5,8 @@
  * NO DEPENDENCIES TO BE INTRODUCED IN THIS FILE (BESIDES TYPES)
  */
 
+import type { ViewportRect } from './donut-placement';
+
 export interface Position {
   x: number;
   y: number;
@@ -235,45 +237,96 @@ const SINGLE_CLEAR_FACTOR = 0.05;
 /** Breathing room beyond touching, as a fraction of the new node's radius. */
 const SINGLE_BREATH_FACTOR = 0.25;
 
-/**
- * Bearing (deg) at the centre of the widest angular gap between the reference's
- * neighbours — i.e. maximally far from every existing spoke. Steers a new node
- * BETWEEN existing edges so their connectors never overlap. Deterministic
- * (first-widest gap clockwise from East wins on ties). East (0°) when there are
- * no neighbours. See docs/node-placement.md §5.
- */
-function widestNeighbourGapBisectorDeg(refPos: Position, obstacles: SizedObstacle[]): number {
-  const angles: number[] = [];
-  for (const o of obstacles) {
-    const deg = (Math.atan2(o.pos.y - refPos.y, o.pos.x - refPos.x) * 180) / Math.PI;
-    angles.push(((deg % 360) + 360) % 360);
-  }
-  if (angles.length === 0) return 0;
-  angles.sort((a, b) => a - b);
+/** Candidate bearings when the reference has no neighbours: the compass order. */
+const LONELY_BEARINGS_DEG = [0, 180, 90, 270];
 
-  let bestGap = -1;
-  let bestMid = 0;
+/**
+ * Smallest angular distance (deg) between a candidate bearing and an existing
+ * spoke. Two connectors this far apart still read as two edges; closer, they
+ * cover each other. This gate is the never-coincide guarantee in numbers
+ * (docs/node-placement.md §5.1); expansion uses the same 5° as its per-child
+ * minimum.
+ */
+const MIN_SPOKE_CLEARANCE_DEG = 5;
+
+/** A candidate bearing and its angular distance to the nearest existing spoke. */
+interface CandidateBearing {
+  deg: number;
+  clearance: number;
+}
+
+/**
+ * Candidate bearings (deg) for a new node, most preferred first. Each gap between
+ * neighbour bearings is halved repeatedly — midpoint, quarter points, eighth
+ * points … — until the clearance to the nearest spoke would drop below
+ * `MIN_SPOKE_CLEARANCE_DEG`; all candidates are then ranked by that clearance,
+ * globally, so a wide gap's eighth point outranks a narrow gap's midpoint.
+ * Deterministic: equal clearances keep clockwise-from-East order (stable sort).
+ * In a dense ring where no gap passes the gate, the widest gap's midpoint is the
+ * only candidate. See docs/node-placement.md §5.1.
+ */
+function candidateBearingsDeg(refPos: Position, obstacles: SizedObstacle[]): number[] {
+  const angles = obstacles
+    .map(o => (Math.atan2(o.pos.y - refPos.y, o.pos.x - refPos.x) * 180) / Math.PI)
+    .map(deg => ((deg % 360) + 360) % 360)
+    .sort((a, b) => a - b);
+  if (angles.length === 0) return LONELY_BEARINGS_DEG;
+
+  const gaps: Array<{ start: number; width: number }> = [];
   for (let i = 0; i < angles.length; i++) {
     const a1 = angles[i];
     const a2 = i + 1 < angles.length ? angles[i + 1] : angles[0] + 360;
-    const gap = a2 - a1;
-    if (gap > bestGap) {
-      bestGap = gap;
-      bestMid = ((a1 + a2) / 2) % 360;
+    if (a2 - a1 > 1e-6) gaps.push({ start: a1, width: a2 - a1 });
+  }
+
+  const candidates: CandidateBearing[] = [];
+  for (const g of gaps) {
+    for (let parts = 2; g.width / parts >= MIN_SPOKE_CLEARANCE_DEG; parts *= 2) {
+      const clearance = g.width / parts;
+      for (let k = 1; k < parts; k += 2) {
+        candidates.push({ deg: (g.start + (g.width * k) / parts) % 360, clearance });
+      }
     }
   }
-  return bestMid;
+  candidates.sort((a, b) => b.clearance - a.clearance);
+  if (candidates.length > 0) return candidates.map(c => c.deg);
+
+  const widest = gaps.reduce((best, g) => (g.width > best.width ? g : best), gaps[0]);
+  return [(widest.start + widest.width / 2) % 360];
+}
+
+/** Nearest point to `p` at which a node of radius `half` sits fully inside `vp`. */
+function clampToViewport(p: Position, half: number, vp: ViewportRect | null): Position {
+  if (vp === null) return p;
+  return {
+    x: clampAxis(p.x, vp.x1 + half, vp.x2 - half),
+    y: clampAxis(p.y, vp.y1 + half, vp.y2 - half)
+  };
+}
+
+/** Clamp `v` into [lo, hi]; when the node is larger than the viewport (lo > hi), centre it. */
+function clampAxis(v: number, lo: number, hi: number): number {
+  if (lo > hi) return (lo + hi) / 2;
+  return Math.min(hi, Math.max(lo, v));
 }
 
 /**
  * Place ONE node next to a reference node. Implements docs/node-placement.md.
  *
- * Direction: exactly the bisector of the widest gap between neighbour bearings.
- * Being strictly between two distinct spokes, it can never coincide with an
- * existing edge, so connectors never overlap (no angular grid, no aliasing).
- * Radius: the preferred distance if it clears, otherwise the nearest larger
- * radius along that bearing that clears every node. All radii and clearances
- * derive from node sizes, so the layout scales with the design system.
+ * Direction: candidate bearings between neighbour spokes, ranked by angular
+ * clearance from the nearest spoke (see `candidateBearingsDeg`); the widest gap's
+ * bisector comes first. Every candidate keeps at least `MIN_SPOKE_CLEARANCE_DEG`
+ * from every spoke, so connectors never cover each other (no angular grid, no
+ * aliasing). Radius: the preferred distance if it clears, otherwise the nearest
+ * larger radius along that bearing that clears every node. All radii and
+ * clearances derive from node sizes, so the layout scales with the design system.
+ *
+ * The viewport is a hard constraint, applied in three passes: a clean on-screen
+ * spot on the best bearing that has one; else the preferred distance on the best
+ * bearing that is on screen, overlap tolerated; else the preferred spot pulled
+ * inside the viewport. A single node overlapping is tolerable; a node the user
+ * cannot see is not. With no viewport the walk is unbounded by the screen and
+ * the saturated-scene fallback is the preferred spot itself.
  *
  * @param refPos    Reference node centre.
  * @param refHalf   Reference node bounding-circle radius (after scale).
@@ -281,13 +334,15 @@ function widestNeighbourGapBisectorDeg(refPos: Position, obstacles: SizedObstacl
  * @param obstacles Every other in-scene node as {pos, half}. The reference need
  *                  not be excluded — a zero-distance obstacle is ignored.
  * @param spacing   User multiplier for breathing room and clearance (1 = default).
+ * @param viewport  Visible area in model coordinates (`cy.extent()`), or null.
  */
 export function placeSingleNode(
   refPos: Position,
   refHalf: number,
   newHalf: number,
   obstacles: SizedObstacle[],
-  spacing: number = 1
+  spacing: number = 1,
+  viewport: ViewportRect | null = null
 ): Position {
   const childSize = newHalf * 2;
   const gClear = childSize * SINGLE_CLEAR_FACTOR * spacing;
@@ -324,22 +379,45 @@ export function placeSingleNode(
     return true;
   };
 
-  // Direction: strictly between two existing spokes, so the new edge can never
-  // lie on top of an existing one.
-  const awayDeg = widestNeighbourGapBisectorDeg(refPos, obs);
-  const rad = (awayDeg * Math.PI) / 180;
-  const at = (r: number): Position => ({
-    x: refPos.x + r * Math.cos(rad),
-    y: refPos.y + r * Math.sin(rad)
-  });
+  // The viewport edges are axis-aligned, so what must fit is the node's box, not
+  // its bounding circle. Callers derive `newHalf` as half the longer side × √2;
+  // dividing it back out gives half the longer side — exact for a square node,
+  // conservative on the short axis of a wide one. The circle radius itself
+  // rejected every spot level with an anchor near the top or bottom edge.
+  const screenInset = newHalf / Math.SQRT2;
+  const onScreen = (p: Position): boolean =>
+    viewport === null ||
+    (p.x - screenInset >= viewport.x1 && p.x + screenInset <= viewport.x2 &&
+     p.y - screenInset >= viewport.y1 && p.y + screenInset <= viewport.y2);
 
-  // Nearest radius along that bearing that clears every node, starting at the
-  // preferred (aesthetic) distance.
-  for (let r = rPref; r <= searchCap; r += dR) {
-    const p = at(r);
-    if (clears(p)) return p;
+  const at = (bearingDeg: number, r: number): Position => {
+    const rad = (bearingDeg * Math.PI) / 180;
+    return { x: refPos.x + r * Math.cos(rad), y: refPos.y + r * Math.sin(rad) };
+  };
+
+  const bearings = candidateBearingsDeg(refPos, obs);
+
+  // Pass 1 — on each bearing, most preferred first, the nearest radius from the
+  // preferred distance outward that clears every node. A bearing is abandoned
+  // the moment its spot leaves the viewport: every spot further out is off-screen too.
+  for (const bearingDeg of bearings) {
+    for (let r = rPref; r <= searchCap; r += dR) {
+      const p = at(bearingDeg, r);
+      if (!onScreen(p)) break;
+      if (clears(p)) return p;
+    }
   }
 
-  // Saturated scene: non-overlapping last resort at the cap, same bearing.
-  return at(searchCap);
+  // Pass 2 — no clean spot on screen: the preferred distance on the most
+  // preferred bearing that is on screen, overlap tolerated. Still strictly
+  // between spokes, so the connector still cannot cover an existing edge.
+  for (const bearingDeg of bearings) {
+    const p = at(bearingDeg, rPref);
+    if (onScreen(p)) return p;
+  }
+
+  // Pass 3 — the anchor itself is within a node's size of the viewport edge:
+  // the preferred spot, pulled inside the viewport. The one path where the
+  // connector may coincide with an existing edge; accepted as exotic.
+  return clampToViewport(at(bearings[0], rPref), screenInset, viewport);
 }

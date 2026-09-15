@@ -13,7 +13,7 @@ import { StyleGenerator } from '../../styles/style-generator';
 import { getSetting } from '../../config';
 import { NODE_SCALE_MAX, NODE_SCALE_MIN } from '../../config/node-settings';
 import { isDebug } from '../../config/debug-flags';
-import { placeSingleNode, type SizedObstacle } from '../utils/pure/position-expansion';
+import { placeSingleNodeInScene } from '../utils/cy/node-placement';
 import { computeTagStylePlan, type TagStyleParams, type TagStylePlan } from './tag-style-plan';
 
 /** Multiplicative steps below this distance from 1 are treated as no-ops. */
@@ -75,6 +75,27 @@ export class SceneNodeOps {
     const activeInScene = activeNodeId
       && this.#cy.getElementById(activeNodeId as string).length > 0;
     return activeInScene ? (activeNodeId as NodeId) : this.#getCentralNodeId();
+  }
+
+  /**
+   * Design for a node entering this scene: the explicit one when given, else
+   * the selected node's when the setting asks for it, else the default. Shared
+   * by includeNode and by the placement measurement that precedes it, so the
+   * node measured is the node included.
+   */
+  #resolveIncludeDesign(
+    explicitDesign?: { id: string; params: Record<string, unknown> }
+  ): { id: DesignId; params: Record<string, unknown> } {
+    if (explicitDesign) return explicitDesign as { id: DesignId; params: Record<string, unknown> };
+
+    if (getSetting('node.inheritDesignFromSelected')) {
+      const activeNodeId = this.#cy.scratch('activeNodeId');
+      const activeNode = activeNodeId ? this.#cy.getElementById(activeNodeId) : null;
+      const inherited = activeNode && activeNode.length > 0 ? activeNode.data('design') : undefined;
+      if (inherited) return inherited;
+    }
+
+    return { id: getSetting('node.defaultDesign') as DesignId, params: {} };
   }
 
   /**
@@ -176,25 +197,7 @@ export class SceneNodeOps {
       return;
     }
 
-    // Use explicit design if provided, otherwise determine from settings
-    let design: { id: DesignId; params: Record<string, unknown> } | undefined = explicitDesign;
-
-    if (!design) {
-      const inheritFromSelected = getSetting('node.inheritDesignFromSelected');
-      if (inheritFromSelected) {
-        const activeNodeId = this.#cy.scratch('activeNodeId');
-        if (activeNodeId) {
-          const activeNode = this.#cy.getElementById(activeNodeId);
-          if (activeNode.length > 0) {
-            design = activeNode.data('design');
-          }
-        }
-      }
-    }
-
-    if (!design) {
-      design = { id: getSetting('node.defaultDesign') as DesignId, params: {} };
-    }
+    const design = this.#resolveIncludeDesign(explicitDesign);
 
     this.#cy.add({
       group: 'nodes',
@@ -477,22 +480,26 @@ export class SceneNodeOps {
       return 0;
     }
 
-    // Collision-free position near the reference (docs/node-placement.md §4):
-    // bounding-circle radii (0.5·√(w²+h²)) so diagonal placements clear corners.
-    const refPos = placementRefCyNode.position();
-    const refBBox = placementRefCyNode.boundingBox();
-    const refHalf = 0.5 * Math.hypot(refBBox.w, refBBox.h);
-    const newHalf = 60 * Math.SQRT2; // bounding-circle radius of a default ~120px node
-    const obstacles: SizedObstacle[] = this.#cy.nodes()
-      .filter(n => n.id() !== (placementRef as string))
-      .map((n: NodeSingular) => {
-        const bb = n.boundingBox();
-        return { pos: n.position(), half: 0.5 * Math.hypot(bb.w, bb.h) };
-      });
-    const includePosition = placeSingleNode(refPos, refHalf, newHalf, obstacles, getSetting('node.spacing'));
+    const node = graphStore.nodes.find((n: Node) => n.id === nodeId);
+    if (!node) {
+      console.error(`Node ${nodeId} not found in graph`);
+      return 0;
+    }
 
-    // Include the node in scene (handles design, stylesheet, cy.add)
-    await this.includeNode(nodeId, includePosition, design);
+    // Measure the node as this scene will render it, then place it
+    // (docs/node-placement.md §4). The design is resolved here, the way
+    // includeNode resolves it, so the measured node and the included node agree.
+    const resolvedDesign = this.#resolveIncludeDesign(design);
+    const size = await StyleGenerator.measureNode(node, resolvedDesign, 1.0, this.#getThemeId());
+    const includePosition = placeSingleNodeInScene(
+      this.#cy,
+      placementRefCyNode,
+      size,
+      getSetting('node.spacing')
+    );
+
+    // Include the node in scene (handles stylesheet, cy.add)
+    await this.includeNode(nodeId, includePosition, resolvedDesign);
 
     // Connect node to its placement reference. Reuse an existing graph edge
     // between the two endpoints if present; otherwise create a new one.

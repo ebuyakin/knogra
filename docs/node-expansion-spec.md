@@ -1,7 +1,7 @@
 # Node Expansion Placement — Specification
 
 **Status:** Current — implemented in `src/features/utils/pure/donut-placement.ts`.
-**Last updated:** 2026-08-20
+**Last updated:** 2026-09-14 (§4.6: per-ray fallback and the contained-parent exception)
 **Authority:** Source of truth for the node-expansion placement algorithm, covering
 `src/features/utils/pure/donut-placement.ts`
 and the obstacle/viewport wiring in `src/features/scene/expand-animator.ts`.
@@ -55,7 +55,12 @@ edges are always named "connector".
 - `minRadius` — the smallest centre-to-centre distance a child may sit from `P`
   (parent half-size + child half-size + margin). Provided by the caller.
 - `maxRadius` — hard cap on how far a child may be pushed. Provided by the caller.
-- `childSize` — the diameter reserved for a child (its bounding box max dimension).
+- `childSize` — the diameter reserved for a child (its bounding box max dimension). One
+  value for all children. Since 2026-09-14 the caller measures every child as it will render
+  (`StyleGenerator.measureNode`, with the design and scale the expansion assigns) and passes
+  the largest; before, it passed the parent's size, so a parent with a long equation spread
+  title-only children as if each were that wide. Per-child sizes inside the algorithm would be
+  the fuller fix and are a spec change (sibling spacing, ring radius, per-child angle).
 - **Outward axis** — the ray `dir(P)` measured from `C`, i.e. the direction pointing
   from the central node through the expanded node. Used only as a tiebreaker.
 
@@ -156,6 +161,20 @@ sector is chosen.
    sibling-clear distance is off-screen but a closer, on-screen distance only *slightly*
    overlaps a sibling, take the on-screen one (slight sibling overlap is acceptable;
    leaving the viewport is not). Hard obstacle overlap is never accepted.
+
+4. **No clearing radius on the ray.** If nothing on the ray passes the obstacle check
+   within `maxRadius`, the child takes the **nearest** radius whose body clears every
+   existing node and keeps `siblingMin` from placed siblings — the §4.8 test, with the
+   connector, existing edges and the viewport ignored. It is never placed at `maxRadius`.
+   Revised 2026-09-14: before, the child landed at the far cap, which read as random.
+
+**Contained-parent exception (2026-09-14).** The obstacle check tests the connector `P→kᵢ`
+against every node's circle. A node's circle is as wide as its longest side in every
+direction, so a wide node above or below `P` can contain `P` itself; the connector then
+starts inside the circle and the test rejects every candidate on every ray, which is what
+sent children to `maxRadius`. For a node whose circle contains `P` (centre distance
+`< s/2 + EDGE_MARGIN`) the connector test is skipped. That node still blocks a full
+half-circle in §4.2 and still counts for body overlap.
 
 ### 4.7 Fallback 1 (relax existing edges)
 

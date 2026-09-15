@@ -1,7 +1,7 @@
 # Single-Node Placement — Specification
 
-**Status:** Current — implemented 2026-07-27; §3 revised 2026-09-09 (shelf anchoring).
-**Last updated:** 2026-09-09
+**Status:** Current — implemented 2026-07-27; §3 revised 2026-09-09 (shelf anchoring); §5 revised 2026-09-14 (viewport constraint, candidate bearings).
+**Last updated:** 2026-09-14
 **Authority:** Source of truth for `placeSingleNode` in
 `src/features/utils/pure/position-expansion.ts`, the shared reference resolver
 (`SceneNodeOps.resolvePlacementReference`), and the four single-node call sites in §9. It does
@@ -25,6 +25,10 @@ This spec defines **one** placement rule, shared by all single-node adds, that i
 - **Non-overlapping** — always respects real node sizes.
 - **Aesthetic when there is room** — a clean compass layout in sparse scenes.
 - **Deterministic** — the same scene always places the Nth node in the same spot.
+- **On screen** (2026-09-14) — the node always lands inside the visible viewport. One node
+  overlapping is tolerable; a node the user cannot see is not. This is the opposite
+  priority from multi-node expansion, where many overlapping nodes wreck the scene and
+  off-screen is the lesser evil.
 
 **In scope (governed by this spec):**
 
@@ -128,6 +132,16 @@ exposed and made diagonally-placed rectangles nearly touch (crumpled edge arrows
 Because both `R_pref` and every clearance are derived from the participating node sizes, the
 whole layout scales naturally with the design system, themes, and per-node scale.
 
+**The new node's size is measured, not estimated (2026-09-14).** Before the node exists the
+caller asks `StyleGenerator.measureNode(node, design, scale, theme)` for the box the design
+will render — the same width and height the stylesheet will carry, scale applied. Until this
+date the callers guessed: "same size as the parent" when the design was inherited, a flat
+120 px otherwise. For content-sized designs the guess was off by a factor of three (a 630-wide
+equation parent, a 210-wide empty child), `R_pref` came out near 900 px, every candidate was
+off screen, and the clamp of §5.3 dropped the child on top of its anchor. Size is a style
+outcome only the design can compute; Features no longer pretend to know it. Cost: one extra
+style computation per added node.
+
 ---
 
 ## 5. Placement algorithm
@@ -166,21 +180,76 @@ East → opposite/South/West/North at 90° → diagonals at 45° → and so on b
 A single existing neighbour at angle θ (e.g. a scene entered from its only parent) yields
 θ+180° first, then θ+90°, then θ+270° — the same rule, rotated.
 
-### 5.2 Radius — nearest clearing distance along `awayDeg`
+**Candidate list (2026-09-14).** `awayDeg` is the first of an ordered list of candidate
+bearings, tried in turn when the viewport (§5.3) rules a bearing out:
+
+- Every gap between neighbour bearings is halved repeatedly — midpoint, quarter points,
+  eighth points, … — for as long as the resulting clearance to the nearest spoke stays
+  `≥ MIN_SPOKE_CLEARANCE_DEG` (5°, the same figure expansion uses as its per-child minimum).
+- All candidates from all gaps are ranked by that clearance, descending, **globally**: a
+  350° gap's eighth points (clearance 22°) outrank a 10° gap's midpoint (5°). Ranking tier
+  by tier was tried first and wedged a third child between two spokes 10° apart while the
+  other 350° stood empty.
+- Ties keep clockwise-from-East order (stable sort), so determinism holds.
+- No neighbours: East, West, South, North.
+- Dense ring where no gap passes the gate: the widest gap's midpoint is the only candidate.
+
+**Never-coincide rule.** Two connectors on the same bearing cover each other and read as
+one edge, which is the worst-looking outcome of all. Every candidate keeps at least the
+minimum clearance from every spoke, so passes 1 and 2 of §5.3 cannot produce it. Only the
+clamp in pass 3 can, and that pass is reached only when the anchor is at the screen edge.
+
+In a scene where the widest-gap midpoint is on screen — the normal case — the list beyond
+its first entry is never consulted and the result is exactly the pre-2026-09-14 one.
+
+### 5.2 Radius — nearest clearing distance along the bearing
 
 1. Start at `R_pref` (§4) and step **outward** by `dR`.
 2. Return the first radius whose body clears every obstacle (§4 clearance test, real sizes).
-3. If nothing clears within `searchCap` (a genuinely saturated scene), place at `searchCap`
-   on the same bearing — defined and non-overlapping. Practically unreachable in normal use.
+3. Abandon the bearing as soon as the candidate leaves the viewport (§5.3) or passes
+   `searchCap`, and move to the next candidate bearing (§5.1).
 
 Because the bearing points into the widest gap, a clearing radius is normally found at or
 near `R_pref`; the walk only engages when that gap already holds a node at that distance,
 in which case the new node lands just beyond it on a second ring — never flung out past the
 scene's outermost node.
 
-**Trade-off (accepted):** this commits to the widest-gap bearing and finds the nearest radius
+**Trade-off (accepted):** this commits to one bearing at a time and finds the nearest radius
 there, rather than scanning 2D for a possibly marginally-closer pocket in a narrower gap.
 Chosen because no-overlap and determinism outrank marginal compactness.
+
+### 5.3 Viewport — a hard constraint (2026-09-14)
+
+The callers pass the visible area in model coordinates (`cy.extent()`). A candidate spot is
+on screen when the new node's **box** sits inside it, approximated by insetting the
+viewport by `newHalf / √2` — half the node's longer side, which is what the callers
+estimate before they multiply by √2 for the bounding circle. Insetting by the circle radius
+itself was tried first and rejected every spot level with an anchor near the top or bottom
+edge, because a wide node's circle is far taller than its box.
+
+Three passes, first success wins:
+
+1. **Clean and on screen.** Candidate bearings in order (§5.1); on each, the walk of §5.2,
+   abandoned when it leaves the viewport. First clearing spot wins.
+2. **On screen, overlap tolerated.** Candidate bearings in order; the spot at `R_pref` on
+   the first bearing where that spot is on screen. Still between spokes, so the connector
+   still cannot cover an existing edge.
+3. **Clamp.** The preferred spot (`awayDeg` at `R_pref`) pulled to the nearest point inside
+   the viewport, inset as above; a node larger than the viewport is centred on the axis it
+   does not fit. Reached only when the anchor is within a node's size of the viewport edge.
+
+Pass 3 replaces the former "place at `searchCap`" last resort, which was the one path that
+could send a node off screen on purpose. An anchor that is itself off screen is not a
+special case: every pass-1 walk fails at once, pass 2 finds nothing, and the clamp pulls the
+node to the viewport edge nearest the anchor. Chosen for uniformity; the situation is rare
+and the scene is already in trouble when it happens.
+
+With no viewport (`null`), pass 1 is unbounded by the screen and pass 2 returns the
+preferred spot itself. No caller passes `null` today.
+
+Why the priority differs from expansion: a single added node cannot wreck a layout, so a
+small overlap is a small cost, while the user has no way to know an invisible node exists.
+Expansion adds many nodes and the reverse holds ([node-expansion-spec.md](node-expansion-spec.md) §4.6).
 
 ---
 
@@ -219,7 +288,10 @@ practice — no performance concern, and no `dθ` constant to tune.
 - **Reference on the scene periphery:** the widest gap naturally points outward into open
   space; the new node lands near `R`, off the crowded interior.
 - **Stale/absent active node:** resolved to central by §3's presence guard.
-- **Saturated scene:** last-resort placement per §5.2, non-overlapping.
+- **Widest gap points off screen** (reference near a viewport edge): the next candidate
+  bearing (§5.1) is used; the compass pattern continues from the on-screen side.
+- **Saturated scene, or nothing fits on screen:** preferred spot clamped into the viewport
+  per §5.3; may overlap.
 
 ---
 
@@ -236,8 +308,14 @@ edge handling:
 | B′ | Node manager → add to scene | `scene.includeExistingNode` | reuse existing edge if any, else new `R→N` on the default type |
 
 Notes:
-- A is being changed so its reference is resolved by §3 (was: always central).
 - Placement math is identical across all four; only the reference node and edge policy vary.
+- The reading of the scene — reference box, obstacles, viewport — is one function,
+  `placeSingleNodeInScene` in `src/features/utils/cy/node-placement.ts`, shared by Graph and
+  Scene (2026-09-14; before, each feature carried a copy). Features may not import each other,
+  so a cy utility is where they meet (architecture §3.5, §4.2). It is handed the new node's
+  size and the `node.spacing` setting: cy utilities read neither Styles nor Config.
+- Each caller therefore does: resolve design and scale → measure (§4) → place → create or
+  include → connect.
 
 ---
 
@@ -277,17 +355,20 @@ Notes:
      ⇒ `R_pref = max(minRadius, (parentHalf + childHalf + gBreath) × spacing)`.
    - `spacing` = `node.spacing` setting (default 1.0, range 0.2–3.0), passed in by the callers.
    - `dR = max(6, childHalf × 0.5)` (radius step).
-   - `searchCap = max(R_pref × 4, farthestObstacle + childSize)`.
-   - Node radius: bounding-circle `0.5·√(w²+h²)` from the real bbox for `R` and obstacles;
-     for the not-yet-created new node, the design-size estimate × `√2` (Route A) or
-     `60·√2` for a default node (Route B).
+   - `searchCap = max(R_pref × 4, farthestObstacle + childSize)`; with a viewport the walk
+     usually stops earlier, at the screen edge.
+   - `viewport` = `cy.extent()` from the caller (§5.3), inset by `newHalf / √2`.
+   - `MIN_SPOKE_CLEARANCE_DEG = 5` (candidate gate, §5.1); `LONELY_BEARINGS_DEG = [0, 180, 90, 270]`.
+   - Node radius: bounding-circle `0.5·√(w²+h²)` from the real bbox for `R` and obstacles,
+     and from the measured box (§4) for the not-yet-created new node. The earlier estimates
+     ("Route A": parent size × √2; "Route B": `60·√2`) are gone.
    The two base factors were calibrated by experiment on 2026-07-27 (halved from an earlier
    `0.1 / 0.5`, which felt too generous at `spacing = 1`).
 5. **Direction-aware radius** (rectangle extent along the placement bearing instead of the
    bounding circle) would remove the ~√2 over-reservation in axis-aligned directions. Deferred:
-   it changes the obstacle model everywhere, and the new node's box is only an estimate before
-   render, so exact box math would give false precision. Revisit if spacing still feels wrong
-   after calibration.
+   it changes the obstacle model everywhere. Since 2026-09-14 the new node's box is measured
+   (§4), so the earlier objection — false precision on an estimated box — no longer applies;
+   what remains is the size of the change. Revisit if spacing still feels wrong.
 2. Whether to clear `activeNodeId` on `sceneChanged` to close the stale-scratch caveat (§3).
 3. Whether `circularSpreadSafe` can be retired once all four call sites move to the new helper
    (its only remaining reference would be dead code in the expansion `else` branch).

@@ -125,24 +125,10 @@ export async function expandNodeConnections(
     ? (cyNode.data('design') || { id: getSetting('node.defaultDesign'), params: {} })
     : { id: getSetting('node.defaultDesign'), params: {} };
   const nodeScale = cyNode.data('scale') || 1.0;
-  
-  // Calculate minRadius: parent half-size + child half-size + margin
+
   const parentBBox = cyNode.boundingBox();
-  const parentSize = Math.max(parentBBox.w, parentBBox.h);
-  const parentHalfSize = parentSize / 2;
-  
-  // Child size: same as parent if inheriting, otherwise default 120
-  const childBaseSize = inheritDesign ? parentSize : 120;
-  const childHalfSize = (childBaseSize * nodeScale) / 2;
-  
-  // Gap between the parent's edge and a child's edge. A full child-radius of
-  // breathing room keeps the fan from crowding the parent in open space.
-  const margin = childHalfSize;
-  const minRadius = parentHalfSize + childHalfSize + margin;
-  
-  // Child size for donut placement algorithm
-  const childSize = childBaseSize * nodeScale;
-  
+  const parentHalfSize = Math.max(parentBBox.w, parentBBox.h) / 2;
+
   // Build node obstacles with actual bounding boxes.
   // EXCLUDE the expanding node itself - we grow away from it, it shouldn't block placement.
   const nodeObstacles: NodeObstacle[] = [];
@@ -195,7 +181,32 @@ export async function expandNodeConnections(
   }
   
   if (isDebug('d_transition')) console.log(`[expandNodeConnections] Adding ${connectedIds.length} new nodes (mode: ${mode}, ${allConnectedIds.length - connectedIds.length} already visible)`);
-  
+
+  const currentSceneId = cy.scratch('currentSceneId') as string;
+  const currentScene = currentSceneId ? await graphStore.readScene(currentSceneId) : null;
+  const themeId = currentScene?.themeId || 'dark';
+
+  // Reserve space per the children's real rendered size, not the parent's
+  // (docs/node-expansion-spec.md §3). Each child is measured with the design and
+  // scale it is about to receive; the fan's uniform-size model is fed the
+  // largest, which keeps its no-overlap guarantee. Before, a parent with a long
+  // equation spread title-only children as if each were that wide.
+  const measuredSizes = await Promise.all(
+    connectedIds.map(async connId => {
+      const nodeData = graphStore.nodes.find(n => n.id === connId);
+      if (!nodeData) return 0;
+      const size = await StyleGenerator.measureNode(nodeData, nodeDesign, nodeScale, themeId);
+      return Math.max(size.width, size.height);
+    })
+  );
+  const childSize = Math.max(...measuredSizes);
+  const childHalfSize = childSize / 2;
+
+  // Gap between the parent's edge and a child's edge. A full child-radius of
+  // breathing room keeps the fan from crowding the parent in open space.
+  const margin = childHalfSize;
+  const minRadius = parentHalfSize + childHalfSize + margin;
+
   // Calculate positions with collision avoidance
   let childPositions;
   const useDonutPlacement = true; // test/debug flag
@@ -288,10 +299,6 @@ export async function expandNodeConnections(
   
   // Apply styles to newly added nodes
   if (newNodeIds.length > 0) {
-    const currentSceneId = cy.scratch('currentSceneId') as string;
-    const currentScene = currentSceneId ? await graphStore.readScene(currentSceneId) : null;
-    const themeId = currentScene?.themeId || 'dark';
-    
     const stylesheet = (cy.style() as any).json();
     const nodesToStyle = newNodeIds.map(nId => {
       const nodeData = graphStore.nodes.find(n => n.id === nId);

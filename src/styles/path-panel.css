@@ -114,6 +114,17 @@
   font-size: 12px;
 }
 
+/* Same offset the navigation group has from the breadcrumbs: one rhythm. */
+.path-controls-help {
+  padding-left: 12px;
+}
+
+/* The box matches the navigation buttons; the glyph is sized down because a
+ * question mark at 14px reads far heavier than the guillemets beside it. */
+.path-controls-help .path-btn {
+  font-size: 12px;
+}
+
 .path-btn {
   display: flex;
   align-items: center;
@@ -135,9 +146,15 @@
   border-color: #484f58;
 }
 
+/*
+ * Disabled dims the glyph only (#8b949e at 40%), never the border: six boxes
+ * with identical borders are the panel's visual rhythm, and a faded box
+ * beside a solid one breaks it. SVG icons use currentColor, so this covers
+ * Home as well as the text glyphs.
+ */
 .path-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  color: rgba(139, 148, 158, 0.4);
 }
 
 /*

@@ -3,7 +3,7 @@
  * Handles graph structure operations: adding/removing nodes and edges
  */
 
-import type { Core, NodeSingular } from 'cytoscape';
+import type { Core } from 'cytoscape';
 import type { Node as NodeData, Edge as EdgeData, NodeId, EdgeId, EdgeTypeId, SceneId, Scene, DesignId, DesignParameterId, NodeInfo } from '../../core/main-types';
 import type { AnchorLinkResult } from './anchor-traversal';
 import type { GraphStatistics } from './statistics';
@@ -12,7 +12,7 @@ import { isEditMode } from '../../storage/app-mode';
 import { eventBus } from '../../events/event-bus';
 import { cascadeNodeDeletion } from '../../storage/node-deletion';
 import { StyleGenerator } from '../../styles/style-generator';
-import { placeSingleNode, type SizedObstacle } from '../utils/pure/position-expansion';
+import { placeSingleNodeInScene } from '../utils/cy/node-placement';
 import { getSetting } from '../../config';
 import { AppStateManager } from '../../storage/app-state';
 import { isDebug } from '../../config/debug-flags';
@@ -119,33 +119,16 @@ export class Graph {
       throw new Error('Cannot add nodes in View mode');
     }
 
-    // Generate nodeId with separators: n-XXXX-XXX-XXX-XXX
-    const timestamp = Date.now().toString();
-    const formattedTimestamp = `${timestamp.slice(0, 4)}-${timestamp.slice(4, 7)}-${timestamp.slice(7, 10)}-${timestamp.slice(10)}`;
-    const nodeId = `n-${formattedTimestamp}` as NodeId;
-    
-    // Generate title if not provided: Node X (where X = total nodes + 1)
-    const nodeTitle = title ?? `Node ${graphStore.nodes.length + 1}`;
-
-    const node: NodeData = {
-      id: nodeId,
-      title: nodeTitle,
-      tags: [],
-      properties: properties ?? {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      attachments: [],
-      aiArtifacts: []
-    };
+    const node = this.#buildNodeRecord(title, properties);
 
     // Determine design and scale based on settings
     let nodeDesign = design;
     let nodeScale = scale ?? 1.0;
-    
+
     if (!nodeDesign) {
       const inheritFromSelected = getSetting('node.inheritDesignFromSelected');
       const defaultDesignId = getSetting('node.defaultDesign');
-      
+
       if (inheritFromSelected) {
         const activeNodeId = this.#cy.scratch('activeNodeId');
         if (activeNodeId) {
@@ -159,38 +142,67 @@ export class Graph {
           }
         }
       }
-      
+
       // Fallback to default design from settings
       if (!nodeDesign) {
         nodeDesign = { id: defaultDesignId as DesignId, params: {} };
       }
     }
 
-    // Add to Cytoscape
+    await this.#createNode(node, position, nodeDesign, nodeScale);
+    return node.id;
+  }
+
+  /** A fresh node record: id from the timestamp, title auto-numbered when absent. */
+  #buildNodeRecord(title?: string, properties?: Record<string, unknown>): NodeData {
+    // Generate nodeId with separators: n-XXXX-XXX-XXX-XXX
+    const timestamp = Date.now().toString();
+    const formattedTimestamp = `${timestamp.slice(0, 4)}-${timestamp.slice(4, 7)}-${timestamp.slice(7, 10)}-${timestamp.slice(10)}`;
+    const nodeId = `n-${formattedTimestamp}` as NodeId;
+
+    // Generate title if not provided: Node X (where X = total nodes + 1)
+    const nodeTitle = title ?? `Node ${graphStore.nodes.length + 1}`;
+
+    return {
+      id: nodeId,
+      title: nodeTitle,
+      tags: [],
+      properties: properties ?? {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      attachments: [],
+      aiArtifacts: []
+    };
+  }
+
+  /** Theme of the current scene: what a new node's style is generated for. */
+  async #currentThemeId(): Promise<string> {
+    const currentSceneId = this.#cy.scratch('currentSceneId') as SceneId;
+    const currentScene = currentSceneId ? await graphStore.readScene(currentSceneId) : null;
+    return currentScene?.themeId || 'dark';
+  }
+
+  /** Add the node to Cytoscape at `position` and style it for the current theme. */
+  async #createNode(
+    node: NodeData,
+    position: { x: number; y: number },
+    design: { id: DesignId; params: Record<string, unknown> },
+    scale: number
+  ): Promise<void> {
     this.#cy.add({
       group: 'nodes',
-      data: {
-        ...node,
-        design: nodeDesign,
-        scale: nodeScale
-      },
+      data: { ...node, design, scale },
       position
     });
 
-    // Apply style via stylesheet - use current scene's theme
-    const currentSceneId = this.#cy.scratch('currentSceneId') as SceneId;
-    const currentScene = currentSceneId ? await graphStore.readScene(currentSceneId) : null;
-    const themeId = currentScene?.themeId || 'dark';
-    
+    const themeId = await this.#currentThemeId();
     const stylesheet = (this.#cy.style() as any).json();
     const updatedStylesheet = await StyleGenerator.addNodesToStylesheet(
       stylesheet,
-      [{ nodeId, nodeData: node, design: nodeDesign, scale: nodeScale }],
+      [{ nodeId: node.id, nodeData: node, design, scale }],
       themeId
     );
     this.#cy.style().fromJson(updatedStylesheet).update();
-
-    return nodeId;
   }
 
   /**
@@ -223,43 +235,22 @@ export class Graph {
       throw new Error(`Node ${nodeId} not found`);
     }
 
-    // Get existing node data
-    const nodePos = existingNode.position();
-
     // Determine design and scale: explicit > inherit from parent > default
-    let nodeDesign = design;
-    let nodeScale = 1.0;
-    
     const inheritDesign = getSetting('node.inheritDesignForConnected');
-    if (!nodeDesign && inheritDesign) {
-      nodeDesign = existingNode.data('design') || { id: getSetting('node.defaultDesign') as DesignId, params: {} };
-      nodeScale = existingNode.data('scale') ?? 1.0;
-    } else if (!nodeDesign) {
-      nodeDesign = { id: getSetting('node.defaultDesign') as DesignId, params: {} };
-    }
+    const defaultDesign = { id: getSetting('node.defaultDesign') as DesignId, params: {} };
+    const nodeDesign: { id: DesignId; params: Record<string, unknown> } =
+      design ?? (inheritDesign ? existingNode.data('design') ?? defaultDesign : defaultDesign);
+    const nodeScale: number = !design && inheritDesign ? existingNode.data('scale') ?? 1.0 : 1.0;
 
-    // Node sizes for placement (docs/node-placement.md §4): use each node's
-    // bounding-circle radius (0.5·√(w²+h²)) so diagonal placements clear the
-    // rectangle corners, not just the axis-aligned edges.
-    const nodeBBox = existingNode.boundingBox();
-    const parentHalf = 0.5 * Math.hypot(nodeBBox.w, nodeBBox.h);
+    // Measure the node as it will render, then place it (docs/node-placement.md
+    // §4). Size is a style outcome the design computes from title, content and
+    // scale; estimating it from the parent was wrong for content-sized designs.
+    const node = this.#buildNodeRecord(title, properties);
+    const size = await StyleGenerator.measureNode(node, nodeDesign, nodeScale, await this.#currentThemeId());
+    const newPos = placeSingleNodeInScene(this.#cy, existingNode, size, getSetting('node.spacing'));
 
-    // Child size: same as parent if inheriting, otherwise default 120. Convert
-    // the max-dimension estimate to a bounding-circle radius via √2.
-    const childBaseSize = inheritDesign ? Math.max(nodeBBox.w, nodeBBox.h) : 120;
-    const childHalf = (childBaseSize * nodeScale / 2) * Math.SQRT2;
-
-    // Nearest non-overlapping spot near the reference, sized from actual bboxes.
-    const obstacles: SizedObstacle[] = this.#cy.nodes()
-      .filter(n => n.id() !== (nodeId as string))
-      .map((n: NodeSingular) => {
-        const bb = n.boundingBox();
-        return { pos: n.position(), half: 0.5 * Math.hypot(bb.w, bb.h) };
-      });
-    const newPos = placeSingleNode(nodePos, parentHalf, childHalf, obstacles, getSetting('node.spacing'));
-
-    // Create new node with determined design and scale (title will be auto-generated if not provided)
-    const newNodeId = await this.addFreeNode(newPos, title, nodeDesign, properties, nodeScale);
+    await this.#createNode(node, newPos, nodeDesign, nodeScale);
+    const newNodeId = node.id;
 
     // Create edge based on direction
     if (direction === 'child') {

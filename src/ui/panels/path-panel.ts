@@ -16,6 +16,7 @@ import type { FeatureAPI } from '../../features/feature-api';
 import { graphStore } from '../../storage/graph-store';
 import { PathManager } from '../components/path-manager';
 import { PathJumpList } from '../components/path-manager/path-jump-list';
+import { ShortcutOverlay } from '../components/shortcut-overlay';
 import { BreadcrumbWindow } from './breadcrumb-window';
 import '../../styles/path-panel.css';
 
@@ -27,6 +28,8 @@ export class PathPanel {
   #window = new BreadcrumbWindow();
   #manager: PathManager;
   #jumpList = new PathJumpList();
+  /** The F1 reference, reachable by mouse for those who would not guess F1. */
+  #shortcutOverlay = new ShortcutOverlay();
 
   constructor(cy: Core, features: FeatureAPI, container: HTMLElement) {
     this.#cy = cy;
@@ -163,11 +166,20 @@ export class PathPanel {
       </div>
     `;
 
+    // Its own group, not a fifth navigation button: the four above are one
+    // control, and the gap keeps them reading that way.
+    const helpControls = `
+      <div class="path-controls path-controls-help">
+        <button class="path-btn" data-action="help" title="Commands and shortcuts (F1)">?</button>
+      </div>
+    `;
+
     this.#container.innerHTML = `
       <div class="path-panel ${this.#visible ? '' : 'hidden'}">
         ${leftControls}
         <div class="path-breadcrumbs">${content}</div>
         ${rightControls}
+        ${helpControls}
       </div>
     `;
 
@@ -239,6 +251,15 @@ export class PathPanel {
       if (sceneId) {
         await this.#features.transition.goToSceneFromPath(sceneId);
       }
+    });
+
+    // Help button — the same dialog F1 toggles. Blurred after the click: the
+    // navigation buttons never keep focus because the panel re-renders after
+    // each of them, and this one must not be the only button with a focus ring.
+    const helpBtn = this.#container.querySelector<HTMLButtonElement>('[data-action="help"]');
+    helpBtn?.addEventListener('click', () => {
+      this.#shortcutOverlay.toggle();
+      helpBtn.blur();
     });
   }
 

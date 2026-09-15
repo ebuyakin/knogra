@@ -40,6 +40,23 @@ export class StyleGenerator {
   }
 
   /**
+   * The size a node will render at, before it exists in any scene: the design's
+   * width and height with the scene scale applied, the same arithmetic
+   * addNodesToStylesheet performs when the node is added. Placement asks this
+   * rather than guessing a size from neighbouring nodes, because size is a style
+   * outcome only the design can compute (docs/node-placement.md §4).
+   */
+  static async measureNode(
+    node: Node,
+    design: { id: string; params: Record<string, unknown> },
+    scale: number,
+    themeId: string = 'dark'
+  ): Promise<{ width: number; height: number }> {
+    const style = await this.generateNodeStyle(node, design, themeId);
+    return { width: style.width * scale, height: style.height * scale };
+  }
+
+  /**
    * Generate default edge style
    * Returns CSS for all edges based on theme
    */

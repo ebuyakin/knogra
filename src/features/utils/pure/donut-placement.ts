@@ -331,6 +331,13 @@ function freeSectors(arcs: Arc[]): Sector[] {
  * existing nodes (and, unless `ignoreEdges`, existing edges), and its connector
  * P→p against existing nodes (always) and non-incident existing edges (unless
  * `ignoreEdges`). This is only a safety net inside a genuine free sector.
+ *
+ * The connector test is skipped for a node whose circle already contains P: the
+ * connector starts at P, so its distance to that node's centre can never exceed
+ * the P-to-centre distance and the test would reject every candidate. A wide
+ * node above or below P does this routinely, because a node's circle is as wide
+ * as its longest side in every direction. Such a node still blocks a full
+ * half-circle in the compass step and still counts for body overlap.
  */
 function obstacleClear(
   parentPos: Position,
@@ -342,7 +349,9 @@ function obstacleClear(
 ): boolean {
   for (const n of nodes) {
     if (distance(p, n.pos) < childRadius + n.size / 2 + NODE_MARGIN) return false;
-    if (pointSegmentDistance(n.pos, parentPos, p) < n.size / 2 + EDGE_MARGIN) return false;
+    const connectorClearance = n.size / 2 + EDGE_MARGIN;
+    const parentInsideNode = distance(parentPos, n.pos) < connectorClearance;
+    if (!parentInsideNode && pointSegmentDistance(n.pos, parentPos, p) < connectorClearance) return false;
   }
   if (!ignoreEdges) {
     for (const e of edges) {
@@ -489,6 +498,11 @@ function resolveOutwardAxis(
  * stops at the first radius that is `siblingMin` clear of every placed sibling and
  * clears obstacles. To stay visible (§4.6.3) it prefers an on-screen radius with
  * only slight sibling overlap over an off-screen fully-clear one.
+ *
+ * When no radius on the ray clears, the child takes the nearest radius whose body
+ * clears every node (the §4.8 test: connector and edges ignored, viewport ignored)
+ * rather than the far cap. Off-screen is acceptable in expansion; unreachably far
+ * is not.
  */
 function placeChildOnRay(
   P: Position,
@@ -505,11 +519,9 @@ function placeChildOnRay(
 ): Position {
   let firstClear: { p: Position; onScreen: boolean } | null = null;
   let visibleSlight: Position | null = null;
-  let last = polarToCartesian(P, angleDeg, minRadius);
 
   for (let r = minRadius; r <= maxRadius; r += RADIUS_STEP) {
     const p = polarToCartesian(P, angleDeg, r);
-    last = p;
     if (!obstacleClear(P, p, childRadius, nodes, edges, ignoreEdges)) continue;
 
     const onScreen = isOnScreen(p, childRadius, vp);
@@ -523,7 +535,10 @@ function placeChildOnRay(
     }
   }
 
-  if (firstClear === null) return visibleSlight ?? last;
+  if (firstClear === null) {
+    return visibleSlight
+      ?? nearestPackRadius(P, angleDeg, childRadius, siblingMin, minRadius, maxRadius, nodes, placed);
+  }
   if (firstClear.onScreen) return firstClear.p;
   return visibleSlight ?? firstClear.p;
 }
