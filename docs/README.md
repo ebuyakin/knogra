@@ -88,5 +88,5 @@ recorded now lives in `.github/project-journal.md`.
 
 | Document | Status | Notes |
 |---|---|---|
-| [marketing.md](marketing.md) | Current | Canonical marketing copy and directory listing notes. |
+| [marketing.md](marketing.md) | Superseded | Superseded 2026-09-20 by the live site (`knogra-site` repo), which is the source of truth for copy. Background only: friction points, pillars, keywords, directory-listing notes. |
 | [marketing-raw-ideas.md](marketing-raw-ideas.md) | Scratchpad | Brainstorming and rejected copy; not canonical. |

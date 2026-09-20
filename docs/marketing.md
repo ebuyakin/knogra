@@ -1,8 +1,8 @@
 # Knogra — Marketing Copy
 
-> **Status:** Current  
+> **Status:** Superseded (marked 2026-09-20). The live site in the `knogra-site` repo is the source of truth for all Knogra copy. The body below is unchanged and still speaks as if it were canonical; it is not. Known stale: the provider list (two of four), the tagline, "no telemetry" in B4. Kept as background for the friction points, pillars, keyword cluster and directory-listing notes.  
 > **Last reviewed:** 2026-07-21  
-> **Authority:** Canonical source for approved marketing copy and directory listing notes.  
+> **Authority:** None for current copy. Formerly the canonical source for approved marketing copy and directory listing notes.  
 > **Related:** [Documentation map](README.md), [Marketing raw ideas](marketing-raw-ideas.md), [Product vision](knogra-vision.md)
 
 **Canonical** copy for every place Knogra is described. Each slot has one purpose, one consumer, one approved version.

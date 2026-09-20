@@ -1,6 +1,6 @@
 # Knogra
 
-**Think in graphs. Learn visually.**
+**Chart the whole subject. One scene at a time.**
 
 Knogra is a browser-based knowledge graph editor where every concept gets its own focused view. Navigate between nodes with smooth spatial transitions, illustrate them with AI-generated SVG pictograms, annotate with an assistant that understands your graph, and arrange layouts that reflect how you think — not just how the algorithm thinks.
 
@@ -28,11 +28,12 @@ Knogra runs at **[app.knogra.io](https://app.knogra.io)** — nothing to install
 
 ## What you can build
 
-- **Mind maps** — free-form thinking with structure when you need it
-- **Concept maps** — labeled relationships, not just hierarchies
-- **Memory palaces** — spatial navigation that builds associations that stick
-- **Equation collections** — LaTeX math rendering inside nodes
-- **Semantic networks** — classic knowledge representation, modern interface
+- **Mind maps** — free-form thinking with structure when you need it. Not locked into rigid hierarchies.
+- **Concept maps** — labeled relationships between ideas. See how concepts connect, not just how they nest.
+- **Memory palaces** — navigate scenes spatially. Visual transitions build the associations that stick.
+- **Equation collections** — LaTeX cheat sheets that live inside your knowledge graph. Math where it belongs.
+- **Semantic networks** — nodes are concepts, edges are relationships. Classic knowledge representation, modern interface.
+- **Nested mind maps** — mind maps inside mind maps: any node opens into a map of its own. Recursive mind maps, as deep as the subject goes.
 
 ## Features
 
