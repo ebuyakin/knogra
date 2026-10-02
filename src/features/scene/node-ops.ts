@@ -258,7 +258,7 @@ export class SceneNodeOps {
 
     const themeId = this.#getThemeId();
     const stylesheet = (this.#cy.style() as any).json();
-    let updatedStylesheet = await StyleGenerator.updateNodeInStylesheet(
+    const updatedStylesheet = await StyleGenerator.updateNodeInStylesheet(
       stylesheet,
       nodeId,
       nodeData,

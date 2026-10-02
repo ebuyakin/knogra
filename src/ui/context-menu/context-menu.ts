@@ -14,6 +14,7 @@ import type { MenuItem, MenuPosition } from './menu-renderer';
 import { buildNodeMenu } from './node-menu';
 import { buildEdgeMenu } from './edge-menu';
 import { buildCanvasMenu } from './canvas-menu';
+import { buildMapMenu } from './map-menu';
 import { openNodeEditor, openEdgeEditor } from '../components/editor-openers';
 import { isEditMode } from '../../storage/app-mode';
 import { getSetting } from '../../config';
@@ -89,6 +90,31 @@ export class ContextMenu {
       }
     });
 
+    // The map's clicks (docs/map-view.md §5.3): a single tap selects, as
+    // everywhere; a right-click on a small box balloons it, anywhere else it is
+    // the map menu; a double-tap on a landmark re-focuses, as double-tap
+    // navigates in a scene, and on a marker balloons. The map's surface sits
+    // in the same grid cell as the scene container, so rendered positions
+    // land on the same renderer.
+    const mapCy = this.#deps.mapCy;
+    const mapView = this.#deps.features.mapView;
+    mapCy.on('cxttap', (event) => {
+      event.preventDefault();
+      if (event.target !== mapCy && mapView.needsPreview(event.target.id() as string)) {
+        mapView.togglePreview(event.target.id() as string);
+        return;
+      }
+      this.#showWhenActive(buildMapMenu(this.#deps), event.renderedPosition);
+    });
+
+    mapCy.on('dbltap', 'node', (event) => {
+      if (event.target.data('depth') === 1) {
+        mapView.focusOn(event.target.data('nodeId') as NodeId);
+        return;
+      }
+      mapView.togglePreview(event.target.id() as string);
+    });
+
     // Close menu on any click outside
     document.addEventListener('click', () => {
       this.#renderer.close();
@@ -156,5 +182,6 @@ export class ContextMenu {
     this.#cancelPendingShow();
     this.#renderer.close();
     this.#deps.cy.off('cxttap');
+    this.#deps.mapCy.off('cxttap dbltap');
   }
 }

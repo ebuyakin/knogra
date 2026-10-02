@@ -201,5 +201,5 @@ function stripTrailingSentencePunctuation(text: string): string {
 }
 
 function containsEquationSyntax(text: string): boolean {
-  return /[=+\-*/^_(){}\\\[\]]/.test(text) || /\\[a-zA-Z]+/.test(text);
+  return /[=+\-*/^_(){}\\[\]]/.test(text) || /\\[a-zA-Z]+/.test(text);
 }

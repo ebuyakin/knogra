@@ -99,6 +99,7 @@ The file is a copy taken at a moment.
 | IndexedDB `knogra-chat` | conversations |
 | IndexedDB `knogra-paths` | saved paths |
 | IndexedDB `knogra-themes` | custom themes |
+| IndexedDB `knogra-map` | map view records (added 2026-09-23, [map-view.md](map-view.md) §6.2) |
 | localStorage `knogra.*` | settings, shelf, app state |
 
 **Two privacy carve-outs, load-bearing:** `exportSettings()` strips API keys, and
@@ -215,13 +216,16 @@ this is **structurally lossless**: a container swap, not a schema change.
   "paths":            [],
   "settings":         {},
   "shelf":            {},
-  "appState":         {}
+  "appState":         {},
+  "mapViews":         []
 }
 ```
 
 `manifest.format` and `manifest.version` are new and mandatory — they let the reader recognise the
 file instead of guessing. Every other key is optional, which is the contract the null-checked reads
 already honour.
+
+`mapViews` (2026-09-23) is the first member added since the format was introduced. Optional, normalised to empty, no version bump: a file from either side of the addition reads unchanged.
 
 **Serialized unindented** — `JSON.stringify(envelope)` with no spacer. The purpose of the format is
 that the file is transparent, inspectable and programmatically convertible; pretty-printing is a
@@ -356,6 +360,7 @@ GRAPH_DB_NAME = 'knogra-graph'
 CHAT_DB_NAME  = 'knogra-chat'
 PATH_DB_NAME  = 'knogra-paths'
 THEME_DB_NAME = 'knogra-themes'
+MAP_DB_NAME   = 'knogra-map'
 
 // localStorage keys
 STATE_KEY    = 'knogra.state'      // App session state
@@ -367,7 +372,7 @@ WORKSPACE_FORMAT  = 'knogra-workspace'
 WORKSPACE_VERSION = '2.0'
 ```
 
-Four databases, not two — a workspace file that forgets paths or themes is not lossless.
+Five databases, not two — a workspace file that forgets paths, themes or map views is not lossless.
 
 ---
 

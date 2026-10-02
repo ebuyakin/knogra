@@ -19,6 +19,7 @@ import { QuizPanel } from './quiz-panel';
 import { ContextMenu } from '../context-menu/context-menu';
 import { PasteStyleDialog } from './paste-style-dialog';
 import { AnchorLinkTooltip } from './anchor-link-tooltip';
+import { MapBoxTooltip } from './map-box-tooltip';
 import { QuickTitleEditor } from './quick-title-editor';
 import { ConnectionBadgeManager } from './connection-badge';
 import { FoldBadgeManager } from './fold-badge';
@@ -39,6 +40,7 @@ export class UIComponentAPI {
   readonly themePicker: ThemePicker;
   readonly quizPanel: QuizPanel;
   readonly anchorLinkTooltip: AnchorLinkTooltip;
+  readonly mapBoxTooltip: MapBoxTooltip;
   readonly quickTitleEditor: QuickTitleEditor;
   readonly contextMenu: ContextMenu;
   readonly pasteStyleDialog: PasteStyleDialog;
@@ -48,7 +50,8 @@ export class UIComponentAPI {
   readonly keyboardHandler: KeyboardHandler;
   readonly transitionInputGuard: TransitionInputGuard;
 
-  constructor(cy: Core, container: HTMLElement, features: FeatureAPI) {
+  /** Both surfaces come from main.ts; the UI never obtains an instance or a container from a feature. */
+  constructor(cy: Core, container: HTMLElement, features: FeatureAPI, mapCy: Core, mapContainer: HTMLElement) {
     // Create editors (independent)
     this.nodeEditor = new NodeEditor();
     this.edgeEditor = new EdgeEditor();
@@ -63,6 +66,7 @@ export class UIComponentAPI {
     this.themePicker = new ThemePicker();
     this.quizPanel = new QuizPanel(features, container);
     this.anchorLinkTooltip = new AnchorLinkTooltip(cy, container);
+    this.mapBoxTooltip = new MapBoxTooltip(mapCy, mapContainer, features);
     this.quickTitleEditor = new QuickTitleEditor(cy, container);
     this.edgeCreationMode = new EdgeCreationMode(cy, container, features);
     this.pasteStyleDialog = new PasteStyleDialog(features);
@@ -71,6 +75,7 @@ export class UIComponentAPI {
     this.contextMenu = new ContextMenu({
       cy,
       container,
+      mapCy,
       features,
       edgeCreationMode: this.edgeCreationMode,
       nodeEditor: this.nodeEditor,

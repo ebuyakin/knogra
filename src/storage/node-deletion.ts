@@ -8,6 +8,7 @@
  * - Paths (remove deleted scenes)
  * - Chat (delete conversation)
  * - Node images (delete owned SVG pictograms)
+ * - Map view (delete the record focused on the node)
  *
  * The shelf is deliberately absent: it lives in localStorage, owns its own format,
  * and drops suggestions referring to a missing node when it next reconciles.
@@ -17,6 +18,7 @@ import type { EdgeId, FoldedNodeEntry, NodeId, Scene, SceneId } from '../core/ma
 import { graphStore } from './graph-store';
 import { chatStore } from './chat-store';
 import { pathStore } from './path-store';
+import { mapStore } from './map-store';
 import { isDebug } from '../config/debug-flags';
 
 export interface CascadeNodeDeletionResult {
@@ -67,7 +69,12 @@ export async function cascadeNodeDeletion(nodeId: NodeId): Promise<CascadeNodeDe
   //    which is what makes this unconditional and orphans impossible.
   await graphStore.deleteNodeImagesForNode(nodeId);
   if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Deleted images for node: ${nodeId}`);
-  
+
+  // 7. Delete the map view focused on this node. Records of other focuses may
+  //    still hold addresses through it; the map view drops those itself.
+  await mapStore.deleteMapView(nodeId);
+  if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Deleted map view for node: ${nodeId}`);
+
   if (isDebug('d_deletion')) console.log(`[cascadeNodeDeletion] Complete for node: ${nodeId}`);
   
   return { deletedSceneIds: scenesToDelete, incidentEdgeIds };

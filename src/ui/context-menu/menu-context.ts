@@ -35,6 +35,8 @@ import { getAppMode, setAppMode } from '../../storage/app-mode';
 export interface MenuDependencies {
   cy: Core;
   container: HTMLElement;
+  /** The map view's instance, injected from main.ts like `cy`; its surface shares the scene container's cell. */
+  mapCy: Core;
   features: FeatureAPI;
   edgeCreationMode: EdgeCreationMode;
   nodeEditor: NodeEditor;

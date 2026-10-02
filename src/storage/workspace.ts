@@ -19,6 +19,7 @@ import {
   exportBackgroundImages,
   exportConversations,
   exportGraphData,
+  exportMapViews,
   exportPaths,
   exportSettings,
   exportShelf,
@@ -27,6 +28,7 @@ import {
   importAppState,
   importConversations,
   importGraphData,
+  importMapViews,
   importPaths,
   importSettings,
   importShelf,
@@ -175,6 +177,7 @@ export async function exportWorkspace(): Promise<void> {
     appState: AppStateManager.getExportableAppState(),
     themes: await exportThemes(),
     nodeImagePresets: exportNodeImagePresets(),
+    mapViews: await exportMapViews(),
   });
 
   const blob = new Blob([serializeEnvelope(envelope)], { type: 'application/json' });
@@ -367,7 +370,10 @@ export async function importWorkspace(file: File): Promise<boolean> {
     
     // 11. Import custom themes to IndexedDB
     await importThemes(themes);
-    
+
+    // 11b. Map views to IndexedDB. A legacy ZIP carries none.
+    await importMapViews(members.mapViews ?? []);
+
     // 12. Reload to apply changes
     // ping before reload — keepalive:true in telemetry.ts ensures the request
     // completes even as the page unloads.

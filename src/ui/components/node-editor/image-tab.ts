@@ -55,7 +55,7 @@ export function createImageTab(deps: ImageTabDeps): EditorTab<ImageTabValues> {
 
   // The record the node should end up with, and the ids this edit superseded.
   let draft: NodeImage | null = null;
-  let removedImageIds: NodeImageId[] = [];
+  const removedImageIds: NodeImageId[] = [];
   // Set as soon as the user acts, so the async load of the existing record
   // cannot overwrite an image they attached while it was still in flight.
   let touched = false;

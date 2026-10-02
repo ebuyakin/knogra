@@ -200,7 +200,7 @@ export async function collapseNodesCascading(
   // Calculate distances ONCE at the start (pure function)
   const allDistances = calculateDistances(rootNodeId, nodesToRemove, edgesForDistance);
   
-  let remainingNodes = new Set(nodesToRemove);
+  const remainingNodes = new Set(nodesToRemove);
   const allAnimatedNodes: NodeId[] = []; // Collect all nodes to remove at the end
 
   // Helper to get parent position

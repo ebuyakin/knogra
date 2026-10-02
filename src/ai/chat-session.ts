@@ -42,6 +42,8 @@ export class ChatSession {
   #provider: AIProvider | null = null;
   #currentNodeId: NodeId | null = null;
   #currentSceneId: SceneId | null = null;
+  /** What was loaded when the map view was entered, restored on leaving it. */
+  #beforeMap: { nodeId: NodeId; sceneId: SceneId } | null = null;
   #messages: ChatMessage[] = [];
   #pendingActions: ProposedAction[] = [];
   #state: ChatSessionState = 'idle';
@@ -322,6 +324,25 @@ export class ChatSession {
     eventBus.on('sceneChanged', ({ sceneId, centralNodeId }) => {
       if (isDebug('d_chat')) console.log(`[ChatSession] Scene changed to ${sceneId}, loading chat for node ${centralNodeId}`);
       this.loadForNode(centralNodeId, sceneId);
+    });
+
+    // The map view: conversations are node-keyed, so the learning space follows
+    // the focus; the scene id stays the scene underneath, because the context
+    // is still built from it (docs/map-view.md §7.5). Leaving restores what was
+    // loaded before entering, unless a scene change has since replaced it.
+    eventBus.on('mapViewChanged', ({ active, focusNodeId }) => {
+      const sceneId = this.#currentSceneId;
+      if (!sceneId) return;
+      if (active && focusNodeId) {
+        if (!this.#beforeMap && this.#currentNodeId) this.#beforeMap = { nodeId: this.#currentNodeId, sceneId };
+        this.loadForNode(focusNodeId, sceneId);
+        return;
+      }
+      if (!active && this.#beforeMap) {
+        const { nodeId, sceneId: previousSceneId } = this.#beforeMap;
+        this.#beforeMap = null;
+        this.loadForNode(nodeId, previousSceneId);
+      }
     });
   }
 }

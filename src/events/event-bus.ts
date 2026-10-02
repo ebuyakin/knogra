@@ -33,6 +33,14 @@ export interface EventMap {
    * the mode in the UI; they never carry correctness.
    */
   pathModeChanged: { active: boolean; pathId: PathId | null; name: string | null };
+  /**
+   * Map view shown, re-focused, or hidden. Emitted by the MapView feature,
+   * which owns the regime (docs/map-view.md §7.3–§7.5). Never `sceneChanged`:
+   * AppState would record a last scene that does not exist and Path would push
+   * it into history. `active` serves the regime, `focusNodeId` the node-keyed
+   * subscribers (chat, shelf).
+   */
+  mapViewChanged: { active: boolean; focusNodeId: NodeId | null };
   // Future events:
   // nodeSelected: { nodeId: NodeId };
 }

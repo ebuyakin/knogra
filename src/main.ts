@@ -54,6 +54,23 @@ if (!container) throw new Error('Container #cy not found');
 const cy = cytoscape({ container, style: [], layout: { name: 'preset', fit: false }, multiClickDebounceTime: DOUBLE_CLICK_INTERVAL_MS });
 const backgroundRenderer = new BackgroundRenderer(container);
 
+// Map view: its own instance on its own surface, so nothing wired to `cy` ever
+// sees a map element (docs/map-view.md §7). The focus is pinned to the centre
+// and the map fits itself, so the user neither pans nor zooms; the feature
+// makes boxes grabbable in Edit mode.
+const mapContainer = document.getElementById('map');
+if (!mapContainer) throw new Error('Container #map not found');
+const mapCy = cytoscape({
+  container: mapContainer,
+  style: [],
+  layout: { name: 'preset', fit: false },
+  userPanningEnabled: false,
+  userZoomingEnabled: false,
+  boxSelectionEnabled: false,
+  autoungrabify: true,
+  multiClickDebounceTime: DOUBLE_CLICK_INTERVAL_MS,
+});
+
 // =============================================================================
 // 3. PERSISTENCE (low-level, before anything can trigger saves)
 // =============================================================================
@@ -137,12 +154,12 @@ const currentSceneId: SceneId = sceneExists ? lastSceneId : graphStore.scenes[0]
 // =============================================================================
 // 5. FEATURES (high-level business logic)
 // =============================================================================
-const features = new FeatureAPI(cy, backgroundRenderer);
+const features = new FeatureAPI(cy, backgroundRenderer, mapCy);
 
 // =============================================================================
 // 6. UI (components and panels)
 // =============================================================================
-const components = new UIComponentAPI(cy, container, features);
+const components = new UIComponentAPI(cy, container, features, mapCy, mapContainer);
 const panels = new PanelAPI(cy, features);
 
 // Setup resize observer for graph container
@@ -157,6 +174,7 @@ const resizeObserver = new ResizeObserver(() => {
   resizeTimeout = setTimeout(() => {
     features.scene.handleResize();
     features.sceneBackground.resize(container.clientWidth, container.clientHeight);
+    features.mapView.handleResize();
   }, 200);
 });
 resizeObserver.observe(container);

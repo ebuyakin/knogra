@@ -19,6 +19,9 @@ import {
   THEME_DB_NAME,
   THEME_DB_VERSION,
   THEME_DB_SCHEMA,
+  MAP_DB_NAME,
+  MAP_DB_VERSION,
+  MAP_DB_SCHEMA,
   SETTINGS_KEY,
   SHELF_KEY,
   STATE_KEY,
@@ -342,6 +345,12 @@ export async function exportThemes(): Promise<unknown[]> {
   return db.table('themes').toArray();
 }
 
+export async function exportMapViews(): Promise<unknown[]> {
+  const db = new Dexie(MAP_DB_NAME);
+  db.version(MAP_DB_VERSION).stores(MAP_DB_SCHEMA);
+  return db.table('mapViews').toArray();
+}
+
 export async function clearAllData(keepSettings = false): Promise<void> {
   const graphDb = new Dexie(GRAPH_DB_NAME);
   graphDb.version(GRAPH_DB_VERSION).stores(GRAPH_DB_SCHEMA);
@@ -359,6 +368,10 @@ export async function clearAllData(keepSettings = false): Promise<void> {
   const pathDb = new Dexie(PATH_DB_NAME);
   pathDb.version(PATH_DB_VERSION).stores(PATH_DB_SCHEMA);
   await pathDb.table('paths').clear();
+
+  const mapDb = new Dexie(MAP_DB_NAME);
+  mapDb.version(MAP_DB_VERSION).stores(MAP_DB_SCHEMA);
+  await mapDb.table('mapViews').clear();
 
   localStorage.removeItem(SHELF_KEY);
 
@@ -535,6 +548,14 @@ export async function importThemes(themes: unknown[]): Promise<void> {
   const db = new Dexie(THEME_DB_NAME);
   db.version(THEME_DB_VERSION).stores(THEME_DB_SCHEMA);
   await db.table('themes').bulkPut(themes);
+}
+
+export async function importMapViews(mapViews: unknown[]): Promise<void> {
+  if (mapViews.length === 0) return;
+
+  const db = new Dexie(MAP_DB_NAME);
+  db.version(MAP_DB_VERSION).stores(MAP_DB_SCHEMA);
+  await db.table('mapViews').bulkPut(mapViews);
 }
 
 /**

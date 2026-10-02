@@ -8,7 +8,6 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   if (className) element.className = className;
 
   // Handle dataset separately if provided, otherwise Object.assign handles standard props
-  // @ts-ignore
   const { dataset, style, ...restProps } = props;
   Object.assign(element, restProps);
   

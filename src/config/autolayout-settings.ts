@@ -12,7 +12,7 @@
  * point for a growing collection of layout algorithms.
  */
 export const AUTOLAYOUT_DEFAULTS = {
-  layoutType: 'radial' as 'radial',
+  layoutType: 'radial' as const,
   ringSpacing: 220,
   siblingGap: 40,
   /** Scales the reserved node footprint used when sizing ring radii. The

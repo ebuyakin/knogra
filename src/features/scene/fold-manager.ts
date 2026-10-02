@@ -525,7 +525,7 @@ export class FoldManager {
 
     // Calculate distances from root to each node-to-hide
     const allDistances = calculateDistances(rootNodeId, nodesToHide, edges as any);
-    let remainingNodes = new Set(nodesToHide);
+    const remainingNodes = new Set(nodesToHide);
 
     while (remainingNodes.size > 0) {
       const maxDistance = findMaxDistance(remainingNodes, allDistances);

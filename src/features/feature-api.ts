@@ -15,6 +15,7 @@ import { Path } from './path/path';
 import { Quiz } from './quiz';
 import { AutoLayout } from './autolayout/autolayout';
 import { Arrange } from './arrange/arrange';
+import { MapView } from './map-view/map-view';
 
 export class FeatureAPI {
   scene: Scene;
@@ -27,8 +28,10 @@ export class FeatureAPI {
   quiz: Quiz;
   autolayout: AutoLayout;
   arrange: Arrange;
+  mapView: MapView;
 
-  constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
+  /** `mapCy` is the map view's own instance; every other feature shares the scene's `cy`. */
+  constructor(cy: Core, backgroundRenderer: BackgroundRenderer, mapCy: Core) {
     this.scene = new Scene(cy);
     this.sceneBackground = new SceneBackground(cy, backgroundRenderer);
     this.node = new Node(cy);
@@ -39,5 +42,6 @@ export class FeatureAPI {
     this.quiz = new Quiz(cy);
     this.autolayout = new AutoLayout(cy);
     this.arrange = new Arrange(cy);
+    this.mapView = new MapView(mapCy);
   }
 }

@@ -12,12 +12,17 @@ export const GRAPH_DB_NAME = 'knogra-graph';
 export const CHAT_DB_NAME = 'knogra-chat';
 export const PATH_DB_NAME = 'knogra-paths';
 export const THEME_DB_NAME = 'knogra-themes';
+// Map view records, one per focus node. Its own database, like paths and
+// themes, so the map view touches neither the graph database's schema nor its
+// store class — see docs/map-view.md §6.2.
+export const MAP_DB_NAME = 'knogra-map';
 
 // IndexedDB schema versions
 export const GRAPH_DB_VERSION = 4;
 export const CHAT_DB_VERSION = 1;
 export const PATH_DB_VERSION = 1;
 export const THEME_DB_VERSION = 1;
+export const MAP_DB_VERSION = 1;
 
 // IndexedDB schemas (Dexie format)
 export const GRAPH_DB_SCHEMA = {
@@ -42,6 +47,10 @@ export const PATH_DB_SCHEMA = {
 
 export const THEME_DB_SCHEMA = {
   themes: 'id, name, createdAt'
+};
+
+export const MAP_DB_SCHEMA = {
+  mapViews: 'focusNodeId, updatedAt'
 };
 
 // localStorage keys

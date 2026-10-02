@@ -52,6 +52,12 @@ export interface WorkspaceMembers {
    * a default the way every other member is normalised would collapse the two.
    */
   nodeImagePresets?: unknown;
+  /**
+   * Map view records — shape owned by `storage/map-store.ts`. Optional because
+   * files written before the map view carry none; absent and empty mean the
+   * same thing here, so it is normalised like every other member.
+   */
+  mapViews?: unknown[];
 }
 
 export interface WorkspaceEnvelope extends WorkspaceMembers {
@@ -193,5 +199,6 @@ export function parseEnvelope(text: string): WorkspaceEnvelope {
     // Passed through rather than normalised, so the reader can still tell a
     // file that carried no presets from one that carried none deliberately.
     nodeImagePresets: source.nodeImagePresets,
+    mapViews: asArray(source.mapViews),
   };
 }

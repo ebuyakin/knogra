@@ -242,7 +242,7 @@ export function renderMarkdown(text: string): string {
   html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
 
   // Unordered lists (- ... or * ...)
-  html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
   html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
 
   // Ordered lists (1. ...)
@@ -263,7 +263,9 @@ export function renderMarkdown(text: string): string {
   html = html.replace(/<p>\s*<hr>\s*<\/p>/g, '<hr>');
   html = html.replace(/<p>\s*<\/p>/g, '');
 
-  // Restore math spans verbatim so MathJax can typeset them
+  // Restore math spans verbatim so MathJax can typeset them. NUL is the
+  // placeholder's fence because no text a model returns contains it.
+  // eslint-disable-next-line no-control-regex
   html = html.replace(/\u0000MATH(\d+)\u0000/g, (_, index: string) => mathSpans[Number(index)] ?? '');
 
   return html;

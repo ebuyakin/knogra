@@ -43,6 +43,13 @@ export function buildCanvasMenu(deps: MenuDependencies, position: MenuPosition):
     buildSceneDesignMenu(deps, editMode),
     buildArrangeMenu(deps.features, editMode),
     buildZoomMenu(deps),
+    {
+      label: 'Helicopter view',
+      action: () => {
+        const centralNodeId = deps.features.scene.getCentralNodeId();
+        if (centralNodeId) deps.features.mapView.show(centralNodeId);
+      }
+    },
     createModeMenuItem(),
     {
       label: 'Quiz...',

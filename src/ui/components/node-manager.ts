@@ -720,7 +720,7 @@ export class NodeManager {
 
     // Delete each node using the database-only method
     let deleted = 0;
-    let errors: string[] = [];
+    const errors: string[] = [];
     
     for (const nodeId of nodesToDelete) {
       const result = await this.#features.graph.deleteNodeFromGraph(nodeId);

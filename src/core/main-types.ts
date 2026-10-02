@@ -95,6 +95,8 @@ export interface Node {
   attachments?: Attachment[];
   aiArtifacts?: AIArtifact[];
   isAnchor?: boolean;  // Marks the root/starting node of the graph
+  /** Design wherever no scene has chosen one; absent = content rule (docs/map-view.md §6.3) */
+  defaultDesign?: { id: DesignId; params: Record<DesignParameterId, unknown> };
 }
 
 export interface Edge {
@@ -107,6 +109,10 @@ export interface Edge {
   properties: Record<EdgePropertyId, unknown>;
   createdAt: Date;
   updatedAt: Date;
+  /** Map view: direction of target from source, degrees, 0 = east, clockwise on screen; absent = unassigned (docs/map-view.md §6.1) */
+  bearing?: number;
+  /** Map view: direction of source from target; absent reads as the reverse of bearing until seeded (docs/map-view.md §6.1) */
+  bearingBack?: number;
 }
 
 export interface EdgeType {
@@ -183,6 +189,15 @@ export interface Scene {
  * Saved navigation path
  * An ordered sequence of scenes that can be saved and loaded
  */
+/** Map view adjustments for one focus; positions derive from bearings and these (docs/map-view.md §6.2) */
+export interface MapView {
+  focusNodeId: NodeId;
+  boxes: Record<string, { length?: number; scale?: number; leaf?: number }>;  // key: address, e.g. 'A/B/C'; scale and leaf are multipliers on the derived values
+  landmarkScale?: number;  // The author's multiplier on the derived landmark scale; absent = 1
+  markerScale?: number;    // The author's multiplier on the derived marker scale; absent = 1
+  updatedAt: Date;
+}
+
 export interface Path {
   id: PathId;
   name: string;
@@ -232,9 +247,9 @@ export interface BackgroundImage {
   createdAt: Date;
 }
 
-// Placeholder types (to be defined later)
-interface Attachment { }
-interface AIArtifact { }
+// Placeholder types (to be defined later): objects of a shape not yet decided
+type Attachment = Record<string, unknown>;
+type AIArtifact = Record<string, unknown>;
 
 // =============================================================================
 // RUNTIME STATE (APP STATE)

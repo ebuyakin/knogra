@@ -18,6 +18,7 @@ import { handleWorkspaceKeys } from './bindings/workspace-bindings';
 import { handleEdgeBendKeys } from './bindings/edge-bend-bindings';
 import { handleViewKeys } from './bindings/view-bindings';
 import { handleSceneKeys } from './bindings/scene-bindings';
+import { handleMapKeys } from './bindings/map-bindings';
 
 export type { KeyboardContext, KeyboardDependencies } from './keyboard-context';
 
@@ -95,6 +96,9 @@ export class KeyboardHandler {
     const key = event.key.toLowerCase();
     const ctrl = event.ctrlKey || event.metaKey;
 
+    // Map view first: while it is shown it claims every key, since the blocks
+    // below address the scene, which is not on screen.
+    if (await handleMapKeys(this.#context, event, key, ctrl)) return;
     if (handleWorkspaceKeys(this.#context, event, key, ctrl)) return;
     if (await handleEdgeBendKeys(this.#context, event, key, ctrl)) return;
     if (await handleViewKeys(this.#context, event, key, ctrl)) return;
