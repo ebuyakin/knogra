@@ -42,7 +42,7 @@ export class ArrivalAnimator {
     centralPosition: Position,
     scene: Scene
   ): Promise<void> {
-    // Mirror of departure-animator's early-return: only short-circuit when
+    // Mirror of departure-fly-out's early-return: only short-circuit when
     // BOTH arriving nodes and arriving edges are empty. Bailing on nodes alone
     // skips the shared-to-shared edge branch below and silently drops edges
     // whose endpoints are both shared between scenes (regression of Bug 2).

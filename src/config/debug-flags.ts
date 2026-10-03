@@ -26,13 +26,13 @@
 interface DebugFlags {
   /** Transition orchestration (transition.ts, phase-orchestrator.ts) */
   d_transition: boolean;
-  /** Departure phase: flyOut, fadeOut (departure-animator.ts) */
+  /** Departure phase: flyOut, fadeOut (departure-fly-out.ts) */
   d_departure: boolean;
-  /** Arrival phase: flyIn, fadeIn (arrival-animator.ts) */
+  /** Arrival phase: flyIn, fadeIn (arrival-fly-in.ts) */
   d_arrival: boolean;
   /** Transition analyzer: edge classification (transition-analyzer.ts) */
   d_analyzer: boolean;
-  /** Ghost element setup/cleanup (shared-core-animator.ts) */
+  /** Ghost element setup/cleanup (morphing-parallel.ts) */
   d_ghost: boolean;
   /** Edge style update diagnostics (scene.ts updateEdgeStyle) */
   d_edgeStyle: boolean;

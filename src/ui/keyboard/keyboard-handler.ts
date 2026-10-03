@@ -31,6 +31,7 @@ export class KeyboardHandler {
     this.#context = {
       cy: deps.cy,
       features: deps.features,
+      mapHandoff: deps.mapHandoff,
       container: deps.container ?? null,
       badgeManager: deps.badgeManager ?? null,
       edgeCreationMode: null,

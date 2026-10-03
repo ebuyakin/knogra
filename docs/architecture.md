@@ -49,7 +49,7 @@ A node's relationship to a scene has two distinct levels:
 
 **Visible** — The node is included AND not folded (hidden). It is rendered on screen and the user can see and interact with it.
 
-This distinction matters for transition routing: a morph transition requires the target scene's central node to be **visible** (not merely included) in the current scene. A folded node has no visual presence to morph from, so the close+open path is used instead.
+This distinction matters for transition routing: a three-phase transition requires the target scene's central node to be **visible** (not merely included) in the current scene. A folded node has no visual presence to transition from, so the close+open path is used instead.
 
 ### Scene vs SceneBackground
 **Scene** — Manages the **graph layer** (nodes, edges, positions, styles via Cytoscape)
@@ -300,11 +300,14 @@ scene/
   viewport.ts     # Viewport calculations
 
 transition/
-    transition.ts            # Public transition facade and routing
-    opening-closing/         # Open/close scene animation path
-    scene-to-scene/          # Morph transition path
-    scene-factory-utils.ts   # Scene auto-creation utilities
+    transition.ts            # Public transition facade and routing (Layer 0)
+    current-scene.ts         # Which scene the instance shows; the only writer of the scratch id
+    scene-resolution.ts      # Find a scene by its central node; create-or-refuse policy; the drafts
+    opening-closing/         # Open/close scene orchestrator and animators
+    scene-to-scene/          # The three-phase transition: orchestrator, animators (departure, morphing, arrival) and operators
+    canvas-theme-operator.ts # The container's background colour and vignette
     fold-state-handler.ts    # Fold-state application after scene changes
+    step-debug.ts            # Dev-only step-through mode
 
 path/
   path.ts         # Main feature class
@@ -325,6 +328,9 @@ Used by 2+ features. Split by purity:
 | Cy-mutating | `utils/cy/` | Accept `cy` as parameter |
 
 Example: `utils/cy/node-position-animator.ts` tweens a node set to new positions (optionally re-framing the viewport) and is shared by `autolayout` and `arrange` — neither imports the other, honouring the no-cross-feature-imports rule (§4.2).
+
+**Sequences across features live in the UI.**
+A user action that needs two features in order is a *flow module* in the UI layer (§3.8), not a feature that holds a reference to another feature: each feature exposes primitives complete on their own, and the flow calls them in sequence, written once and called by every entry point (menu, key). `ui/components/editor-openers.ts` is the existing instance (update the node, then restyle it); `ui/map-handoff.ts` is the second (map-view.md §8). A feature that receives another feature's capability, however it is wrapped, depends on it; that was considered for the map handoff on 2026-10-02 and declined.
 
 **Dependency rules:**
 ```
@@ -352,6 +358,7 @@ Core Types only
 | **Quiz** | `quiz.ts` | Runtime recall mode: hides sampled node content and tracks reveal/self-grade state |
 | **AutoLayout** | `autolayout/autolayout.ts` | Scene-wide re-arrangement anchored on the central node: radial layout (pluggable algorithms), grow & arrange, rotate, and apparent node size (enlarge/shrink) |
 | **Arrange** | `arrange/arrange.ts` | Selection-scoped geometric tools anchored on the selection's own centroid: align, distribute, circle, grid (axis-aligned and diagonal), rotate, tighten/spread, plus a one-shot undo of the last arrangement. Pluggable tool registry — see [arrange-architecture.md](arrange-architecture.md) |
+| **MapView** | `map-view/map-view.ts` | The map view (UI: Helicopter view): a derived, navigable view per node on its own Cytoscape instance, one bearing per edge end across the whole graph. Enters from and leaves to study scenes by a UI flow that drives it and Transition in turn (§3.10 regime) — see [map-view.md](map-view.md) |
 
 **FeatureAPI** (`feature-api.ts`) — Facade exposing all features. No business logic.
 
@@ -480,6 +487,15 @@ its own subsystem rather than a single component.
 
 Menu content changes are localized: each right-click surface has exactly one builder file.
 
+#### Flows
+
+A flow is a UI module that calls two or more features in a fixed order on behalf of one user action, written once and called by every entry point (§3.5, "Sequences across features live in the UI"). The features stay ignorant of each other; the flow holds the order and what undoing the sequence needs (the map handoff remembers the scene it was entered from and the saver suspension it took), never feature state.
+
+| File | Purpose |
+|------|---------|
+| `components/editor-openers.ts` | Open an editor, then apply its result: node content through Node, then style through Scene |
+| `map-handoff.ts` | The handoff: enter (scene to map), leave (map to the focus's study scene), back (map to the entered scene); the map feature and the transition engine in turn ([map-view.md §8](map-view.md)) |
+
 #### Panels (`ui/panels/`)
 
 **PanelAPI** (`panel-api.ts`) — Facade for all panels.
@@ -520,6 +536,7 @@ invent a fourth mechanism.
 | **Transition input guard** | Prevent input from corrupting state mid-animation | *All* input, for the duration of one animation | `ui/transition-input-guard.ts` | UI | ~1 second |
 | **Shelf interaction guard** | Prevent commands from disrupting an in-flight AI-shelf animation | *All* input during Add/Remove-from-shelf execution (full block); shelf commands only during post-transition / AI-addition re-arrangement (shelf-only block) | `ui/shelf-interaction-guard.ts` | UI | ~sub-second (one shelf animation) |
 | **Path mode** | Linear guided traversal of a fixed scene sequence | Graph-initiated scene navigation; node/edge/scene **deletion** | `features/path/path.ts` | Features | Session, persisted in `knogra.state` |
+| **Map view** | The canvas is showing a map, not a scene | All scene-instance commands (their subject is not on screen); GraphSaver while the map's transient scene is the scene instance's current scene | `features/map-view/map-view.ts` | Features | Session, while the map is shown |
 
 **Why they compose without negotiation:** each regime restricts for a *different reason*, and
 where two regimes touch the same capability the narrower one is a strict subset of the wider one.

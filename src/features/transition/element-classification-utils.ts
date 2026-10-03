@@ -2,12 +2,16 @@
  * Element Classifier
  *
  * Pure functions for analyzing and classifying scene elements during transitions.
- * Determines which nodes and edges are departing, shared, or arriving between scenes.
- * Also provides fold-state utilities for excluding hidden nodes from classification.
+ * Determines which nodes and edges are departing, shared, or arriving between scenes,
+ * first by inclusion and then by fold visibility; what the fold pass needs from
+ * the instance comes in through `InstanceView`, so the module never touches cy.
+ * Debug logging behind `d_fold` is the one side effect, kept because the
+ * reclassification is where fold bugs have been found.
  */
 
 import type { NodeId, EdgeId, Scene } from '../../core/main-types';
 import type { EdgeCollection } from 'cytoscape';
+import { isDebug } from '../../config/debug-flags';
 
 // ============================================================================
 // TYPES
@@ -157,4 +161,121 @@ export function buildTargetPositions(scene: Scene): {
   }
 
   return { positions, scales };
+}
+
+// ============================================================================
+// FOLD-AWARE RECLASSIFICATION
+// ============================================================================
+
+/**
+ * What reclassification needs from the instance, without touching it: an
+ * edge's endpoints, from the instance when the edge is drawn and from the
+ * store otherwise, and whether a node is drawn at all (a debug detail).
+ */
+export interface InstanceView {
+  endpointsOf(edgeId: EdgeId): [NodeId, NodeId] | null;
+  isPresent(nodeId: NodeId): boolean;
+}
+
+/** Whether either scene folds anything; when neither does, classification by inclusion is the whole story. */
+export function foldsDiffer(currentScene: Scene, targetScene: Scene): boolean {
+  return getHiddenNodeIds(currentScene).size > 0 || getHiddenNodeIds(targetScene).size > 0;
+}
+
+/**
+ * Reclassify by fold visibility, not just inclusion. A node's animation role
+ * depends on its visibility in source AND target:
+ *   visible→visible  = shared (morph)
+ *   visible→hidden   = departing (fly out; FoldStateHandler re-adds hidden)
+ *   hidden→visible   = arriving (fly in)
+ *   hidden→hidden    = silent (FoldStateHandler handles)
+ *   hidden→absent    = silent (remove from cy without animation)
+ *   absent→hidden    = silent (FoldStateHandler adds hidden)
+ * Edges follow their endpoints: when a node is reclassified shared→arriving or
+ * shared→departing, its edges in sharedEdges move with it so they animate in
+ * or out instead of being orphaned; without this, edges touching a
+ * newly-arriving node are stranded in sharedEdges and silently dropped from
+ * cy by stowaway removal, corrupting scene.edges on the next save.
+ * Mutates `elements` in place.
+ */
+export function reclassifyForFold(elements: TransitionElements, currentScene: Scene, targetScene: Scene, view: InstanceView): void {
+  const hiddenInSource = getHiddenNodeIds(currentScene);
+  const hiddenInTarget = getHiddenNodeIds(targetScene);
+  if (isDebug('d_fold')) {
+    console.log(`[d_fold] Hidden in source (${currentScene.id}):`, [...hiddenInSource]);
+    console.log(`[d_fold] Hidden in target (${targetScene.id}):`, [...hiddenInTarget]);
+    console.log(`[d_fold] Pre-reclassify — shared: ${elements.sharedNodes.length}, departing: ${elements.departingNodes.length}, arriving: ${elements.arrivingNodes.length}`);
+  }
+
+  // Reclassify shared nodes
+  const reclassifiedShared: NodeId[] = [];
+  for (const id of elements.sharedNodes) {
+    const hidSrc = hiddenInSource.has(id);
+    const hidTgt = hiddenInTarget.has(id);
+    if (!hidSrc && !hidTgt) {
+      reclassifiedShared.push(id);
+      if (isDebug('d_fold')) console.log(`[d_fold]   ${id}: visible→visible (shared)`);
+    }
+    else if (!hidSrc && hidTgt) {
+      elements.departingNodes.push(id);
+      if (isDebug('d_fold')) console.log(`[d_fold]   ${id}: visible→hidden (→departing)`);
+    }
+    else if (hidSrc && !hidTgt) {
+      elements.arrivingNodes.push(id);
+      if (isDebug('d_fold')) console.log(`[d_fold]   ${id}: hidden→visible (→arriving), in cy: ${view.isPresent(id)}`);
+    }
+    else {
+      if (isDebug('d_fold')) console.log(`[d_fold]   ${id}: hidden→hidden (silent)`);
+    }
+  }
+  elements.sharedNodes = reclassifiedShared;
+
+  // Remove hidden departing nodes (hidden→absent: silent cy removal, no animation)
+  elements.departingNodes = elements.departingNodes.filter(id => !hiddenInSource.has(id));
+
+  // Remove hidden arriving nodes (absent→hidden: FoldStateHandler handles)
+  elements.arrivingNodes = elements.arrivingNodes.filter(id => !hiddenInTarget.has(id));
+
+  if (isDebug('d_fold')) {
+    console.log(`[d_fold] Post-reclassify — shared: ${elements.sharedNodes.length}, departing: ${elements.departingNodes.length}, arriving: ${elements.arrivingNodes.length}`);
+    console.log(`[d_fold]   departing:`, elements.departingNodes);
+    console.log(`[d_fold]   arriving:`, elements.arrivingNodes);
+  }
+
+  // Edges follow their endpoints. Departing wins over arriving: an edge between
+  // a departing and an arriving node should fade out (the departing endpoint
+  // disappears first).
+  const arrivingNodeSet = new Set(elements.arrivingNodes);
+  const departingNodeSet = new Set(elements.departingNodes);
+  const stillSharedEdges: EdgeId[] = [];
+  for (const edgeId of elements.sharedEdges) {
+    const endpoints = view.endpointsOf(edgeId);
+    if (!endpoints) continue;
+    const [src, tgt] = endpoints;
+    if (departingNodeSet.has(src) || departingNodeSet.has(tgt)) {
+      elements.departingEdges.push(edgeId);
+      if (isDebug('d_fold')) console.log(`[d_fold]   edge ${edgeId}: shared→departing`);
+    } else if (arrivingNodeSet.has(src) || arrivingNodeSet.has(tgt)) {
+      elements.arrivingEdges.push(edgeId);
+      if (isDebug('d_fold')) console.log(`[d_fold]   edge ${edgeId}: shared→arriving`);
+    } else {
+      stillSharedEdges.push(edgeId);
+    }
+  }
+  elements.sharedEdges = stillSharedEdges;
+}
+
+/** Keep only the edges whose both endpoints are in an animated category; the rest are the fold handler's. Mutates `elements` in place. */
+export function keepAnimatedEdges(elements: TransitionElements, view: InstanceView): void {
+  const animatedNodes = new Set([
+    ...elements.departingNodes, ...elements.sharedNodes, ...elements.arrivingNodes
+  ]);
+  const isEdgeAnimated = (edgeId: EdgeId): boolean => {
+    const endpoints = view.endpointsOf(edgeId);
+    if (!endpoints) return false;
+    return animatedNodes.has(endpoints[0]) && animatedNodes.has(endpoints[1]);
+  };
+  elements.departingEdges = elements.departingEdges.filter(isEdgeAnimated);
+  elements.sharedEdges = elements.sharedEdges.filter(isEdgeAnimated);
+  elements.arrivingEdges = elements.arrivingEdges.filter(isEdgeAnimated);
 }

@@ -1,7 +1,7 @@
 # Map View (user-facing name: Helicopter view)
 
 > Status: Draft, normative. Agreed in design on 2026-09-23; becomes Current when the v1 scope in §11 ships.
-> Last reviewed: 2026-09-23
+> Last reviewed: 2026-10-03 (§7.6 and §8 as built; the handoff vocabulary)
 > Authority: Canonical for the map view: its vocabulary, concepts, invariants, behaviour, data model, architecture, and the decisions behind them. During implementation, where code and this document disagree, this document wins until it is amended in the same session.
 > Related: [Product vision](knogra-vision.md), [Architecture](architecture.md), [Layout architecture](layout-architecture.md), [Scene transitions](scene-transitions.md), [Workspace architecture](workspace-architecture.md), [Node placement](node-placement.md)
 
@@ -10,8 +10,8 @@
 The vision document describes travelling the graph as "a flashlight over a large landscape".
 A flashlight orients you only if the landscape exists: what you walked away from must still be behind you when you look back.
 The current model has no landscape.
-It has independent per-scene layouts that share nodes, and a morph that tweens between them.
-The morph gives continuity only while two layouts agree about where things are, and any serious customisation of a scene destroys that agreement.
+It has independent per-scene layouts that share nodes, and a transition that tweens between them.
+The transition gives continuity only while two layouts agree about where things are, and any serious customisation of a scene destroys that agreement.
 The author then maintains agreement by hand, which is tedious, or gives up, and transitions become disorienting.
 
 The map view is the landscape.
@@ -75,6 +75,15 @@ Use these words and no others in code, comments, settings and UI copy for this f
 
     depth       Hops from the focus along the map tree: 0, 1 or 2.
                 The same count Grow & Arrange calls "degree" in its menu; not the degree of a node in the graph-theory sense.
+
+    re-focus    Moving from one map to the next (§5.2): depart, move, arrive, on the map's own instance.
+                Not a transition, which is the scene engine's move from one scene to another (scene-transitions.md §1.3); the two are alike in shape and different in code.
+
+    handoff     Moving between a scene and the map (§8): enter, scene to the map of its central node; leave, map to the focus's study scene; back, map to the scene it was entered from.
+                A transition to or from the map's scene plus the map's own moves; neither a transition nor a re-focus on its own.
+
+    map's scene The map as a Scene object (§8): the picture the scene engine draws and transitions to or from during a handoff.
+                Transient under its own id; the same object under an engine id is the study scene a focus without one gets.
 
     map view    The feature, and one instance of it: the map of one focus.
                 Helicopter view in the UI only.
@@ -206,7 +215,7 @@ This follows from I2 and I7 and is the property the whole design exists to provi
 
 ### 5.1 Entering
 
-From a scene, the canvas menu item Helicopter view opens the map focused on the scene's central node; inside the map, the menu offers Back to scene.
+From a scene, the canvas menu item Helicopter view opens the map focused on the scene's central node; inside the map, the menu offers Open the focus's scene and Back to scene.
 No entry shortcut in v1: the scene's keyboard namespace is nearly exhausted (layout-architecture.md §1.1), and an entry key waits for the leader-key redesign of the keyboard handler, a separate task already on the roadmap.
 Inside the map the keyboard is the map's own, since the scene's bindings never run while it is shown, and keys are chosen to read as their scene counterparts do:
 
@@ -218,8 +227,9 @@ Inside the map the keyboard is the map's own, since the scene's bindings never r
     [ / ]           previous / next focus
     F               back to the base frame: base zoom, focus at the centre
     = / -           zoom in / out about the focus, for the session
-    Escape          collapse an open balloon; otherwise back to the scene
-On entry the map instance is shown over the scene instance (§7) with a crossfade in v1 and a handoff morph in v2 (§8).
+    Enter           leave: open the focus's study scene, created from the map if it has none
+    Escape          collapse an open balloon; otherwise back to the scene the map was entered from
+Entering is the handoff of §8: the scene engine transitions the scene into the map's scene and the map instance takes over at the moment the pictures coincide.
 
 ### 5.2 Navigating
 
@@ -238,8 +248,8 @@ A becomes `B/A`, a landmark within the allowance and the deviation of the revers
 Twins are what make this a pure rewriting: if C is also B's neighbour, A's map has both the landmark `A/C` and the marker `A/B/C`, and in B's map they swap roles, the marker under B growing into the landmark `B/C` and the landmark shrinking into the marker `B/A/C`.
 A leaving marker whose node is also a neighbour of B dies under its old parent and is born as a landmark under B; the address model says so and the transition does not special-case it.
 
-The transition runs in three phases, the same skeleton as a scene transition (scene-transitions.md: departure, shared movement, arrival) with one deliberate difference: departure goes inward, into the parent, never outward from the centre.
-It is a strict subset of the scene transition: departing, shared move-only, arriving and the viewport, with no design change, so survivors keep their elements throughout as shared nodes do in a scene morph, and the phases run on the same driver, one animation-frame loop with one batch per frame, rendered positions interpolated on straight lines with the zoom back-solved.
+The re-focus runs in three phases, the same skeleton as a scene transition (scene-transitions.md: departure, morphing, arrival) with one deliberate difference: departure goes inward, into the parent, never outward from the centre.
+It is a strict subset of the scene transition: departing, shared move-only, arriving and the viewport, with no design change, so survivors keep their elements throughout as shared nodes do in a scene transition, and the phases run on the same driver, one animation-frame loop with one batch per frame, rendered positions interpolated on straight lines with the zoom back-solved.
 Size is tweened only for role changers, never for leavers or arrivals: a size change invalidates the renderer's element texture cache and re-rasterises the node's SVG face every frame, which for equation nodes dominates the frame; position and opacity leave the cache intact.
 The scene's departure and arrival make the same choice, and so a marker slides rather than shrinks or grows.
 
@@ -250,7 +260,7 @@ The scene's departure and arrival make the same choice, and so a marker slides r
 The phases are sequential; each has its own duration setting (§6.4), as scene transitions have, because tuning by eye through those knobs is how the scene transition was made and how this one will be.
 Because bearings are shared, no line turns during move; boxes slide along rays and rescale.
 Twin links, when enabled, fade out in depart and fade in in arrive; they are never tweened.
-When the theme follows the focus's scene (§5.6) and the new focus's theme differs, the background and styles crossfade during move, as the scene morph crossfades to its target theme.
+When the theme follows the focus's scene (§5.6) and the new focus's theme differs, the background and styles crossfade during move, as a scene transition crossfades to its target theme during morphing.
 
 The focus is always at the centre of the viewport, and the author does not pan.
 The zoom is `map.baseZoom` on entry, after a re-focus and on `F`, and the map never changes it on its own; `+` and `-` step it about the focus for the session and it is never stored.
@@ -313,8 +323,8 @@ Filtering is the intended answer to hubs (§10).
 
 ### 5.5 Leaving
 
-A command opens the current focus's study scene through the existing transition feature, or returns to the scene the map was entered from.
-If the focus has no scene, the existing scene auto-creation applies unchanged.
+Enter opens the current focus's study scene (leave); Escape returns to the scene the map was entered from (back); both by the handoff of §8: the scene engine transitions the map's scene into the target on its own instance.
+If the focus has no scene, one is created: the map exactly as shown (§8), under the existing edit-mode guard; in View mode the command is unavailable for a focus without a scene, as navigation to such a node is from a scene.
 Chat and notes follow the focus throughout (§7.3), so leaving the map for the node's scene changes nothing in the learning space.
 
 ### 5.6 Theme
@@ -448,8 +458,9 @@ Costs accepted: two stylesheets built from the same generator, so drift is possi
 ### 7.2 Feature slice
 
     src/features/map-view/
-      map-view.ts          public class MapView over the injected instance, the only feature-api entry; show, hide, lookups
+      map-view.ts          public class MapView over the injected instance, the only feature-api entry; the handoff primitives, hide, lookups
       map-tree.ts          pure: graph + focus → the map tree (boxes and lines)
+      map-scene.ts         pure: map tree + layout → the map's scene, the Scene object the engine transitions to and from (§8)
       geometry.ts          pure: map tree + bearings + lengths + scales → positions
       render.ts            builds map elements and their styles for the map instance; every element carries a kind, box, line or twin link, and geometry, drag and re-focus act on boxes and lines only
       interaction.ts       live drag → provisional bearing and length, re-derive; release → persist; click → re-focus; scale keys
@@ -466,9 +477,9 @@ The pure modules take plain data and return plain data, as the layout algorithms
     reads       graphStore nodes and edges; Node.defaultDesign; the design registry and StyleGenerator for node styles; a theme
     writes      Edge.bearing through graphStore; MapView records through the map store
     emits       mapViewChanged { active, focusNodeId } on entry, on every re-focus, and on leaving
-    exposes     boxesOf(nodeId), nodeOf(elementId), focusNodeId, isActive(), show, hide, focusOn, back, forward, scaleSelected, togglePreview, collapsePreview; never its instance
+    exposes     boxesOf(nodeId), nodeOf(elementId), focusNodeId, isActive(); the handoff primitives of §7.6; hide, focusOn, back, forward, scaleSelected, scaleGroup, moveSelected, togglePreview, collapsePreview; never its instance
     subscribes  nothing from other features
-    calls       features.transition to open a study scene on leaving; the existing node editor for content edits (v2)
+    calls       nothing in another feature; the handoff is driven from the UI (§7.6); the existing node editor for content edits (v2)
     touches     one early return in the keyboard handler while the map is active; one subscription in chat-session so the learning space follows the focus; the workspace export and import lists; the map database
 
 Everything else is owned inside the slice.
@@ -478,8 +489,30 @@ The map never emits `sceneChanged`: AppState would record a last scene that does
 ### 7.4 The map as a regime
 
 While the map is shown, scene commands are unavailable, because their subject is not on screen.
-This is a restrictive regime in the sense of architecture.md §3.10 and joins that table: purpose, the canvas is showing a map, not a scene; restricts, all scene-instance commands; owner, `features/map-view`; layer, Features; lifetime, session.
+This is a restrictive regime in the sense of architecture.md §3.10 and joins that table: purpose, the canvas is showing a map, not a scene; restricts, all scene-instance commands, and GraphSaver while the map's scene is the scene instance's current scene (§8); owner, `features/map-view`; layer, Features; lifetime, session.
 Enforcement belongs to the owner: the map announces itself through EventBus and the keyboard handler and menus guard their own entry points, exactly as View mode and Path mode do.
+The GraphSaver suspension is the one exception: it is taken and released by the handoff flow (§7.6), the only party that knows when the map's scene becomes and stops being the engine's current scene.
+
+### 7.6 Who runs the handoff
+
+Features never import each other (architecture.md §4.2), and the handoff of §8 needs the map feature and the transition feature in turn.
+Neither drives the other: each exposes primitives complete on their own, and a flow module in the UI layer, `ui/map-handoff.ts`, calls them in order, written once and used by the menu and the keys, as `editor-openers.ts` does for the editors (architecture.md §3.5, §3.8).
+A port, the map receiving the engine's capabilities through FeatureAPI, was considered on 2026-10-02 and declined: however wrapped, a feature holding another feature's capability depends on it.
+Events, the engine announcing phases for the map to react to, were declined because the sequence would be invisible to a reader.
+
+    transition    openBehind(scene)                open a given Scene object instantly, nothing written, nothing announced
+                  transitionTo(scene)              the three-phase transition from the current scene to a given Scene object, with the usual events; the current scene may be transient
+                  ensureScene(nodeId, draft)       the existing find-or-create policy with a draft in place of the offsets rule; the draft receives the id the engine assigns; throws in View mode for a node without a scene
+    map view      prepare(nodeId, surface)         walk, seed, lay out for a surface of the given size, keep; nothing drawn (a hidden surface measures zero, so the flow passes the scene container's size)
+                  mapScene()                       the prepared map, or else the shown one, as a Scene object (§8)
+                  sceneDraft(sceneId)              the shown map as the focus's new study scene under the given id: the same object
+                  takeOver()                       draw the prepared map at the base frame, twins' other boxes stowed on the box the map's scene keeps, and show the surface
+                  arriveTwins()                    the stowed boxes slide out to their places
+                  convergeTwins()                  the reverse, before leaving, after a glide back to the base frame
+                  hide()                           as now, also discarding anything prepared
+    flow          enter(), leave(), back(): the sequences of §8; the GraphSaver suspension while the map's scene is current; the scene the map was entered from
+
+The flow is a class with one instance, created in `UIComponentAPI` and handed to the menus and the keyboard like the editors, because `back` needs the entered scene and the suspension must be released by whoever took it.
 
 ### 7.5 Hosting other features on the map
 
@@ -514,21 +547,49 @@ Quiz is built on the scene instance, samples from the scene record, and hides co
 On the map it samples from boxes and hides every box of a node, twins included: either a second Quiz bound to the map instance, or one Quiz over a small surface abstraction, an instance plus the two lookups.
 Not v1.
 
-## 8. Transitions between map and scene
+## 8. The handoff
 
-Two instances cannot share one tween, so a literal morph across the boundary is not available.
-What is available is a handoff that looks like one, because both instances render in graph coordinates into containers of the same size.
+Two instances cannot share one tween, and the scene engine already knows every rule of a transition: which nodes depart, which are shared and morph, which change design and need a ghost, which arrive, what their edges do, how fold state applies.
+So the engine does the transition, on its own instance, and the map's part is to hand it a picture it can draw: the map's scene (decided 2026-10-02, replacing the earlier plan in which the map's animator imitated the engine and the containers crossfaded).
+The handoff has three forms: enter, scene to the map of its central node; leave, map to the focus's study scene; back, map to the scene it was entered from (§2).
 
-Map to scene.
-The map instance reads the target Scene record and animates its own boxes to that scene's positions and scales, under the viewport the scene will open with.
-Boxes whose node is absent from the scene fade; twins of a node present in the scene converge onto its position; nodes present only in the scene fade in as ghosts.
-At the moment the pictures coincide the scene instance opens the scene without animation and the containers swap.
-Scene to map is the same sequence reversed.
-The scene engine is not involved beyond an instant open; the map's own animator does all the work.
+The map's scene.
+A Scene object reproducing the shown map: one node per map node, at its box's map position, in the node's default design at the box's rendered scale; the edges the map draws, the lines of the kept boxes, and no other edge between those nodes; the map's base frame as viewport (the focus at the focal point, the base zoom); no fold state.
+A node with twins appears once, at its kept box: its landmark box when it has one, otherwise its first box.
+Edges the map does not draw are left out on purpose (2026-10-02): the engine's arrival faded in every edge among the shown nodes and the swap then dropped them, a seam and a moment of clutter; the engine's picture must be the map's picture.
+Under its own id, `map:<focus>`, which can never be a stored scene's, it is transient and never persisted; under an id the engine assigns it is a stored scene (below).
+It is a pure function of the map tree and the layout (`map-scene.ts`), built in the map feature and handed to the engine by the flow (§7.6).
 
-This is v2.
-V1 crossfades between the containers.
-The handoff is what makes the map an intermediary between two arbitrary study scenes of different nodes: scene X to map of X, navigate to Y under the guarantee, map of Y to scene Y.
+Entering the map from scene X, the flow in order; the user is watching the scene canvas throughout.
+
+    1  the map feature prepares the map of X's central node for the surface's size: walks, seeds, lays out, keeps the result; nothing is drawn and its surface stays hidden
+    2  the map feature produces the map's scene from what it prepared
+    3  the engine transitions from X to that object, its ordinary three phases: nodes of X with no box on the map depart; nodes on both morph to their map places and sizes; a node X drew in a design other than its default crossfades through a ghost; nodes the map has and X had not arrive, with the map's lines; X's folded nodes are handled as always; the viewport glides to the map's frame. At the end the scene canvas shows the map's picture
+    4  the map feature takes over: draws its prepared map on its own surface at the base frame, a twin's other boxes stowed on its kept box, invisible, and shows the surface; the two canvases hold the same picture, so nothing visible changes
+    5  the map feature arrives the twins: the stowed boxes slide out to their own places and fade in, with their lines
+    6  the engine is told nothing more; its hidden canvas holds the map's scene as current, and the flow holds a GraphSaver suspension, taken before step 3, until a stored scene is current again, since a save now would insert a scene the store does not have
+
+Input is blocked as for any transition: step 3 raises the engine's own guard, steps 4 and 5 are short.
+If step 1, 2 or 3 fails, the flow releases the suspension and discards the prepared map; the engine's own handling leaves the user on scene X, and nothing of the map's was touched, since steps 1 and 2 only read.
+
+Leaving the map for scene Y, the focus's study scene, is the mirror.
+
+    1  the map glides back to its base frame, any balloon collapses, and the twins converge: a node's other boxes slide into its kept box and fade
+    2  the engine opens the map's scene instantly on its hidden canvas; the two pictures are identical in geometry and design
+    3  the map's surface hides; the scene canvas shows; nothing visible changes
+    4  the engine transitions from the map's scene to scene Y: boxes Y does not hold depart, shared nodes morph, nodes whose scene design differs from their default crossfade through ghosts, nodes Y holds and the map did not arrive, edges and fold state as in any transition, path history and sceneChanged as in any transition; the flow releases the suspension once a stored scene is current (if step 4 fails with the map's scene still current, on the next sceneChanged instead)
+
+Back to the entered scene is the same with scene X as the target and nothing to create; if X no longer exists, back behaves as leave.
+
+What the engine needs is small: entry points that take a Scene object rather than look a record up, to open the map's scene instantly and to transition to it, with nothing written.
+While the map's scene is the scene instance's current scene, GraphSaver is suspended, or its first viewport event would insert a scene that is not in the store; this is part of the map regime (§7.4), during which scene commands are unavailable anyway.
+
+A Y without a study scene gets one on leaving: the map exactly as shown, markers and rendered scales included, under the id the engine assigns, through the existing edit-mode guard (decided 2026-10-02; the earlier draft, landmarks only at scale 1, was dropped).
+The map is the prototypical shape of a scene, so nothing visible changes except the twins converging, and the author's first study scene of Y is the map of Y; the engine's offsets rule, which builds a new scene from the scene one came from, is not used from the map.
+
+The cost that remains is the one the engine always pays: shared nodes whose scale changes tween their size and re-rasterise each frame, and on a map-to-scene transition that is most of them; to be measured on an equation-heavy map before any shortcut is taken.
+
+This is what makes the map an intermediary between two arbitrary study scenes of different nodes: scene X to map of X, navigate to Y under the guarantee, map of Y to scene Y.
 
 ## 9. Decisions and rejected alternatives
 
@@ -595,10 +656,10 @@ The F1 shortcut overlay does not list them yet.
 ## 11. Staging
 
 V1.
-Enter from the canvas menu; navigate by clicking landmarks with the three-phase re-focus animation; live drag to adjust bearing and length; scale a box, a role, and move a fan or a marker in or out; tooltip on hover and balloon on click for any small box; the walk's filter predicate (no UI); map-local history; leave to the focus's study scene or back to the entered scene; crossfade at both boundaries; bearings seeded per §6.5; the three data-model changes; settings; the doc map row; the regime row in architecture.md; this document's status to Current.
+Enter from the canvas menu; navigate by clicking landmarks with the three-phase re-focus animation; live drag to adjust bearing and length; scale a box, a role, and move a fan or a marker in or out; tooltip on hover and balloon on click for any small box; the walk's filter predicate (no UI); map-local history; leave to the focus's study scene or back to the entered scene by the handoff of §8, the engine transitioning through the map's scene; bearings seeded per §6.5; the three data-model changes; settings; the doc map row; the regime row in architecture.md; this document's status to Current.
 
 V2.
-The handoff morph (§8); the filter UI by edge type and tag (§5.4); authoring in the map (add child or parent with a bearing assigned by widest gap, delete edge); default design editable from the node editor; twin links; crowding policy once seen in use.
+The filter UI by edge type and tag (§5.4); authoring in the map (add child or parent with a bearing assigned by widest gap, delete edge); default design editable from the node editor; twin links; crowding policy once seen in use.
 
 Not planned.
 Map visits in scene paths; per-box designs; folding in the map.

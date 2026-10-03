@@ -467,7 +467,7 @@ export class StyleGenerator {
 
   /**
    * Drop every per-edge override rule that is not backed by an override in the
-   * given scene. Morph transitions update the stylesheet incrementally, so
+   * given scene. Scene-to-scene transitions update the stylesheet incrementally, so
    * rules for departed edges would otherwise leak into later scenes (an edge
    * re-included elsewhere picks up another scene's bend/style) and accumulate
    * across transitions. Removal-only: rule order is preserved, and rules for
@@ -484,7 +484,7 @@ export class StyleGenerator {
   /**
    * Drop every per-node rule that is not backed by a node in the given scene.
    * The node counterpart of `pruneStaleEdgeRules`, and needed for the same
-   * reason: morph transitions add rules for arriving nodes incrementally and
+   * reason: scene-to-scene transitions add rules for arriving nodes incrementally and
    * never remove them for departed ones, so the rules accumulate across a
    * traversal until the next `openScene` rebuilds the stylesheet from scratch.
    * Each rule carries an encoded SVG payload that is re-parsed on every later

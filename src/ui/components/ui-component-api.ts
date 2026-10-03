@@ -26,6 +26,7 @@ import { FoldBadgeManager } from './fold-badge';
 import { EdgeCreationMode } from '../edge-creation-mode';
 import { KeyboardHandler } from '../keyboard/keyboard-handler';
 import { TransitionInputGuard } from '../transition-input-guard';
+import { MapHandoff } from '../map-handoff';
 import { graphStore } from '../../storage/graph-store';
 import { StyleGenerator } from '../../styles/style-generator';
 
@@ -49,6 +50,7 @@ export class UIComponentAPI {
   readonly edgeCreationMode: EdgeCreationMode;
   readonly keyboardHandler: KeyboardHandler;
   readonly transitionInputGuard: TransitionInputGuard;
+  readonly mapHandoff: MapHandoff;
 
   /** Both surfaces come from main.ts; the UI never obtains an instance or a container from a feature. */
   constructor(cy: Core, container: HTMLElement, features: FeatureAPI, mapCy: Core, mapContainer: HTMLElement) {
@@ -70,6 +72,8 @@ export class UIComponentAPI {
     this.quickTitleEditor = new QuickTitleEditor(cy, container);
     this.edgeCreationMode = new EdgeCreationMode(cy, container, features);
     this.pasteStyleDialog = new PasteStyleDialog(features);
+    // The flow between a scene and the map; the menus and the keys call it, never the features in sequence.
+    this.mapHandoff = new MapHandoff({ features, container });
 
     // Create context menu (depends on editors)
     this.contextMenu = new ContextMenu({
@@ -77,6 +81,7 @@ export class UIComponentAPI {
       container,
       mapCy,
       features,
+      mapHandoff: this.mapHandoff,
       edgeCreationMode: this.edgeCreationMode,
       nodeEditor: this.nodeEditor,
       edgeEditor: this.edgeEditor,
@@ -98,6 +103,7 @@ export class UIComponentAPI {
     this.keyboardHandler = new KeyboardHandler({
       cy,
       features,
+      mapHandoff: this.mapHandoff,
       container,
       badgeManager: this.badgeManager,
       nodeEditor: this.nodeEditor,

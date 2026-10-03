@@ -37,7 +37,7 @@ export class FoldStateHandler {
     this.#cy.nodes('.fold-root').removeClass('fold-root');
 
     // Remove stowaway hidden nodes from previous scene.
-    // During scene-to-scene morph, hidden→hidden nodes survive in cy at old positions.
+    // During a scene-to-scene transition, hidden→hidden nodes survive in cy at old positions.
     // Removing them here ensures apply() re-adds from DB with correct target positions.
     const hiddenNodes = this.#cy.nodes().filter(n => n.style('display') === 'none');
     if (hiddenNodes.length > 0) {
@@ -106,7 +106,7 @@ export class FoldStateHandler {
     // Add edges for hidden nodes (both endpoints must exist in cy).
     // Carry the scene's design/curve in element data — GraphSaver extracts
     // these on the next sync, so bare graph data would wipe the scene's
-    // persisted edge override (mirrors arrival-animator's edge add).
+    // persisted edge override (mirrors arrival-fly-in's edge add).
     const addedEdgeIds: EdgeId[] = [];
     for (const _nodeId of allHiddenIds) {
       const sceneEdgeIds = Object.keys(scene.edges) as EdgeId[];

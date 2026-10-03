@@ -6,14 +6,14 @@
  * address or leaves, and every new box without a preimage arrives. A strict
  * subset of a scene transition — departing, shared move-only, arriving, and
  * the viewport — with no design change, so survivors keep their elements
- * throughout, as shared nodes do in a scene morph. Three sequential phases:
+ * throughout, as shared nodes do in a scene transition. Three sequential phases:
  *
  *   depart   leaving markers slide into their parent boxes and fade
  *   move     every surviving box moves, and the few that change role rescale, in one movement
  *   arrive   new markers slide out of their parents and fade in
  *
  * Each phase is one requestAnimationFrame loop with one batch per frame, the
- * driver `shared-core-animator.ts` uses: rendered positions interpolated on
+ * driver `morphing-parallel.ts` uses: rendered positions interpolated on
  * straight lines and the model position back-solved against that frame's
  * zoom, so a zoom change bends nothing. Size is tweened only for role
  * changers, because a size change invalidates Cytoscape's element texture
@@ -232,6 +232,90 @@ export function settle(cy: Core, plan: RefocusPlan, newLayout: MapLayout, zoom: 
   }
   for (const line of lines) line.element.style(lineStyleAt(line, 1));
   cy.endBatch();
+}
+
+// ============================================================================
+// TWINS IN THE HANDOFF
+// ============================================================================
+
+/** A twin box the map's scene does not show, and the box of the same node it does (map-scene.ts `keptAddress`). */
+export interface TwinBox {
+  address: Address;
+  keptAddress: Address;
+}
+
+/**
+ * Stow the twins: on their kept box, invisible, beneath it, their lines
+ * invisible. The map taken over from the engine then shows exactly the map's
+ * scene (docs/map-view.md §8 step 4), until `slideTwins` brings them out.
+ */
+export function stowTwins(cy: Core, newTree: MapTree, newLayout: MapLayout, ids: MapElementIds, twins: TwinBox[]): void {
+  cy.startBatch();
+  for (const twin of twins) {
+    const node = boxElement(cy, ids, twin.address);
+    const kept = newLayout.positions.get(twin.keptAddress);
+    if (!node || !kept) continue;
+    node.position({ x: kept.x, y: kept.y });
+    node.style({ opacity: 0, 'z-index': BENEATH_Z_INDEX });
+    for (const line of lineElements(cy, newTree, ids, twin.address)) line.style({ opacity: 0 });
+  }
+  cy.endBatch();
+}
+
+/**
+ * Stowed twins slide out to their own places and fade in (`out`, after the
+ * engine has transitioned to the map's scene), or slide back onto their kept box
+ * and fade (`in`, before the engine takes the picture back); their lines
+ * with them. The arriving and converging moves of a re-focus, for the handoff.
+ */
+export function slideTwins(
+  cy: Core,
+  tree: MapTree,
+  layout: MapLayout,
+  ids: MapElementIds,
+  twins: TwinBox[],
+  direction: 'out' | 'in',
+  duration: number
+): Promise<void> {
+  const out = direction === 'out';
+  const opacity = out ? { from: 0, to: 1 } : { from: 1, to: 0 };
+  const movers: Mover[] = [];
+  const lines: LineTween[] = [];
+  for (const twin of twins) {
+    const node = boxElement(cy, ids, twin.address);
+    const own = layout.positions.get(twin.address);
+    const kept = layout.positions.get(twin.keptAddress);
+    if (!node || !own || !kept) continue;
+    if (!out) node.style('z-index', BENEATH_Z_INDEX);
+    movers.push({ element: node, from: out ? { x: kept.x, y: kept.y } : { x: own.x, y: own.y }, to: out ? own : kept, opacity });
+    for (const line of lineElements(cy, tree, ids, twin.address)) lines.push({ element: line, opacity });
+  }
+
+  return runTween(cy, movers, lines, { from: cy.zoom(), to: cy.zoom() }, cy.pan(), duration, out ? easeOutCubic : easeInCubic).then(() => {
+    // Arrived twins are ordinary boxes again; converged ones stay stowed until the map is hidden.
+    if (!out) return;
+    cy.startBatch();
+    for (const mover of movers) mover.element.removeStyle('opacity z-index');
+    for (const line of lines) line.element.removeStyle('opacity');
+    cy.endBatch();
+  });
+}
+
+function boxElement(cy: Core, ids: MapElementIds, address: Address): NodeSingular | null {
+  const elementId = ids.boxes.get(address);
+  if (!elementId) return null;
+  const node = cy.getElementById(elementId) as NodeSingular;
+  return node.length > 0 ? node : null;
+}
+
+function lineElements(cy: Core, tree: MapTree, ids: MapElementIds, address: Address): EdgeLike[] {
+  const lines: EdgeLike[] = [];
+  for (const line of linesOfBoxes(tree, [address])) {
+    const lineId = ids.lines.get(line.key);
+    const element = lineId ? cy.getElementById(lineId) : null;
+    if (element && element.length > 0) lines.push(element);
+  }
+  return lines;
 }
 
 // ============================================================================

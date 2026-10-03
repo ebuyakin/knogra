@@ -46,8 +46,7 @@ export function buildCanvasMenu(deps: MenuDependencies, position: MenuPosition):
     {
       label: 'Helicopter view',
       action: () => {
-        const centralNodeId = deps.features.scene.getCentralNodeId();
-        if (centralNodeId) deps.features.mapView.show(centralNodeId);
+        deps.mapHandoff.enter();
       }
     },
     createModeMenuItem(),

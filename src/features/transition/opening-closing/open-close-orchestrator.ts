@@ -1,8 +1,11 @@
 /**
  * OpenCloseOrchestrator
  *
- * Layer 1 orchestrator for scene opening and closing.
- * Owns OpenSceneAnimator and CloseSceneAnimator (Layer 2).
+ * Layer 1 orchestrator for scene opening and closing: `open(scene, mode)` and
+ * `close(scene, mode)`, each complete from the canvas theme to the fold state
+ * and the invariant check. Owns OpenSceneAnimator and CloseSceneAnimator
+ * (Layer 2) and its own FoldStateHandler. Never decides which scene is
+ * current and never announces; that is Transition's (scene-transitions.md §2.2).
  */
 
 import type { Core } from 'cytoscape';
@@ -12,22 +15,34 @@ import type { BackgroundRenderer } from '../../../background/background-renderer
 import { graphStore } from '../../../storage/graph-store';
 import { getSetting } from '../../../config';
 import { isDebug } from '../../../config/debug-flags';
+import { getTheme } from '../../../styles/themes';
 import { StyleGenerator } from '../../../styles/style-generator';
 import { resolveSceneEdgeVisualState } from '../../../styles/edge-visual-resolver';
 import { OpenSceneAnimator } from './open-scene-animator';
 import { CloseSceneAnimator } from './close-scene-animator';
+import { FoldStateHandler } from '../fold-state-handler';
+import { checkSceneInvariant } from '../transition-invariants';
+import { applyCanvasTheme } from '../canvas-theme-operator';
 import { getHiddenNodeIds } from '../element-classification-utils';
 import { resolveScenePan } from '../../utils/cy/viewport-utils';
+
+export type OpenMode = 'instant' | 'fade' | 'animated';
+export type CloseMode = 'fade' | 'animated';
+
+/** The fade modes' duration (ms); not a setting, matching the inline value it replaces. */
+const FADE_DURATION_MS = 250;
 
 export class OpenCloseOrchestrator {
   #cy: Core;
   #openAnimator: OpenSceneAnimator;
   #closeAnimator: CloseSceneAnimator;
+  #foldState: FoldStateHandler;
 
   constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
     this.#cy = cy;
     this.#openAnimator = new OpenSceneAnimator(cy, backgroundRenderer);
     this.#closeAnimator = new CloseSceneAnimator(cy, backgroundRenderer);
+    this.#foldState = new FoldStateHandler(cy);
   }
 
   // ==========================================================================
@@ -35,9 +50,60 @@ export class OpenCloseOrchestrator {
   // ==========================================================================
 
   /**
+   * Open a scene on an empty instance: canvas theme, base stylesheet, viewport,
+   * the elements by `mode`, fold state, the invariant, the central node
+   * selected so it shows the combined central+selected style and the user can
+   * navigate at once (a transition inherits selection through its ghosts; an open
+   * has no such path).
+   */
+  async open(scene: Scene, mode: OpenMode): Promise<void> {
+    this.#cy.elements().remove();
+
+    const themeId = scene.themeId || 'dark';
+    const [bgFadeDuration] = getSetting('transition.openBgFadeIn') as [number, number];
+    applyCanvasTheme(this.#cy.container(), getTheme(themeId), mode === 'instant' ? 0 : bgFadeDuration);
+
+    this.#cy.style().fromJson([
+      StyleGenerator.generateEdgeStyle(themeId),
+      ...StyleGenerator.generateEdgeTypeStyles(graphStore.edgeTypes, themeId),
+      ...StyleGenerator.buildCentralAndSelectedRules(themeId),
+      ...StyleGenerator.generateEdgeTypeVisibilityStyles(scene.edgeTypeVisibility)
+    ]).update();
+
+    this.#setViewport(scene);
+
+    if (mode === 'instant') {
+      await this.#openInstant(scene, themeId);
+      await this.#foldState.apply(scene, themeId);
+    } else if (mode === 'fade') {
+      await this.#openFade(scene, themeId);
+    } else {
+      await this.#openAnimated(scene);
+      await this.#foldState.apply(scene, themeId);
+    }
+    checkSceneInvariant(this.#cy, scene, `open:${mode}`);
+
+    const centralEl = this.#cy.getElementById(scene.centralNodeId);
+    if (centralEl.length > 0) {
+      this.#cy.$(':selected').unselect();
+      centralEl.select();
+    }
+  }
+
+  /** Close the given scene by `mode`, leaving the instance empty with its fold scratch cleared. */
+  async close(scene: Scene, mode: CloseMode): Promise<void> {
+    if (mode === 'fade') await this.#closeFade();
+    else await this.#closeAnimated(scene);
+  }
+
+  // ==========================================================================
+  // OPENING
+  // ==========================================================================
+
+  /**
    * Open scene instantly — add all elements at final positions, no animation
    */
-  async openInstant(scene: Scene, themeId: string): Promise<void> {
+  async #openInstant(scene: Scene, themeId: string): Promise<void> {
     const nodeIds = Object.keys(scene.nodes) as NodeId[];
     const nodesToStyle: { nodeId: NodeId; nodeData: Node; design: { id: string; params: Record<string, unknown> }; scale?: number }[] = [];
 
@@ -124,7 +190,7 @@ export class OpenCloseOrchestrator {
   /**
    * Open scene with full animation sequence
    */
-  async openAnimated(scene: Scene, _themeId: string): Promise<void> {
+  async #openAnimated(scene: Scene): Promise<void> {
     // Build target positions
     const targetPositions: Record<NodeId, { x: number; y: number }> = {};
     for (const [nodeId, nodeData] of Object.entries(scene.nodes)) {
@@ -154,7 +220,7 @@ export class OpenCloseOrchestrator {
 
     // 3. Other nodes fly in from outside (exclude folded nodes)
     // 4. Edges fade in per layer (cascaded with nodes)
-    const hiddenNodeIds = this.getHiddenNodeIds(scene);
+    const hiddenNodeIds = getHiddenNodeIds(scene);
     const otherNodeIds = Object.keys(scene.nodes)
       .filter(id => id !== scene.centralNodeId && !hiddenNodeIds.has(id as NodeId)) as NodeId[];
     
@@ -178,29 +244,59 @@ export class OpenCloseOrchestrator {
   }
 
   /**
-   * Close the current scene with reverse-open animation:
+   * Open scene with a quick fade: place everything invisible, apply fold state
+   * while nothing shows (no flash), then fade in only the visible elements,
+   * edges to the opacity scene visibility gives them. No cascading, no fly-in,
+   * no central zoom. Used when transition.transitionMode is 'fade'.
+   */
+  async #openFade(scene: Scene, themeId: string): Promise<void> {
+    await this.#openInstant(scene, themeId);
+    this.#cy.elements().style({ opacity: 0 });
+    const bgCanvas = this.#cy.container()?.querySelector('.background-canvas') as HTMLCanvasElement | null;
+    if (bgCanvas) bgCanvas.style.opacity = '0';
+
+    await this.#foldState.apply(scene, themeId);
+
+    const visibleNodes = this.#cy.nodes().filter((ele: any) => ele.style('display') !== 'none');
+    const visibleEdges = this.#cy.edges().filter((ele: any) => ele.style('display') !== 'none');
+    const nodeFadePromises = visibleNodes.map((ele: any) =>
+      ele.animation({ style: { opacity: 1 }, duration: FADE_DURATION_MS }).play().promise()
+    );
+    const edgeFadePromises = visibleEdges.map((ele: any) => {
+      const edgeData = graphStore.edges.find(edge => edge.id === ele.id());
+      const targetOpacity = edgeData
+        ? resolveSceneEdgeVisualState({ edge: edgeData, scene, edgeTypes: graphStore.edgeTypes, themeId }).opacity
+        : 1;
+      return ele.animation({ style: { opacity: targetOpacity }, duration: FADE_DURATION_MS }).play().promise();
+    });
+    if (bgCanvas) {
+      bgCanvas.style.transition = `opacity ${FADE_DURATION_MS}ms ease`;
+      bgCanvas.style.opacity = '1';
+    }
+    await Promise.all([...nodeFadePromises, ...edgeFadePromises]);
+    this.#cy.edges().removeStyle('opacity');
+    if (bgCanvas) bgCanvas.style.transition = '';
+  }
+
+  // ==========================================================================
+  // CLOSING
+  // ==========================================================================
+
+  /**
+   * Close the given scene with reverse-open animation:
    * 1. Peripheral nodes + edges fly out from central node
    * 2. Central node shrinks/fades + background fades out
-   * 3. Cleanup: remove all elements, clear scene ID
+   * 3. Cleanup: remove all elements, clear the fold scratch
    */
-  async close(centralNodeId: NodeId): Promise<void> {
-    // Look up current scene for BFS distance calculation
-    const currentSceneId = this.#cy.scratch('currentSceneId') as string | null;
-    const scene = currentSceneId
-      ? graphStore.scenes.find(s => s.id === currentSceneId) ?? null
-      : null;
-
+  async #closeAnimated(scene: Scene): Promise<void> {
     // Phase 1: Peripheral nodes + edges cascade fly-out (farthest first)
-    if (scene) {
-      await this.#closeAnimator.flyOutNodesAndEdges(centralNodeId, scene);
-    }
+    await this.#closeAnimator.flyOutNodesAndEdges(scene.centralNodeId, scene);
 
     // Phase 2: Central node shrinks/fades + background fades
-    await this.#closeAnimator.fadeOutCentralAndBackground(centralNodeId);
+    await this.#closeAnimator.fadeOutCentralAndBackground(scene.centralNodeId);
 
-    // Cleanup: clear remaining elements, reset scene state
+    // Cleanup: clear remaining elements and the fold scratch; which scene is current is Transition's
     this.#cy.elements().remove();
-    this.#cy.scratch('currentSceneId', null);
     this.#cy.scratch('foldedNodes', {});
   }
 
@@ -208,15 +304,13 @@ export class OpenCloseOrchestrator {
    * Close scene with a quick fade — all elements fade to opacity 0, then are removed.
    * No cascading, no fly-out. Used when transition.transitionMode is 'fade'.
    */
-  async closeFade(): Promise<void> {
-    const fadeDuration = 250;
-
+  async #closeFade(): Promise<void> {
     // Fade all elements to opacity 0
     const elements = this.#cy.elements();
     if (elements.length > 0) {
       await Promise.all(
         elements.map((ele: any) =>
-          ele.animation({ style: { opacity: 0 }, duration: fadeDuration }).play().promise()
+          ele.animation({ style: { opacity: 0 }, duration: FADE_DURATION_MS }).play().promise()
         )
       );
     }
@@ -224,68 +318,25 @@ export class OpenCloseOrchestrator {
     // Fade background canvas
     const bgCanvas = this.#cy.container()?.querySelector('.background-canvas') as HTMLCanvasElement | null;
     if (bgCanvas) {
-      bgCanvas.style.transition = `opacity ${fadeDuration}ms ease`;
+      bgCanvas.style.transition = `opacity ${FADE_DURATION_MS}ms ease`;
       bgCanvas.style.opacity = '0';
-      await new Promise(resolve => setTimeout(resolve, fadeDuration));
+      await new Promise(resolve => setTimeout(resolve, FADE_DURATION_MS));
       bgCanvas.style.transition = '';
     }
 
-    // Cleanup
+    // Cleanup; which scene is current is Transition's
     this.#cy.elements().remove();
-    this.#cy.scratch('currentSceneId', null);
     this.#cy.scratch('foldedNodes', {});
   }
 
-  /**
-   * Open scene with a quick fade — place all elements at final positions, then fade in.
-   * No cascading, no fly-in, no central zoom. Used when transition.transitionMode is 'fade'.
-   */
-  async openFade(scene: Scene, themeId: string): Promise<void> {
-    // Place everything using the same logic as openInstant
-    await this.openInstant(scene, themeId);
-
-    // Set all elements to opacity 0
-    const elements = this.#cy.elements();
-    elements.style({ opacity: 0 });
-
-    // Set background to opacity 0
-    const bgCanvas = this.#cy.container()?.querySelector('.background-canvas') as HTMLCanvasElement | null;
-    if (bgCanvas) {
-      bgCanvas.style.opacity = '0';
-    }
-
-    // Fade everything in
-    const fadeDuration = 250;
-    const fadePromises = elements.map((ele: any) => {
-      if (!ele.isEdge?.()) {
-        return ele.animation({ style: { opacity: 1 }, duration: fadeDuration }).play().promise();
-      }
-
-      const edgeData = graphStore.edges.find(edge => edge.id === ele.id());
-      const targetOpacity = edgeData
-        ? resolveSceneEdgeVisualState({ edge: edgeData, scene, edgeTypes: graphStore.edgeTypes, themeId }).opacity
-        : 1;
-      return ele.animation({ style: { opacity: targetOpacity }, duration: fadeDuration }).play().promise();
-    });
-
-    // Fade background in parallel
-    if (bgCanvas) {
-      bgCanvas.style.transition = `opacity ${fadeDuration}ms ease`;
-      bgCanvas.style.opacity = '1';
-    }
-
-    await Promise.all(fadePromises);
-    this.#cy.edges().removeStyle('opacity');
-
-    if (bgCanvas) {
-      bgCanvas.style.transition = '';
-    }
-  }
+  // ==========================================================================
+  // VIEWPORT
+  // ==========================================================================
 
   /**
    * Set viewport from saved scene viewport or fit to content
    */
-  setViewport(scene: Scene): void {
+  #setViewport(scene: Scene): void {
     // Check if scene has valid saved viewport
     if (scene.viewport && scene.viewport.zoom && scene.viewport.zoom > 0) {
       this.#cy.viewport({
@@ -299,13 +350,5 @@ export class OpenCloseOrchestrator {
       this.#cy.fit(undefined, padding);
       if (isDebug('d_transition')) console.log(`[OpenCloseOrchestrator] Fit to content with padding=${padding}`);
     }
-  }
-
-  /**
-   * Build set of all hidden node IDs from scene fold state.
-   * Delegates to shared utility in element-classification-utils.
-   */
-  getHiddenNodeIds(scene: Scene): Set<NodeId> {
-    return getHiddenNodeIds(scene);
   }
 }

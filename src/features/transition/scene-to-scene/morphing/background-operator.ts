@@ -86,7 +86,7 @@ export class BackgroundOperator {
   /**
    * Prepare background crossfade: create transition canvas, load images, draw.
    * Uses two canvases for smooth transition.
-   * Timing: Synchronized with the parallel morph.
+   * Timing: Synchronized with the morphing phase.
    * 
    * @param targetScene - The scene to transition to
    * @param totalDuration - Total duration for the crossfade

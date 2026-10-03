@@ -1,7 +1,7 @@
 # Scene Manipulation & Transition Specification
 
 > **Status:** Current  
-> **Last reviewed:** 2026-08-04  
+> **Last reviewed:** 2026-10-03 (terminology in §1.3: transition, morphing, re-focus, handoff; §2 and §4 after the layering was restored on 2026-10-02)  
 > **Authority:** Canonical source for scene manipulation, scene transitions, fold semantics, and related invariants.  
 > **Replaces:** [transition-sequence-spec.md](transition-sequence-spec.md), transition-related sections of [fold-unfold-design.md](fold-unfold-design.md)  
 > **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Background design](background-design.md)
@@ -47,11 +47,17 @@
 
 | Term | Definition |
 |------|------------|
+| **Navigation** | The umbrella in prose for any move from one picture to another; never a code name. The kinds are the four rows below. |
+| **Transition** | Scene to scene when the target's central node is visible in the current scene: departure, morphing, arrival (§4.2). Never "morph" for the whole. |
+| **Close and open** | Scene to scene otherwise, and the fade variant (§4.1). |
+| **Re-focus** | Map to map, on the map's own instance (map-view.md §5.2). Close to a transition in shape, different code, so a different name. |
+| **Handoff** | Scene to map and back (map-view.md §8): enter, leave, back. A transition to or from the map's scene plus the map's own moves. |
+| **Morphing** | Phase 2 of a transition: the shared nodes move, rescale and crossfade design. "Morph" is what a shared node does. |
 | **Shared node** | Visible in BOTH old and new scene. Morphs (moves, may crossfade design). |
 | **Departing node** | Visible in old scene, NOT included in new scene. Flies out. |
 | **Arriving node** | Included in new scene, NOT visible in old scene. Flies in. |
 | **Ghost element** | Temporary clone for crossfade. Carries old design fading out while real element assumes new design fading in. Named `ghost_{node|edge}_{originalId}_{timestamp}`. |
-| **Related scenes** | Target scene's central node is **visible** in current scene. Enables morph transition. |
+| **Related scenes** | Target scene's central node is **visible** in current scene. Enables a transition. |
 | **Unrelated scenes** | Target scene's central node is absent or folded in current scene. Uses close→open. |
 
 ### 1.4 Central Node Invariant
@@ -90,21 +96,28 @@ FeatureAPI (facade)
 ├── Graph               (add/delete nodes & edges)
 ├── Node                (content updates: title, tags, properties)
 ├── Edge                (content updates)
-├── Transition          (scene-to-scene navigation)
-│   ├── OpenCloseOrchestrator
+├── Transition          (entry points, regime guards, the bracket, which scene is current, announcements)
+│   ├── CurrentScene                 (the scratch id and the transient scene; the only writer)
+│   ├── scene-resolution             (find by central node; create-or-refuse policy; pure drafts)
+│   ├── OpenCloseOrchestrator        open(scene, mode), close(scene, mode)
 │   │   ├── OpenSceneAnimator
-│   │   └── CloseSceneAnimator
-│   ├── SceneToSceneOrchestrator
-│   │   ├── DepartureAnimator
-│   │   ├── SharedCoreAnimator
-│   │   │   ├── BackgroundOperator
-│   │   │   ├── TransitionAnalysisOperator
-│   │   │   └── GhostOperator
-│   │   └── ArrivalAnimator
-│   └── FoldStateHandler
+│   │   ├── CloseSceneAnimator
+│   │   └── FoldStateHandler
+│   └── SceneToSceneOrchestrator     transition(current, target, options)
+│       ├── DepartureAnimator
+│       ├── SharedCoreAnimator
+│       │   ├── BackgroundOperator
+│       │   ├── TransitionAnalysisOperator
+│       │   └── GhostOperator
+│       ├── ArrivalAnimator
+│       └── FoldStateHandler
 ├── Path                (navigation history)
 └── SceneBackground     (background images)
 ```
+
+Shared by both orchestrators, Layer 3: `canvas-theme-operator` (the container's colour and vignette) and `step-debug` (the dev step-through pause). Pure, under both: `element-classification-utils` and `transition-invariants`.
+
+The layering was restored on 2026-10-02: until then `Transition` ran the transition itself (classification, the phases, the central flag, the background, fold state, the stylesheet prune, 950 lines) and the orchestrator was three phase methods; the open modes and an inline fade path lived in `Transition` too, beside a stale `openFade` in the orchestrator. The map handoff (map-view.md §8), which needs `transition` and an instant `open` with Scene objects as Layer 1 primitives, was the occasion. The refactor was six extractions with no behaviour change, each verified in the browser; its plan was a temporary document, deleted when done.
 
 ### 2.2 Layer Rules
 
@@ -238,61 +251,65 @@ All viewport changes emit `viewport` event → **GraphSaver** persists `scene.vi
 
 ### 4.1 Entry Points
 
+Every entry point runs inside `Transition`'s bracket: `transitionStart` (the UI input guard listens), the GraphSaver suspension, the dev transition record (`utils/diagnostics/transition-buffer`), then `transitionEnd` and the record's failure in `finally`, so an exception never leaves input blocked. `openBehind` runs it without the input guard, since nothing visible happens; `goToSceneFromPath` records the path step and lets the calls inside guard themselves.
+
+Two regime guards refuse scene-initiated navigation: path mode (`pathModeChanged`) and the map view (`mapViewChanged`); both are subscriptions, never imports (architecture.md §3.10).
+
 **`Transition.goToSceneByNode(targetNodeId, { fade? })`**  
 Primary navigation. Called when user clicks a node or presses 'G'.
 
-- If `fade` mode or `transitionMode === 'fade'`: `closeScene({ fade: true })` → `openScene(targetSceneId, { fade: true })`
-- Otherwise: persistence is suspended → `#executeToNode(targetNodeId)` → suspension is released
+- If `fade` mode or `transitionMode === 'fade'`: resolve or create the scene (§4.3) → `closeScene({ fade: true })` → `openScene(id, { fade: true })` → `scene:changed` for the path
+- Otherwise: persistence is suspended → the transition (§4.2) → `scene:changed` → suspension is released
 
 **`Transition.goToSceneFromPath(sceneId)`**  
-Navigation from path panel (back/forward/breadcrumb).
+Navigation from path panel (back/forward/breadcrumb). No `scene:changed`; the path owns its history.
 
-- Smart routing: if target's central node is **visible** in current scene → 3-phase morph
+- Smart routing: if target's central node is **visible** in current scene → the transition (§4.2)
 - Otherwise → `closeScene()` → `openScene(sceneId)`
 
 **`Transition.openScene(sceneId, { skipAnimation?, fade? })`**  
-Opens a scene from scratch (initial load, theme change, non-adjacent navigation).
+Opens a scene from scratch (initial load, theme change, non-adjacent navigation). `Transition` looks the scene up, makes it current, picks the mode, calls `OpenCloseOrchestrator.open(scene, mode)` and emits `sceneChanged`. The orchestrator:
 
-1. Suspend graph persistence
-2. `cy.scratch('currentSceneId', sceneId)`
-3. `cy.elements().remove()` — clear current
-4. Apply canvas background from theme
-5. Initialize base stylesheet (edge rule + central/selected rules)
-6. Set viewport (saved or fit-to-content)
-7. **Instant mode** (`skipAnimation`): `openInstant()` + `FoldStateHandler.apply()`
-8. **Fade mode**: `openInstant()` → set opacity 0 → `FoldStateHandler.apply()` → fade in visible elements
-9. **Animated mode**: `openAnimated()` → `FoldStateHandler.apply()`
-10. Emit `sceneChanged` event
-11. Release graph persistence suspension
+1. `cy.elements().remove()` — clear current
+2. Canvas theme from the scene's theme (`canvas-theme-operator`; instant for `'instant'`, else the `openBgFadeIn` setting)
+3. Base stylesheet (edge rule, edge type rules, central/selected rules, edge type visibility)
+4. Viewport (saved or fit-to-content)
+5. **Instant mode**: `openInstant()` + `FoldStateHandler.apply()`
+6. **Fade mode**: `openInstant()` → everything at opacity 0 → `FoldStateHandler.apply()` while nothing shows (no flash) → fade in only the visible elements, edges to their scene-visibility opacity
+7. **Animated mode**: `openAnimated()` → `FoldStateHandler.apply()`
+8. The invariant check (§7)
+9. The central node selected, so it shows the combined central+selected style and the user can navigate at once
 
 **`Transition.closeScene({ fade? })`**  
-Closes current scene.
+Closes current scene: `Transition` picks the mode, calls `OpenCloseOrchestrator.close(scene, mode)`, then clears the current scene (`CurrentScene.clear()`). The orchestrator:
 
-1. Suspend graph persistence
-2. **Fade mode**: fade all elements to opacity 0, remove
-3. **Animated mode**: `CloseSceneAnimator.flyOutNodesAndEdges()` → `fadeOutCentralAndBackground()`
-4. `cy.elements().remove()`
-5. `cy.scratch('currentSceneId', null)`
-6. `cy.scratch('foldedNodes', undefined)`
-7. Release graph persistence suspension
+1. **Fade mode**: fade all elements to opacity 0
+2. **Animated mode**: `CloseSceneAnimator.flyOutNodesAndEdges()` → `fadeOutCentralAndBackground()`
+3. `cy.elements().remove()`
+4. `cy.scratch('foldedNodes', {})`
 
-### 4.2 The 3-Phase Morph Sequence
+**The map handoff** (map-view.md §8), called by `ui/map-handoff.ts`:
 
-Executed by `#executeToNode()` when target scene's central node is **visible** in current scene.
+- **`Transition.openBehind(scene)`** — `open(scene, 'instant')` for a given Scene object, nothing announced; the object becomes current, transient when the store does not hold it
+- **`Transition.transitionTo(scene)`** — the transition from the current scene, stored or transient, to a given Scene object; a stored target is announced (`sceneChanged`, `scene:changed`), a transient one is not and becomes the transient current scene
+- **`Transition.ensureScene(nodeId, draft)`** — the scene whose central node is `nodeId`, or in Edit mode the draft persisted (§4.3); `draft` receives the id the engine assigns (`sceneIdFor`), so the caller never learns the id format
+
+### 4.2 The three-phase transition
+
+`SceneToSceneOrchestrator.transition(currentScene, targetScene, { isNewScene })`, called by `Transition` when the target scene's central node is **visible** in the current scene (and by `transitionTo` for the map handoff). `Transition` resolves the target first (§4.3); the orchestrator takes both scenes as objects and returns a `TransitionReport` (what it classified, the zoom change) for the dev record. It never writes the current-scene scratch, never saves and never announces: `Transition` does those after `transition` returns, in that order (save the auto-created scene, make the target current, `sceneChanged`).
 
 #### Phase 0: Preparation
 
-1. **Resolve target scene:**
-   - Find existing scene by `centralNodeId` → `graphStore.scenes.find(s => s.centralNodeId === targetNodeId)`
-   - If not found: **auto-create** via `createSceneFromCurrent()`
-   - Auto-created scene: central at viewport center, connected nodes preserve relative offsets, no inherited fold state
+1. **Resolve target scene** (`Transition`, §4.3):
+   - `findSceneByCentral(targetNodeId)`
+   - If not found: **draft** via `draftFromCurrent()`, saved after the transition succeeds
+   - Drafted scene: central at viewport center, connected nodes preserve relative offsets, no inherited fold state
 
-2. **Classify elements:**
+2. **Classify elements** (`element-classification-utils`, pure; the instance reads come in through `InstanceView`):
    - `classifyElements(oldScene, newScene, cy.edges())` → departing/shared/arriving nodes and edges
-   - **Fold-aware reclassification:** `getHiddenNodeIds()` on both scenes
-   - Visible→visible = shared; visible→hidden = departing; hidden→visible = arriving; hidden→hidden = silent
-   - Remove hidden stowaways (nodes with `display: none` that are now arriving)
-   - Reclassify edges: both endpoints must be in animated category
+   - When either scene folds anything (`foldsDiffer`): `reclassifyForFold()` — visible→visible = shared; visible→hidden = departing; hidden→visible = arriving; hidden→hidden = silent; edges follow their reclassified endpoints, departing winning over arriving
+   - Remove hidden stowaways (nodes with `display: none` that are now arriving) — the one cy mutation, in the orchestrator between the two pure passes
+   - `keepAnimatedEdges()`: both endpoints must be in an animated category
 
 #### Phase 1: Departure (`DepartureAnimator`)
 
@@ -303,7 +320,7 @@ Removes elements not in new scene.
 3. **Old central zoom out** (if old central is departing): shrinks to 20% while fading
 4. All departed elements removed from Cytoscape after animation
 
-#### Phase 2: Shared Movement (`SharedCoreAnimator`)
+#### Phase 2: Morphing (`SharedCoreAnimator`)
 
 Transforms shared elements from old state to new state. **All sub-stages run in parallel.**
 
@@ -357,11 +374,11 @@ Introduces elements new to the scene.
 
 #### Post-Phase: Stylesheet Reconciliation
 
-After fold state is applied, `#executeToNode` prunes every per-edge override rule (`edge[id = "…"]`) not backed by an override in the target scene (`StyleGenerator.pruneStaleEdgeRules`). The morph path updates the stylesheet incrementally — without this, departing edges' rules survive the transition, leak another scene's bend/style onto edges re-included later, and accumulate across morphs. Removal-only, so rule order is preserved; folded edges keep their rules because folded edges remain in `scene.edges`. Arriving and tween edges are additionally reconciled in-flight (update-or-remove) by their animators.
+After fold state is applied and the invariant checked, the orchestrator prunes every per-edge override rule (`edge[id = "…"]`) not backed by an override in the target scene (`StyleGenerator.pruneStaleEdgeRules`), and the per-node rules likewise, then rebuilds the central/selected rules for the target theme. The morph path updates the stylesheet incrementally — without this, departing edges' rules survive the transition, leak another scene's bend/style onto edges re-included later, and accumulate across morphs. Removal-only, so rule order is preserved; folded edges keep their rules because folded edges remain in `scene.edges`. Arriving and tween edges are additionally reconciled in-flight (update-or-remove) by their animators.
 
 ### 4.3 Scene Auto-Creation
 
-**`createSceneFromCurrent(targetCentralId, currentScene, viewportCenter, connectedNodeIds)`**
+**`draftFromCurrent(targetNodeId, currentScene, viewportCenter)`** in `scene-resolution.ts`, over the pure `buildSceneFromOffsets`
 
 When navigating to a node with no existing scene:
 
@@ -535,10 +552,10 @@ IndexedDB Persistence
 
 ### 6.4 Fold State in Transitions
 
-**Element classification** (`#executeToNode`):
+**Element classification** (`SceneToSceneOrchestrator.transition`, over `element-classification-utils`):
 - Hidden nodes from BOTH scenes are excluded from initial classification
 - Shared nodes reclassified by visibility:
-  - visible→visible = shared (morph)
+  - visible→visible = shared (morphs)
   - visible→hidden = departing (fly out)
   - hidden→visible = arriving (fly in)
   - hidden→hidden = silent (FoldStateHandler handles)
@@ -546,7 +563,7 @@ IndexedDB Persistence
 **Stowaway cleanup:**
 - `FoldStateHandler.apply()` from previous transition may have added hidden nodes to cy
 - If now classified as "arriving," they must be removed before arrival phase (duplicate ID error)
-- Cleanup runs in `#executeToNode` after reclassification
+- Cleanup runs in `SceneToSceneOrchestrator.transition` after `reclassifyForFold` and before `keepAnimatedEdges`
 
 **Post-transition fold setup:**
 - After all animation phases complete, `FoldStateHandler.apply(targetScene)`:
@@ -563,7 +580,7 @@ IndexedDB Persistence
 
 1. **Missing regime model (architectural):**
    - Currently no View/Edit mode distinction. All operations persist unconditionally.
-   - This causes drift between user's exploratory state and author's saved scene state, which transitions then try to morph from.
+   - This causes drift between user's exploratory state and author's saved scene state, which transitions then start from.
    - Fold/unfold during exploration gets persisted, creating inconsistent fold state across scenes.
 
 2. **Nested fold position bug (Scenario_3):**
@@ -652,9 +669,11 @@ IndexedDB Persistence
 | `src/features/scene/fold-manager.ts` | Fold/unfold state and animation |
 | `src/features/transition/transition.ts` | Top-level transition router |
 | `src/features/transition/opening-closing/open-close-orchestrator.ts` | Open/close scene orchestrator |
-| `src/features/transition/scene-to-scene/scene-to-scene-orchestrator.ts` | 3-phase morph orchestrator |
-| `src/features/transition/element-classification-utils.ts` | Pure functions: classify elements, get hidden IDs |
-| `src/features/transition/scene-factory-utils.ts` | Pure functions: auto-create scene |
+| `src/features/transition/scene-to-scene/scene-to-scene-orchestrator.ts` | The three-phase transition orchestrator: departure, morphing, arrival |
+| `src/features/transition/element-classification-utils.ts` | Pure functions: classify elements by inclusion and by fold visibility, get hidden IDs |
+| `src/features/transition/scene-resolution.ts` | Find a scene by central node; create-or-refuse policy; pure drafts (auto-create) |
+| `src/features/transition/current-scene.ts` | Which scene the instance shows, stored or transient; the only writer of the scratch id |
+| `src/features/transition/canvas-theme-operator.ts` | The container's background colour and vignette |
 | `src/features/transition/fold-state-handler.ts` | Post-transition fold setup |
 | `src/storage/graph-store.ts` | IndexedDB interface with in-memory cache |
 | `src/storage/graph-saver.ts` | Auto-save listener (Cytoscape → GraphStore) |

@@ -89,9 +89,16 @@ export function buildMapMenu(deps: MenuDependencies): MenuItem[] {
       }
     },
     {
+      label: 'Open the focus\'s scene (Enter)',
+      enabled: deps.mapHandoff.canLeave(),
+      action: () => {
+        deps.mapHandoff.leave();
+      }
+    },
+    {
       label: 'Back to scene (Esc)',
       action: () => {
-        mapView.hide();
+        deps.mapHandoff.back();
       }
     },
     {

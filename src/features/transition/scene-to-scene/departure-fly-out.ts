@@ -121,7 +121,7 @@ export class DepartureAnimator {
     const layerPromises: Promise<void>[] = [];
 
     // Layer for shared→shared edges (no node anchor): fade immediately, in
-    // parallel with the first cascade layer. Mirrors arrival-animator's handling.
+    // parallel with the first cascade layer. Mirrors arrival-fly-in's handling.
     if (sharedToSharedEdges.length > 0) {
       layerPromises.push(
         this.#animateLayer(

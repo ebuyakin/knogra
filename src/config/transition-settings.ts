@@ -41,10 +41,10 @@ export type SharedBackgroundTiming = 'sequential' | 'parallel';
 export type ArrivalEdgeTiming = 'after' | 'parallel';
 
 /**
- * Phase 2: Shared movement timings (NEW PARALLEL MORPH)
+ * Phase 2: Morphing timings, the shared nodes moving, rescaling and crossfading in parallel
  */
 export interface MorphTimings {
-  /** Total duration of the shared morph phase [duration, delayAfter] */
+  /** Total duration of the morphing phase [duration, delayAfter] */
   morphDuration: StageTiming;
   /** Crossfade overlap percentage (0-100). 0 = sequential, 100 = full overlap */
   morphCrossfadeOverlap: number;
@@ -120,7 +120,7 @@ export interface CloseSceneTimings {
  * Full transition settings
  */
 export interface TransitionSettings extends DepartureTimings, SharedTimings, MorphTimings, ArrivalTimings, OpenSceneTimings, CloseSceneTimings {
-  /** Transition mode: animated (full morph) or fade (quick crossfade) */
+  /** Transition mode: animated (the three phases) or fade (quick crossfade) */
   transitionMode: 'animated' | 'fade';
   /** Phase 1: Edge timing mode */
   departureEdgeTiming: DepartureEdgeTiming;
@@ -148,7 +148,7 @@ export const TRANSITION_DEFAULTS: TransitionSettings = {
   departureLayerStagger: [200, 0],
   departureCentralZoomOut: [400, 200],
   
-  // Phase 2: Shared Morph (PARALLEL)
+  // Phase 2: Morphing (PARALLEL)
   morphDuration: [700, 200],
   morphCrossfadeOverlap: 0,
 

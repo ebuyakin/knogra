@@ -73,11 +73,18 @@ export async function handleMapKeys(context: KeyboardContext, event: KeyboardEve
     return true;
   }
 
-  // Escape: an open balloon first, the map second; one press, one outcome.
+  // Enter: the focus's study scene, created from the map if it has none (docs/map-view.md §8).
+  if (key === 'enter') {
+    event.preventDefault();
+    await context.mapHandoff.leave();
+    return true;
+  }
+
+  // Escape: an open balloon first, the map second, back to the scene it was entered from; one press, one outcome.
   if (key === 'escape') {
     event.preventDefault();
     if (mapView.hasPreview()) mapView.collapsePreview();
-    else mapView.hide();
+    else await context.mapHandoff.back();
     return true;
   }
 

@@ -6,9 +6,11 @@
  * Cytoscape instance on its own surface (`#map`, created by main.ts like the
  * scene's), shown over the scene while active, so nothing wired to the scene
  * instance ever sees a map element (docs/map-view.md §7). This class owns
- * show and hide, re-focusing, the adjustments, and the lookups other features
- * need to be hosted on the map (§7.5); the map's content comes from the
- * feature-local modules.
+ * the map's side of the handoff (prepare, the map's scene, take over, the
+ * twins' moves; §7.6, §8), hide, re-focusing, the adjustments, and the
+ * lookups other features need to be hosted on the map (§7.5); the map's
+ * content comes from the feature-local modules. The sequence that enters and
+ * leaves the map is the UI flow's, `ui/map-handoff.ts`, never this class's.
  *
  * On the map an element id is opaque, not a node id, and a node may have
  * several boxes. Anything that hosts on the map goes through `boxesOf` and
@@ -17,7 +19,7 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { NodeId } from '../../core/main-types';
+import type { NodeId, Scene, SceneId } from '../../core/main-types';
 import { graphStore } from '../../storage/graph-store';
 import { mapStore } from '../../storage/map-store';
 import { isEditMode } from '../../storage/app-mode';
@@ -47,7 +49,8 @@ import {
 import { wireDragging, type DragRelease, type MapState } from './interaction';
 import { MarkerPreview } from './preview';
 import { MapHistory } from './history';
-import { arrive, depart, move, planRefocus, settle, staleLineIds, type LineTween } from './refocus-animator';
+import { arrive, depart, move, planRefocus, settle, slideTwins, staleLineIds, stowTwins, type LineTween, type TwinBox } from './refocus-animator';
+import { keptAddress, mapSceneOf, type MapPicture } from './map-scene';
 
 /** `F` returns to the base frame with a short glide rather than a jump. */
 const REFRAME_DURATION_MS = 200;
@@ -73,6 +76,8 @@ interface DerivedMap {
 export class MapView {
   #cy: Core;
   #state: MapState | null = null;
+  /** A map derived for the handoff and not yet drawn; `takeOver` consumes it, `hide` discards it. */
+  #prepared: DerivedMap | null = null;
   #preview: MarkerPreview;
   #history = new MapHistory();
   /** A re-focus is animating; clicks arriving meanwhile are ignored rather than queued. */
@@ -116,13 +121,102 @@ export class MapView {
     return this.nodeOf(selected.first().id());
   }
 
-  /** Build and show the map focused on `focusNodeId` over the scene. */
-  async show(focusNodeId: NodeId): Promise<void> {
-    if (!graphStore.nodes.some(node => node.id === focusNodeId)) return;
-    await this.#present(focusNodeId);
+  // ==========================================================================
+  // THE HANDOFF (docs/map-view.md §7.6, §8): primitives the UI flow calls in order
+  // ==========================================================================
+
+  /**
+   * Walk, seed, style and lay out the map of `focusNodeId` for a surface of
+   * the given size, and keep it; nothing is drawn and the surface stays
+   * hidden. The size is the caller's because a hidden surface measures zero.
+   */
+  async prepare(focusNodeId: NodeId, surface: Size): Promise<void> {
+    if (!graphStore.nodes.some(node => node.id === focusNodeId)) throw new Error(`Map view: no node ${focusNodeId}`);
+    this.#prepared = await this.#derive(focusNodeId, new Map(), surface);
+  }
+
+  /** The prepared map, or else the shown one, as the Scene object the engine draws and transitions to. */
+  mapScene(): Scene {
+    return mapSceneOf(this.#picture(), getSetting('map.baseZoom'));
+  }
+
+  /** The shown map as the focus's new study scene, exactly as shown, under the id the engine hands in: the map is the prototypical shape of a scene. */
+  sceneDraft(id: SceneId): Scene {
+    return mapSceneOf(this.#picture(), getSetting('map.baseZoom'), id);
+  }
+
+  /**
+   * Draw the prepared map and show the surface, the twins' other boxes stowed
+   * on the box the map's scene keeps, so the two canvases hold one picture.
+   */
+  takeOver(): void {
+    const prepared = this.#prepared;
+    if (!prepared) throw new Error('Map view: nothing prepared to take over with');
+    this.#prepared = null;
+
+    const state = this.#mount(prepared);
+    stowTwins(this.#cy, state.tree, state.layout, state.ids, this.#stowedTwins(state));
+    const focusNodeId = state.tree.focusNodeId;
     this.#history.reset(focusNodeId);
     eventBus.emit('mapViewChanged', { active: true, focusNodeId });
+    if (isDebug('d_scene')) console.log(`[MapView] Took over the map of ${focusNodeId}: ${state.tree.boxes.length} boxes`);
   }
+
+  /** The stowed twins slide out to their own places. */
+  async arriveTwins(): Promise<void> {
+    const state = this.#state;
+    if (!state) return;
+    await slideTwins(this.#cy, state.tree, state.layout, state.ids, this.#stowedTwins(state), 'out', this.#duration('map.arriveDuration'));
+  }
+
+  /**
+   * The reverse, before leaving: back to the base frame the map's scene
+   * declares, any balloon collapsed, then the twins converge on their kept
+   * boxes. Afterwards the map shows exactly `mapScene()`.
+   */
+  async convergeTwins(): Promise<void> {
+    const state = this.#state;
+    if (!state) return;
+    this.collapsePreview();
+    this.#cy.$(':selected').unselect();
+    await this.#frame(this.#duration('map.departDuration'));
+    await slideTwins(this.#cy, state.tree, state.layout, state.ids, this.#stowedTwins(state), 'in', this.#duration('map.departDuration'));
+  }
+
+  /** Every twin box the map's scene does not show, with the box of its node that it does. */
+  #stowedTwins(state: MapState): TwinBox[] {
+    const twins: TwinBox[] = [];
+    for (const [nodeId, addresses] of state.tree.twins) {
+      const kept = keptAddress(state.tree, nodeId);
+      if (!kept) continue;
+      for (const address of addresses) {
+        if (address !== kept) twins.push({ address, keptAddress: kept });
+      }
+    }
+    return twins;
+  }
+
+  /** What the map's scene is made from: the prepared map first, else the shown one at its live layout. */
+  #picture(): MapPicture {
+    if (this.#prepared) return this.#prepared.render;
+    const state = this.#state;
+    if (!state) throw new Error('Map view: no map prepared or shown');
+    return {
+      tree: state.tree,
+      layout: state.layout,
+      nodeById: new Map(graphStore.nodes.map(node => [node.id, node])),
+      edgeById: state.edgeById,
+      themeId: getSetting('map.themeId'),
+    };
+  }
+
+  #duration(setting: 'map.arriveDuration' | 'map.departDuration'): number {
+    return getSetting('map.animate') ? getSetting(setting) : 0;
+  }
+
+  // ==========================================================================
+  // ON THE MAP
+  // ==========================================================================
 
   /**
    * Forget this map's adjustments, lengths and scales, and show it from
@@ -161,19 +255,30 @@ export class MapView {
     container.style.display = 'block';
     this.#cy.resize();
 
-    const derived = await this.#derive(focusNodeId, new Map());
-    const ids = renderMap(this.#cy, derived.render, derived.state.baseStyles);
-    this.#state = { ...derived.state, ids, addressByElementId: invert(ids) };
-
-    container.style.backgroundColor = getTheme(derived.render.themeId).canvas.background.color;
-    this.#frame(0);
-    this.#applyGrabbability();
-
-    if (isDebug('d_scene')) console.log(`[MapView] Showing map of ${focusNodeId}: ${derived.state.tree.boxes.length} boxes`);
+    const derived = await this.#derive(focusNodeId, new Map(), this.#surface());
+    const state = this.#mount(derived);
+    if (isDebug('d_scene')) console.log(`[MapView] Showing map of ${focusNodeId}: ${state.tree.boxes.length} boxes`);
   }
 
-  /** Hide the map; the scene underneath was never touched. */
+  /** Draw a derived map on the surface, shown, at the base frame, replacing whatever was there. */
+  #mount(derived: DerivedMap): MapState {
+    const container = this.#container();
+    container.style.display = 'block';
+    this.#cy.resize();
+
+    const ids = renderMap(this.#cy, derived.render, derived.state.baseStyles);
+    const state: MapState = { ...derived.state, ids, addressByElementId: invert(ids) };
+    this.#state = state;
+
+    container.style.backgroundColor = getTheme(derived.render.themeId).canvas.background.color;
+    void this.#frame(0);
+    this.#applyGrabbability();
+    return state;
+  }
+
+  /** Hide the map and forget anything prepared; what the scene canvas holds is the flow's concern. */
   hide(): void {
+    this.#prepared = null;
     if (!this.#state) return;
     this.#preview.reset();
     this.#state = null;
@@ -193,7 +298,7 @@ export class MapView {
 
   /** Back to the base frame on request (`F`): base zoom, focus at the centre. */
   reframe(): void {
-    this.#frame(REFRAME_DURATION_MS);
+    void this.#frame(REFRAME_DURATION_MS);
   }
 
   /** Zoom by `factor` about the focus, which stays at the centre: the focus is at the origin and the pan is the centre at any zoom. */
@@ -242,7 +347,7 @@ export class MapView {
       this.#cy.$(':selected').unselect();
 
       // Base styles carry over: survivors keep their nodes, and arrivals add theirs.
-      const derived = await this.#derive(nodeId, new Map(old.baseStyles));
+      const derived = await this.#derive(nodeId, new Map(old.baseStyles), this.#surface());
       const { tree, layout, baseStyles } = derived.state;
       const plan = planRefocus(old.tree, tree, old.ids);
       const animate = getSetting('map.animate');
@@ -294,7 +399,7 @@ export class MapView {
       if (animate) await arrive(this.#cy, plan, tree, layout, getSetting('map.arriveDuration'));
 
       this.#state = { ...derived.state, baseStyles, ids: plan.ids, addressByElementId: invert(plan.ids) };
-      this.#frame(0);
+      void this.#frame(0);
       this.#applyGrabbability();
       if (options.record) this.#history.push(nodeId);
       eventBus.emit('mapViewChanged', { active: true, focusNodeId: nodeId });
@@ -471,12 +576,13 @@ export class MapView {
   }
 
   /**
-   * Walk, seed, style and lay out the map of `focusNodeId`, without touching
-   * the instance. Styles come before layout because the layout needs the
-   * boxes' sizes. `baseStyles` is extended in place. The ring is a fraction of
-   * the surface's height, in graph units at the base zoom.
+   * Walk, seed, style and lay out the map of `focusNodeId` for a surface of
+   * the given size in pixels, without touching the instance. Styles come
+   * before layout because the layout needs the boxes' sizes. `baseStyles` is
+   * extended in place. The ring is a fraction of the surface's height, in
+   * graph units at the base zoom.
    */
-  async #derive(focusNodeId: NodeId, baseStyles: Map<NodeId, BoxBaseStyle>): Promise<DerivedMap> {
+  async #derive(focusNodeId: NodeId, baseStyles: Map<NodeId, BoxBaseStyle>, surface: Size): Promise<DerivedMap> {
     const nodeById = new Map(graphStore.nodes.map(node => [node.id, node]));
     const edgeById = new Map(graphStore.edges.map(edge => [edge.id, edge]));
     const themeId = getSetting('map.themeId');
@@ -487,11 +593,10 @@ export class MapView {
 
     const record = mapStore.getMapView(focusNodeId);
     const adjustments: MapAdjustments = { boxes: structuredClone(record?.boxes ?? {}), landmarkScale: record?.landmarkScale, markerScale: record?.markerScale };
-    const container = this.#container();
     const baseZoom = getSetting('map.baseZoom');
     const params: MapGeometryParams = {
-      viewport: { width: container.clientWidth / baseZoom, height: container.clientHeight / baseZoom },
-      ringRadius: (getSetting('map.ringRadius') * container.clientHeight) / 2 / baseZoom,
+      viewport: { width: surface.width / baseZoom, height: surface.height / baseZoom },
+      ringRadius: (getSetting('map.ringRadius') * surface.height) / 2 / baseZoom,
       horizontalStretch: getSetting('map.horizontalStretch'),
       arcShares: {
         landmark: getSetting('map.arcLandmarkShare'),
@@ -599,20 +704,29 @@ export class MapView {
     return container;
   }
 
+  /** The shown surface's size in pixels; zero while hidden, which is why `prepare` takes its size from the caller. */
+  #surface(): Size {
+    const container = this.#container();
+    return { width: container.clientWidth, height: container.clientHeight };
+  }
+
   /**
    * The base frame: the base zoom, the focus at the centre. The focus box is at
    * the graph origin, so the pan is the surface's centre at every zoom.
+   * Resolves when the glide has ended, at once for a jump.
    */
-  #frame(durationMs: number): void {
-    if (!this.#state) return;
+  #frame(durationMs: number): Promise<void> {
+    if (!this.#state) return Promise.resolve();
     const container = this.#container();
     const zoom = getSetting('map.baseZoom');
     const pan = { x: container.clientWidth / 2, y: container.clientHeight / 2 };
     if (durationMs <= 0) {
       this.#cy.zoom(zoom);
       this.#cy.pan(pan);
-      return;
+      return Promise.resolve();
     }
-    this.#cy.animate({ zoom, pan }, { duration: durationMs, easing: 'ease-in-out' });
+    return new Promise(resolve => {
+      this.#cy.animate({ zoom, pan }, { duration: durationMs, easing: 'ease-in-out', complete: () => resolve() });
+    });
   }
 }

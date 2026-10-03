@@ -12,12 +12,12 @@ import type { SharedBackgroundTiming } from '../../../config/transition-settings
 import { graphStore } from '../../../storage/graph-store';
 import { getSetting } from '../../../config';
 import { isDebug } from '../../../config/debug-flags';
-import { BackgroundOperator } from './shared-core-animation/background-operator';
+import { BackgroundOperator } from './morphing/background-operator';
 import { StyleGenerator } from '../../../styles/style-generator';
 import { resolveSceneEdgeVisualState } from '../../../styles/edge-visual-resolver';
-import { TransitionAnalysisOperator, type TransitionAnalysis } from './shared-core-animation/transition-analysis-operator';
-import { GhostOperator } from './shared-core-animation/ghost-operator';
-import { waitForStep } from './scene-to-scene-orchestrator';
+import { TransitionAnalysisOperator, type TransitionAnalysis } from './morphing/transition-analysis-operator';
+import { GhostOperator } from './morphing/ghost-operator';
+import { waitForStep } from '../step-debug';
 import { resolveScenePan } from '../../utils/cy/viewport-utils';
 
 interface Position {

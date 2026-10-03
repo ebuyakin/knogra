@@ -100,19 +100,26 @@ Browser:
 - [ ] back and forward retrace the focuses
 - [ ] `map.animate` off: the same end state, instantly
 
-## Step 6. Boundaries, theme, docs
+## Step 6. The handoff (spec §8, §7.6), theme, docs
 
-- [ ] crossfade between the containers on enter and on leave
-- [ ] leave to the focus's study scene through `features.transition`; scene auto-creation applies if it has none
+Rewritten 2026-10-02: the engine does the morph through the map's scene; the crossfade plan is gone.
+
+- [x] spec §8 rewritten with the enter and leave sequences; §5.1, §5.5, §7.3, §7.4, §7.6 (who runs the handoff: a UI flow module; port and events declined), §11; architecture.md §3.5 "sequences across features live in the UI", MapView catalog row, §3.10 regime row
+- [x] engine (02.10, after the transition feature's layering was restored first, see scene-transitions.md §2.1 and the journal): `openBehind(scene)`, `morphTo(scene)`, `ensureScene(nodeId, draft)` as routings over `OpenCloseOrchestrator.open` and `SceneToSceneOrchestrator.morph`; `CurrentScene` holds the transient scene; `goToSceneByNode` and `goToSceneFromPath` guarded by mapViewChanged
+- [ ] map: `prepare(nodeId)`, `mapScene()` pure over tree and layout, `takeOver()`, `arriveTwins()`, `convergeTwins()`; `sceneFromMap` = the map's scene minus markers, for creation
+- [ ] flow: `ui/map-handoff.ts` with enter(), back(), leaveTo(nodeId); the menu and the keys call it; GraphSaver suspended while the map's scene is current
+- [ ] commands: menu "Open this node's scene"; Escape back; G decided
 - [ ] `map.themeMode` `scene`, with the fallback to the entered scene's theme and the crossfade during move
-- [ ] `docs/architecture.md`: regime row in §3.10, feature catalog entry in §3.5, the second-instance note
 - [ ] `docs/map-view.md`: status Draft → Current; any place the code diverged, amended
-- [ ] `docs/README.md`: the map-view.md row's status; this checklist's row removed if it was ever added
+- [ ] `docs/README.md`: the map-view.md row's status
 - [ ] journal entry
 - [ ] delete this file (Eugene)
 
 Browser:
-- [ ] scene → map → navigate → leave to the new focus's scene: the scene opens correctly and its own transitions still work afterwards
+- [ ] scene → map: nodes of the scene glide to their ring and leaf places, designs crossfade where the scene's differ, twins' second boxes slide out after the swap
+- [ ] map → navigate → leave to the new focus's scene: markers depart, landmarks settle, the scene's own transitions still work afterwards; a node without a scene gets one made of its landmarks
+- [ ] back to the entered scene; Escape
+- [ ] measure the move phase on an equation-heavy map
 - [ ] theme mode `scene`: re-focusing between nodes whose scenes have different themes crossfades
 
 ## After v1, separately

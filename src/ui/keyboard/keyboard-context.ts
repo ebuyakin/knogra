@@ -18,11 +18,13 @@ import type { AnchorLinkTooltip } from '../components/anchor-link-tooltip';
 import type { QuickTitleEditor } from '../components/quick-title-editor';
 import type { SettingsModal } from '../components/settings-modal';
 import type { ShortcutOverlay } from '../components/shortcut-overlay';
+import type { MapHandoff } from '../map-handoff';
 
 /** What UIComponentAPI supplies when constructing the handler. */
 export interface KeyboardDependencies {
   cy: Core;
   features: FeatureAPI;
+  mapHandoff: MapHandoff;
   container?: HTMLElement | null;
   badgeManager?: ConnectionBadgeManager | null;
   nodeEditor?: NodeEditor | null;
@@ -35,6 +37,8 @@ export interface KeyboardDependencies {
 export interface KeyboardContext {
   cy: Core;
   features: FeatureAPI;
+  /** The flow between a scene and the map view (map-handoff.ts). */
+  mapHandoff: MapHandoff;
   container: HTMLElement | null;
   badgeManager: ConnectionBadgeManager | null;
   edgeCreationMode: EdgeCreationMode | null;

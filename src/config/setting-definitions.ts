@@ -433,7 +433,7 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
       {
         key: 'transition.transitionMode',
         label: 'Transition Mode',
-        description: 'Animated: full morph transitions with spatial continuity. Fade: quick crossfade between scenes (faster for editing)',
+        description: 'Animated: three-phase transitions with spatial continuity. Fade: quick crossfade between scenes (faster for editing)',
         type: 'select',
         options: [
           { value: 'animated', label: 'Animated' },
@@ -491,7 +491,7 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           {
             key: 'transition.morphDuration',
             label: 'Total Duration',
-            description: 'Total duration of the shared morph phase [duration, delay] (ms)',
+            description: 'Total duration of the morphing phase, the shared nodes moving and rescaling [duration, delay] (ms)',
             type: 'stageTiming'
           },
           {

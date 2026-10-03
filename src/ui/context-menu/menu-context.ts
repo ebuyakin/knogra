@@ -25,6 +25,7 @@ import type { ThemePicker } from '../components/theme-picker';
 import type { QuizPanel } from '../components/quiz-panel';
 import type { AnchorLinkTooltip } from '../components/anchor-link-tooltip';
 import type { PasteStyleDialog } from '../components/paste-style-dialog';
+import type { MapHandoff } from '../map-handoff';
 import type { MenuItem } from './menu-renderer';
 import { getAppMode, setAppMode } from '../../storage/app-mode';
 
@@ -49,6 +50,8 @@ export interface MenuDependencies {
   quizPanel: QuizPanel;
   anchorLinkTooltip: AnchorLinkTooltip;
   pasteStyleDialog: PasteStyleDialog;
+  /** The flow between a scene and the map view; the menus never sequence the features themselves. */
+  mapHandoff: MapHandoff;
 }
 
 export interface CopiedEdgeStyle {
