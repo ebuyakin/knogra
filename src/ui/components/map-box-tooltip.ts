@@ -33,8 +33,12 @@ export class MapBoxTooltip {
 
   #setupEventListeners(): void {
     this.#cy.on('mouseover', 'node', (event: EventObject) => {
+      const elementId = event.target.id() as string;
       // A ballooned box is readable as it is; the tooltip would sit on top of it.
-      if (!this.#needsPreview(event) || this.#features.mapView.isBallooned(event.target.id() as string)) return;
+      if (!this.#needsPreview(event) || this.#features.mapView.isBallooned(elementId)) return;
+      // A node the map quiz hides must not be given away by its title.
+      const nodeId = this.#features.mapView.nodeOf(elementId);
+      if (nodeId !== null && this.#features.mapQuiz.statusOf(nodeId) === 'hidden') return;
       this.#show(event.target.data('title') as string, event.target.renderedPosition());
     });
     this.#cy.on('mouseout', 'node', () => this.hide());

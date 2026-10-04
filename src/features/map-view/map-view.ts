@@ -19,7 +19,7 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { EdgeId, NodeId, Scene, SceneId } from '../../core/main-types';
+import type { EdgeId, NodeId, Scene, SceneId, ThemeId } from '../../core/main-types';
 import { graphStore } from '../../storage/graph-store';
 import { mapStore } from '../../storage/map-store';
 import { isEditMode } from '../../storage/app-mode';
@@ -29,14 +29,15 @@ import { NODE_SCALE_MAX, NODE_SCALE_MIN } from '../../config/node-settings';
 import { getTheme } from '../../styles/themes';
 import { applyCanvasTheme } from '../../styles/canvas-theme';
 import { isDebug } from '../../config/debug-flags';
-import { buildMapTree, firstLineByAddress, lastNodeOfAddress, linesOfBoxes, type Address } from './map-tree';
-import { layoutMapTree, normalizeBearing, pairKeyOf, siblingEnds, type EdgeEnds, type MapAdjustments, type MapGeometryParams, type Size } from './geometry';
+import { buildMapTree, firstLineByAddress, lastNodeOfAddress, linesOfBoxes, type Address, type MapBox } from './map-tree';
+import { layoutMapTree, normalizeBearing, pairKeyOf, siblingEnds, signedAngleBetween, type EdgeEnds, type MapAdjustments, type MapGeometryParams, type Size } from './geometry';
 import { ensureBearings } from './seeding';
 import {
   addElements,
   ensureBaseStyles,
   lineBases,
   lineWeights,
+  rebuildStylesheet,
   removeElements,
   renderMap,
   restyleBoxes,
@@ -81,6 +82,8 @@ export class MapView {
   #state: MapState | null = null;
   /** A map derived for the handoff and not yet drawn; `takeOver` consumes it, `hide` discards it. */
   #prepared: DerivedMap | null = null;
+  /** The theme of the scene the map was entered from: what a focus without a scene is drawn in under `map.themeMode` 'scene' (§5.6). */
+  #enteredThemeId: ThemeId | null = null;
   #preview: MarkerPreview;
   #history = new MapHistory();
   /** A re-focus is animating; clicks arriving meanwhile are ignored rather than queued. */
@@ -124,42 +127,112 @@ export class MapView {
     return this.nodeOf(selected.first().id());
   }
 
+  // ==========================================================================
+  // KEYBOARD WALK (docs/map-view.md §5.2): the map as a tree, siblings around
+  // their parent, in and out along depth. Selection as a click makes it;
+  // nothing is written and nothing moves.
+  // ==========================================================================
+
   /**
-   * Select the next landmark clockwise (`1`) or anticlockwise (`-1`) around
-   * the ring, wrapping (docs/map-view.md §5.2). From a selected marker its
-   * landmark is the start; with nothing selected the landmark nearest the top
-   * is selected itself. Selection as a click makes it, an open balloon
-   * collapsing as on a click; nothing is written and nothing moves.
+   * Select the next sibling clockwise (`1`) or anticlockwise (`-1`), wrapping:
+   * the landmarks around the focus, or a marker's fan around its landmark.
+   * With the focus or nothing selected, the landmark nearest the top.
    */
-  selectLandmark(step: 1 | -1): void {
+  selectSibling(step: 1 | -1): void {
     const state = this.#state;
     if (!state) return;
-    // Angle on screen from the focus at the origin, increasing clockwise since y points down; 270 is the top.
-    const angleOf = (address: Address): number => {
-      const position = state.layout.positions.get(address);
-      return position ? normalizeBearing((Math.atan2(position.y, position.x) * HALF_TURN_DEGREES) / Math.PI) : 0;
-    };
-    const ring = state.tree.boxes
-      .filter(box => box.depth === 1)
-      .map(box => ({ address: box.address, angle: angleOf(box.address) }))
-      .sort((left, right) => left.angle - right.angle);
-    if (ring.length === 0) return;
+    const current = this.#selectedBox(state);
+    if (!current || current.depth === 0) {
+      this.#selectBox(state, this.#topLandmark(state));
+      return;
+    }
+    const siblings = this.#siblingsAround(state, current.parentAddress!);
+    const index = siblings.findIndex(entry => entry.address === current.address);
+    if (index < 0 || siblings.length === 0) return;
+    this.#selectBox(state, siblings[(index + step + siblings.length) % siblings.length].address);
+  }
 
+  /** Select one level in: a marker's landmark, a landmark's focus. */
+  selectInward(): void {
+    const state = this.#state;
+    if (!state) return;
+    const current = this.#selectedBox(state);
+    if (!current || current.parentAddress === null) return;
+    this.#selectBox(state, current.parentAddress);
+  }
+
+  /**
+   * Select one level out: from the focus or nothing the landmark nearest the
+   * top; from a landmark the marker nearest its own outward direction, the
+   * middle of the fan.
+   */
+  selectOutward(): void {
+    const state = this.#state;
+    if (!state) return;
+    const current = this.#selectedBox(state);
+    if (!current || current.depth === 0) {
+      this.#selectBox(state, this.#topLandmark(state));
+      return;
+    }
+    if (current.depth !== 1) return;
+    const fan = this.#siblingsAround(state, current.address);
+    if (fan.length === 0) return;
+    const outward = this.#angleAround(state, current.address, String(state.tree.focusNodeId));
+    const nearest = fan.reduce((best, entry) => (Math.abs(signedAngleBetween(outward, entry.angle)) < Math.abs(signedAngleBetween(outward, best.angle)) ? entry : best));
+    this.#selectBox(state, nearest.address);
+  }
+
+  /** Balloon the selected box if it is small, or collapse it if it is the one ballooned. */
+  toggleSelectedPreview(): void {
     const selected = this.#cy.$('node:selected');
-    const selectedAddress = selected.length === 1 ? state.addressByElementId.get(selected.first().id()) : undefined;
-    const selectedBox = selectedAddress ? state.tree.boxes.find(box => box.address === selectedAddress) : undefined;
-    const startAddress = selectedBox?.depth === 1 ? selectedBox.address : selectedBox?.depth === 2 ? selectedBox.parentAddress : null;
-    const startIndex = startAddress ? ring.findIndex(entry => entry.address === startAddress) : -1;
+    if (selected.length !== 1) return;
+    this.togglePreview(selected.first().id());
+  }
 
-    const TOP = 270;
-    const nearestTop = ring.reduce((best, entry, index) => (Math.abs(entry.angle - TOP) < Math.abs(ring[best].angle - TOP) ? index : best), 0);
-    const nextIndex = startIndex < 0 ? nearestTop : (startIndex + step + ring.length) % ring.length;
-    const elementId = state.ids.boxes.get(ring[nextIndex].address);
+  #selectedBox(state: MapState): MapBox | undefined {
+    const selected = this.#cy.$('node:selected');
+    if (selected.length !== 1) return undefined;
+    const address = state.addressByElementId.get(selected.first().id());
+    return address ? state.tree.boxes.find(box => box.address === address) : undefined;
+  }
+
+  /**
+   * Select the box and, for a marker, balloon it: moving the selection with
+   * the keyboard is an act of inspection and a marker is unreadable otherwise;
+   * a landmark balloons only on request (Space), a click never (§5.3).
+   */
+  #selectBox(state: MapState, address: Address | undefined): void {
+    const elementId = address ? state.ids.boxes.get(address) : undefined;
     if (!elementId) return;
-
     this.collapsePreview();
     this.#cy.$(':selected').unselect();
     this.#cy.getElementById(elementId).select();
+    const box = state.tree.boxes.find(candidate => candidate.address === address);
+    if (box?.depth === 2 && this.needsPreview(elementId)) this.togglePreview(elementId);
+  }
+
+  /** The children of a box in clockwise order around it, with their angles. */
+  #siblingsAround(state: MapState, parentAddress: Address): Array<{ address: Address; angle: number }> {
+    return state.tree.boxes
+      .filter(box => box.parentAddress === parentAddress)
+      .map(box => ({ address: box.address, angle: this.#angleAround(state, box.address, parentAddress) }))
+      .sort((left, right) => left.angle - right.angle);
+  }
+
+  /** The angle of a box's position as seen from another's, on screen: 0 east, increasing clockwise since y points down. */
+  #angleAround(state: MapState, address: Address, centreAddress: Address): number {
+    const position = state.layout.positions.get(address);
+    const centre = state.layout.positions.get(centreAddress);
+    if (!position || !centre) return 0;
+    return normalizeBearing((Math.atan2(position.y - centre.y, position.x - centre.x) * HALF_TURN_DEGREES) / Math.PI);
+  }
+
+  /** The landmark nearest the top of the ring (270° on screen), or none on a map without landmarks. */
+  #topLandmark(state: MapState): Address | undefined {
+    const TOP = 270;
+    const ring = this.#siblingsAround(state, String(state.tree.focusNodeId));
+    if (ring.length === 0) return undefined;
+    return ring.reduce((best, entry) => (Math.abs(entry.angle - TOP) < Math.abs(best.angle - TOP) ? entry : best)).address;
   }
 
   // ==========================================================================
@@ -170,10 +243,25 @@ export class MapView {
    * Walk, seed, style and lay out the map of `focusNodeId` for a surface of
    * the given size, and keep it; nothing is drawn and the surface stays
    * hidden. The size is the caller's because a hidden surface measures zero.
+   * `fallbackThemeId`, the entered scene's theme, is what the map is drawn in
+   * under `map.themeMode` 'scene' when the focus has no scene of its own.
    */
-  async prepare(focusNodeId: NodeId, surface: Size): Promise<void> {
+  async prepare(focusNodeId: NodeId, surface: Size, options: { fallbackThemeId?: ThemeId } = {}): Promise<void> {
     if (!graphStore.nodes.some(node => node.id === focusNodeId)) throw new Error(`Map view: no node ${focusNodeId}`);
+    this.#enteredThemeId = options.fallbackThemeId ?? null;
     this.#prepared = await this.#derive(focusNodeId, new Map(), surface);
+  }
+
+  /**
+   * The theme a map of `focusNodeId` is drawn in (docs/map-view.md §5.6):
+   * under 'fixed' the one theme for every map; under 'scene' the theme of the
+   * focus's own study scene, else of the scene the map was entered from, else
+   * the fixed one.
+   */
+  #themeFor(focusNodeId: NodeId): ThemeId {
+    if (getSetting('map.themeMode') === 'fixed') return getSetting('map.themeId');
+    const ownScene = graphStore.scenes.find(scene => scene.centralNodeId === focusNodeId);
+    return ownScene?.themeId ?? this.#enteredThemeId ?? getSetting('map.themeId');
   }
 
   /** The prepared map, or else the shown one, as the map's scene: the focus and the landmarks, what the engine transitions to and from. */
@@ -241,7 +329,7 @@ export class MapView {
       layout: state.layout,
       nodeById: new Map(graphStore.nodes.map(node => [node.id, node])),
       edgeById: state.edgeById,
-      themeId: getSetting('map.themeId'),
+      themeId: state.themeId,
     };
   }
 
@@ -327,6 +415,8 @@ export class MapView {
 
     // The same paint as the scene canvas, colour and vignette, so the two surfaces match at the swap.
     applyCanvasTheme(container, getTheme(derived.render.themeId));
+    // The instance contract (§7.5): a feature hosted on this instance reads the theme here, as it reads the scene's from currentSceneId.
+    this.#cy.scratch('themeId', derived.render.themeId);
     void this.#frame(0);
     this.#applyGrabbability();
     return state;
@@ -335,6 +425,7 @@ export class MapView {
   /** Hide the map and forget anything prepared; what the scene canvas holds is the flow's concern. */
   hide(): void {
     this.#prepared = null;
+    this.#enteredThemeId = null;
     if (!this.#state) return;
     this.#preview.reset();
     this.#state = null;
@@ -402,8 +493,9 @@ export class MapView {
       else this.collapsePreview();
       this.#cy.$(':selected').unselect();
 
-      // Base styles carry over: survivors keep their nodes, and arrivals add theirs.
-      const derived = await this.#derive(nodeId, new Map(old.baseStyles), this.#surface());
+      // Base styles carry over, survivors keeping theirs and arrivals adding theirs, unless the theme changes with the focus (§5.6): they are generated per theme.
+      const sameTheme = this.#themeFor(nodeId) === old.themeId;
+      const derived = await this.#derive(nodeId, sameTheme ? new Map(old.baseStyles) : new Map(), this.#surface());
       const plan = await this.#animateTo(old, derived);
       if (options.record) this.#history.push(nodeId);
       eventBus.emit('mapViewChanged', { active: true, focusNodeId: nodeId });
@@ -462,10 +554,22 @@ export class MapView {
     this.#cy.endBatch();
 
     // Move: one movement for every survivor and the zoom; converging twins fade out along the way.
-    if (animate) await move(this.#cy, plan, layout, tree, baseStyles, zoom, lineTweens, getSetting('map.moveDuration'));
+    // A theme that changes with the focus crossfades the surface over the move; the boxes take the new theme's styles when it ends (§5.6).
+    const themeChanged = derived.state.themeId !== old.themeId;
+    const moveDuration = getSetting('map.moveDuration');
+    if (themeChanged) {
+      applyCanvasTheme(this.#container(), getTheme(derived.state.themeId), animate ? moveDuration : 0);
+      this.#cy.scratch('themeId', derived.state.themeId);
+    }
+    if (animate) await move(this.#cy, plan, layout, tree, baseStyles, zoom, lineTweens, moveDuration);
     else settle(this.#cy, plan, layout, zoom, lineTweens);
     removeElements(this.#cy, plan.converging.map(twin => twin.elementId));
-    restyleBoxes(this.#cy, this.#roleChangers(plan.surviving, old, layout));
+    if (themeChanged) {
+      rebuildStylesheet(this.#cy, derived.render, plan.ids, baseStyles);
+      restyleLines(this.#cy, lineWeights(derived.render, plan.ids, [...plan.ids.lines.keys()]));
+    } else {
+      restyleBoxes(this.#cy, this.#roleChangers(plan.surviving, old, layout));
+    }
     if (animate && plan.arriving.length > 0) await wait(pause);
 
     // Arrive: new markers are added at their places and slide out of their parents.
@@ -543,10 +647,12 @@ export class MapView {
 
   /**
    * Move the selected boxes out or in by `factor`, the scene's `,` and `.`:
-   * a landmark's whole fan, by the multiplier on its leaf, so it survives a
+   * the focus's whole ring, by the multiplier on its leaf (the ring is the
+   * focus's leaf, §2), landmarks with a dragged length staying put; a
+   * landmark's whole fan, by the multiplier on its leaf, so it survives a
    * change in crowding; a marker alone along its own ray, by its length, the
    * same absolute value a drag writes, so a moved marker is a hand-placed
-   * marker. The focus has nothing to move. Edit mode only.
+   * marker. Edit mode only.
    */
   async moveSelected(factor: number): Promise<void> {
     const state = this.#state;
@@ -554,12 +660,14 @@ export class MapView {
 
     const boxes = state.adjustments.boxes;
     let touched = false;
+    let ringMoved = false;
     this.#cy.$('node:selected').forEach(node => {
       const address = state.addressByElementId.get(node.id());
       const box = address ? state.tree.boxes.find(candidate => candidate.address === address) : undefined;
-      if (!address || !box || box.depth === 0) return;
-      if (box.depth === 1) {
+      if (!address || !box) return;
+      if (box.depth <= 1) {
         boxes[address] = { ...boxes[address], leaf: Math.round((boxes[address]?.leaf ?? 1) * factor * 100) / 100 };
+        if (box.depth === 0) ringMoved = true;
       } else {
         const length = state.layout.lengths.get(address) ?? 0;
         boxes[address] = { ...boxes[address], length: Math.round(length * factor) };
@@ -568,7 +676,8 @@ export class MapView {
     });
     if (!touched) return;
 
-    this.#applyOverrides([]);
+    // A moved ring changes every line's drawn length, so every box's lines re-weight.
+    this.#applyOverrides(ringMoved ? state.tree.boxes.map(box => box.address) : []);
     await this.#persistRecord();
   }
 
@@ -658,7 +767,7 @@ export class MapView {
   async #derive(focusNodeId: NodeId, baseStyles: Map<NodeId, BoxBaseStyle>, surface: Size, orderToKeep?: Map<EdgeId, EdgeEnds>): Promise<DerivedMap> {
     const nodeById = new Map(graphStore.nodes.map(node => [node.id, node]));
     const edgeById = new Map(graphStore.edges.map(edge => [edge.id, edge]));
-    const themeId = getSetting('map.themeId');
+    const themeId = this.#themeFor(focusNodeId);
     const tree = buildMapTree(focusNodeId, graphStore.nodes, graphStore.edges);
     const twinAllowance = getSetting('map.twinAllowance');
     const endsByEdge = await ensureBearings(tree, edgeById, graphStore.edges, twinAllowance, orderToKeep);
@@ -693,6 +802,7 @@ export class MapView {
     return {
       state: {
         tree,
+        themeId,
         lineByAddress: firstLineByAddress(tree),
         edgeById,
         endsByEdge,

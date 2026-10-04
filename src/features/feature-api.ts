@@ -26,6 +26,8 @@ export class FeatureAPI {
   transition: Transition;
   path: Path;
   quiz: Quiz;
+  /** The map's own quiz: a separate session over the map instance, every node eligible (map-view.md §7.5). */
+  mapQuiz: Quiz;
   autolayout: AutoLayout;
   arrange: Arrange;
   mapView: MapView;
@@ -39,7 +41,8 @@ export class FeatureAPI {
     this.graph = new Graph(cy);
     this.transition = new Transition(cy, backgroundRenderer);
     this.path = new Path(cy);
-    this.quiz = new Quiz(cy);
+    this.quiz = new Quiz(cy, 'scenes');
+    this.mapQuiz = new Quiz(mapCy, 'graph');
     this.autolayout = new AutoLayout(cy);
     this.arrange = new Arrange(cy);
     this.mapView = new MapView(mapCy);

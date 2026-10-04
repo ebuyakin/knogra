@@ -64,7 +64,8 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     column: 2,
     shortcuts: [
       { key: '/', description: 'Open the map of this scene' },
-      { key: 'L / H', description: 'Select next / previous landmark (or Arrows)' },
+      { key: 'H J K L', description: 'Walk the map: siblings, in, out (or Arrows)' },
+      { key: 'Space', description: 'Balloon the selected small node' },
       { key: 'Enter', description: 'Open the focus\'s scene' },
       { key: 'Escape', description: 'Back to the scene you came from' },
     ]

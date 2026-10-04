@@ -1,3 +1,17 @@
+/**
+ * Quiz — runtime recall over one canvas.
+ *
+ * A session samples nodes and masks their content on the instance it is bound
+ * to; the user selects, reveals, grades. Two instances exist (feature-api.ts):
+ * one over the scene instance, eligible nodes being those in some scene, and
+ * one over the map instance, eligible nodes being the whole graph; a session
+ * belongs to the canvas it was started on and the handoff is closed while it
+ * runs (docs/map-view.md §7.5). The class knows neither canvas by name: it
+ * reads an element's node through the instance contract both honour, the node
+ * id in `data.nodeId` or else the element id, the design in `data.design`, the
+ * theme in the instance's scratch or else the current scene's.
+ */
+
 import type cytoscape from 'cytoscape';
 import type { Core } from 'cytoscape';
 import type { AppMode, Node, NodeId } from '../core/main-types';
@@ -6,6 +20,9 @@ import { eventBus } from '../events/event-bus';
 import { getAppMode, setAppMode } from '../storage/app-mode';
 import { graphStore } from '../storage/graph-store';
 import { StyleGenerator } from '../styles/style-generator';
+
+/** Which nodes a session may hide: those in some scene (the scene quiz), or every node (the map quiz). */
+export type QuizEligibility = 'scenes' | 'graph';
 
 interface QuizSession {
   config: QuizConfig;
@@ -21,7 +38,7 @@ interface QuizSession {
 // bypassing only its background-image; nothing else is ever touched.
 const QUIZ_BYPASS_PROPS = 'background-image';
 
-export function getEligibleQuizNodeIds(config: QuizConfig): NodeId[] {
+export function getEligibleQuizNodeIds(config: QuizConfig, eligibility: QuizEligibility): NodeId[] {
   const sceneNodeIds = new Set<NodeId>();
   const centralNodeIds = new Set<NodeId>();
 
@@ -34,7 +51,7 @@ export function getEligibleQuizNodeIds(config: QuizConfig): NodeId[] {
 
   return graphStore.nodes
     .map(node => node.id)
-    .filter(nodeId => sceneNodeIds.has(nodeId))
+    .filter(nodeId => eligibility === 'graph' || sceneNodeIds.has(nodeId))
     .filter(nodeId => config.includeCentralNodes || !centralNodeIds.has(nodeId));
 }
 
@@ -58,14 +75,16 @@ export function sampleQuizNodeIds(nodeIds: NodeId[], hiddenPercent: number): Nod
 
 export class Quiz {
   #cy: Core;
+  #eligibility: QuizEligibility;
   #session: QuizSession | null = null;
   #listeners: Set<QuizSnapshotListener> = new Set();
   #selectedNodeId: NodeId | null = null;
   #message: string | null = null;
   #ending: boolean = false;
 
-  constructor(cy: Core) {
+  constructor(cy: Core, eligibility: QuizEligibility) {
     this.#cy = cy;
+    this.#eligibility = eligibility;
 
     this.#cy.on('select unselect', 'node', () => {
       this.#refreshSelectedNode();
@@ -84,6 +103,15 @@ export class Quiz {
         this.#end({ restoreAppMode: false });
       }
     });
+  }
+
+  isActive(): boolean {
+    return this.#session !== null;
+  }
+
+  /** A node's standing in the running session; 'not-hidden' when none runs. For the UI that must not give a hidden node away. */
+  statusOf(nodeId: NodeId): QuizNodeStatus {
+    return this.#getNodeStatus(nodeId);
   }
 
   subscribe(listener: QuizSnapshotListener): () => void {
@@ -105,7 +133,7 @@ export class Quiz {
         active: false,
         config: null,
         previousAppMode: null,
-        eligibleNodeCount: getEligibleQuizNodeIds({ hiddenPercent: 30, includeCentralNodes: true }).length,
+        eligibleNodeCount: getEligibleQuizNodeIds({ hiddenPercent: 30, includeCentralNodes: true }, this.#eligibility).length,
         hiddenCount: 0,
         revealedCount: 0,
         remainingCount: 0,
@@ -141,7 +169,7 @@ export class Quiz {
     }
 
     const normalizedConfig = this.#normalizeConfig(config);
-    const eligibleNodeIds = getEligibleQuizNodeIds(normalizedConfig);
+    const eligibleNodeIds = getEligibleQuizNodeIds(normalizedConfig, this.#eligibility);
     const hiddenNodeIds = sampleQuizNodeIds(eligibleNodeIds, normalizedConfig.hiddenPercent);
 
     if (hiddenNodeIds.length === 0) {
@@ -240,7 +268,12 @@ export class Quiz {
 
   #refreshSelectedNode(): void {
     const selectedNode = this.#cy.nodes(':selected').first();
-    this.#selectedNodeId = selectedNode.length > 0 ? selectedNode.id() as NodeId : null;
+    this.#selectedNodeId = selectedNode.length > 0 ? this.#nodeIdOf(selectedNode) : null;
+  }
+
+  /** The node behind an element: `data.nodeId` where the instance's ids are opaque (the map), else the element id (a scene). */
+  #nodeIdOf(node: cytoscape.NodeSingular): NodeId {
+    return (node.data('nodeId') as NodeId | undefined) ?? (node.id() as NodeId);
   }
 
   #applyCurrentSceneState(): void {
@@ -251,11 +284,11 @@ export class Quiz {
     this.#emitSnapshot();
   }
 
+  /** Every element of the node, several on the map (twins), one on a scene. */
   #applyNodeStateById(nodeId: NodeId): void {
-    const node = this.#cy.getElementById(nodeId as string);
-    if (node.length > 0 && node.isNode()) {
-      void this.#applyNodeState(node as cytoscape.NodeSingular);
-    }
+    this.#cy.nodes().forEach(node => {
+      if (this.#nodeIdOf(node) === nodeId) void this.#applyNodeState(node);
+    });
   }
 
   /**
@@ -265,7 +298,7 @@ export class Quiz {
    * exactly as it normally renders. Nothing else ever changes.
    */
   async #applyNodeState(node: cytoscape.NodeSingular): Promise<void> {
-    if (this.#getNodeStatus(node.id() as NodeId) === 'hidden') {
+    if (this.#getNodeStatus(this.#nodeIdOf(node)) === 'hidden') {
       await this.#hideNodeContent(node);
       return;
     }
@@ -282,7 +315,7 @@ export class Quiz {
       const maskedImage = await this.#maskedBackgroundImage(node);
       if (!maskedImage) return;
       // State may have changed while the masked SVG was generating.
-      if (this.#getNodeStatus(node.id() as NodeId) !== 'hidden') return;
+      if (this.#getNodeStatus(this.#nodeIdOf(node)) !== 'hidden') return;
       node.style('background-image', maskedImage);
     } catch (error) {
       console.warn(`[Quiz] Failed to mask node ${node.id()}`, error);
@@ -307,17 +340,21 @@ export class Quiz {
   }
 
   #resolveNodeData(node: cytoscape.NodeSingular): Node {
-    const stored = graphStore.nodes.find(n => n.id === node.id());
+    const nodeId = this.#nodeIdOf(node);
+    const stored = graphStore.nodes.find(n => n.id === nodeId);
     if (stored) return stored;
     return {
-      id: node.id() as NodeId,
+      id: nodeId,
       title: (node.data('title') as string) ?? '',
       tags: (node.data('tags') as string[]) ?? [],
       properties: (node.data('properties') as Record<string, unknown>) ?? {}
     };
   }
 
+  /** The theme the instance draws in: declared in its scratch (the map), else the current scene's. */
   #currentThemeId(): string {
+    const declared = this.#cy.scratch('themeId') as string | undefined;
+    if (declared) return declared;
     const sceneId = this.#cy.scratch('currentSceneId') as string | undefined;
     const scene = sceneId ? graphStore.scenes.find(s => s.id === sceneId) : null;
     return scene?.themeId ?? 'dark';

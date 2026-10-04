@@ -52,11 +52,28 @@ export async function handleMapKeys(context: KeyboardContext, event: KeyboardEve
     return true;
   }
 
-  // Arrows and h / l: the selection moves around the ring, as the scene's arrows and h j k l move it between nodes;
-  // on a ring the two directions that exist are clockwise and anticlockwise. Up, down, j, k are kept for the fan.
+  // Arrows and h j k l walk the map as a tree, as the scene's move the selection between nodes: left and right
+  // among siblings (landmarks around the focus, markers around their landmark), down out a level, up in a level.
   if (key === 'arrowright' || key === 'l' || key === 'arrowleft' || key === 'h') {
     event.preventDefault();
-    mapView.selectLandmark(key === 'arrowright' || key === 'l' ? 1 : -1);
+    mapView.selectSibling(key === 'arrowright' || key === 'l' ? 1 : -1);
+    return true;
+  }
+  if (key === 'arrowdown' || key === 'j') {
+    event.preventDefault();
+    mapView.selectOutward();
+    return true;
+  }
+  if (key === 'arrowup' || key === 'k') {
+    event.preventDefault();
+    mapView.selectInward();
+    return true;
+  }
+
+  // Space: balloon the selected box if it is small, or collapse it; markers balloon on their own when the keyboard selects them.
+  if (key === ' ') {
+    event.preventDefault();
+    mapView.toggleSelectedPreview();
     return true;
   }
 

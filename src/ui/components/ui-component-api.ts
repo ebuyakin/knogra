@@ -40,6 +40,7 @@ export class UIComponentAPI {
   readonly backgroundEditor: BackgroundEditor;
   readonly themePicker: ThemePicker;
   readonly quizPanel: QuizPanel;
+  readonly mapQuizPanel: QuizPanel;
   readonly anchorLinkTooltip: AnchorLinkTooltip;
   readonly mapBoxTooltip: MapBoxTooltip;
   readonly quickTitleEditor: QuickTitleEditor;
@@ -66,7 +67,8 @@ export class UIComponentAPI {
     this.nodeManager = new NodeManager(features);
     this.backgroundEditor = new BackgroundEditor(container);
     this.themePicker = new ThemePicker();
-    this.quizPanel = new QuizPanel(features, container);
+    this.quizPanel = new QuizPanel(features.quiz, container);
+    this.mapQuizPanel = new QuizPanel(features.mapQuiz, container);
     this.anchorLinkTooltip = new AnchorLinkTooltip(cy, container);
     this.mapBoxTooltip = new MapBoxTooltip(mapCy, mapContainer, features);
     this.quickTitleEditor = new QuickTitleEditor(cy, container);
@@ -91,6 +93,7 @@ export class UIComponentAPI {
       backgroundEditor: this.backgroundEditor,
       themePicker: this.themePicker,
       quizPanel: this.quizPanel,
+      mapQuizPanel: this.mapQuizPanel,
       anchorLinkTooltip: this.anchorLinkTooltip,
       pasteStyleDialog: this.pasteStyleDialog
     });

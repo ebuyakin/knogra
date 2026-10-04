@@ -89,6 +89,12 @@ export function buildMapMenu(deps: MenuDependencies): MenuItem[] {
       }
     },
     {
+      label: 'Quiz...',
+      action: () => {
+        deps.mapQuizPanel.show();
+      }
+    },
+    {
       label: 'Open the focus\'s scene (Enter)',
       enabled: deps.mapHandoff.canLeave(),
       action: () => {
@@ -97,6 +103,7 @@ export function buildMapMenu(deps: MenuDependencies): MenuItem[] {
     },
     {
       label: 'Back to scene (Esc)',
+      enabled: deps.mapHandoff.canBack(),
       action: () => {
         deps.mapHandoff.back();
       }

@@ -45,7 +45,8 @@ export function buildCanvasMenu(deps: MenuDependencies, position: MenuPosition):
     buildArrangeMenu(deps.features, editMode),
     buildZoomMenu(deps),
     {
-      label: 'Helicopter view',
+      label: 'Helicopter view (/)',
+      enabled: deps.mapHandoff.canEnter(),
       action: () => {
         deps.mapHandoff.enter();
       }

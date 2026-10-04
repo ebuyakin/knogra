@@ -112,7 +112,7 @@ Rewritten 2026-10-02: the engine does the morph through the map's scene; the cro
 - [x] engine arrivals and departures for the handoff: 'grow' in, 'shrink' out (03.10; pluggable phase animators, scene-transitions.md §4.2)
 - [x] the scene a focus without one gets = the map's skeleton, focus and landmarks (03.10; markers exist only on the map)
 - [x] reset a study scene to the map's skeleton (03.10): `ui/scene-reset.ts`, under Scene design → Auto-layout "Reset to map shape…", Edit mode, confirm; carries over title, description, theme, background, edge-type visibility; animated by the engine with 'shrink'
-- [ ] `map.themeMode` `scene`, with the fallback to the entered scene's theme and the crossfade during move
+- [x] `map.themeMode` `scene` (04.10): the focus's scene's theme, else the entered scene's, else the fixed one; on a re-focus that changes the theme the surface crossfades over the move and the boxes and lines take the new theme's styles when it ends (`rebuildStylesheet`)
 - [ ] `docs/map-view.md`: status Draft → Current; any place the code diverged, amended
 - [ ] `docs/README.md`: the map-view.md row's status
 - [ ] journal entry

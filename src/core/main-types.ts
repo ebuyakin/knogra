@@ -192,7 +192,7 @@ export interface Scene {
 /** Map view adjustments for one focus; positions derive from bearings and these (docs/map-view.md §6.2) */
 export interface MapView {
   focusNodeId: NodeId;
-  boxes: Record<string, { length?: number; scale?: number; leaf?: number }>;  // key: address, e.g. 'A/B/C'; scale and leaf are multipliers on the derived values
+  boxes: Record<string, { length?: number; scale?: number; leaf?: number }>;  // key: address, e.g. 'A/B/C'; scale and leaf are multipliers on the derived values; on the focus's entry, leaf multiplies the ring
   landmarkScale?: number;  // The author's multiplier on the derived landmark scale; absent = 1
   markerScale?: number;    // The author's multiplier on the derived marker scale; absent = 1
   updatedAt: Date;

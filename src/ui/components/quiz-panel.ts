@@ -1,9 +1,10 @@
-import type { FeatureAPI } from '../../features/feature-api';
+import type { Quiz } from '../../features/quiz';
 import type { QuizSnapshot } from '../../core/quiz-types';
 import '../../styles/quiz-panel.css';
 
+/** One panel per quiz: the scene's and the map's are separate sessions (map-view.md §7.5). */
 export class QuizPanel {
-  #features: FeatureAPI;
+  #quiz: Quiz;
   #container: HTMLElement;
   #overlay: HTMLDivElement;
   #root: HTMLDivElement;
@@ -15,10 +16,10 @@ export class QuizPanel {
   #dragOffsetX: number = 0;
   #dragOffsetY: number = 0;
 
-  constructor(features: FeatureAPI, container: HTMLElement) {
-    this.#features = features;
+  constructor(quiz: Quiz, container: HTMLElement) {
+    this.#quiz = quiz;
     this.#container = container;
-    this.#snapshot = this.#features.quiz.getSnapshot();
+    this.#snapshot = this.#quiz.getSnapshot();
     this.#overlay = document.createElement('div');
     this.#overlay.className = 'quiz-panel-overlay hidden';
     this.#root = document.createElement('div');
@@ -26,7 +27,7 @@ export class QuizPanel {
     this.#overlay.appendChild(this.#root);
     document.body.appendChild(this.#overlay);
 
-    this.#features.quiz.subscribe((snapshot) => {
+    this.#quiz.subscribe((snapshot) => {
       this.#snapshot = snapshot;
       this.#render();
     });
@@ -160,10 +161,10 @@ export class QuizPanel {
   #attachListeners(): void {
     this.#root.querySelector('[data-action="hide"]')?.addEventListener('click', () => this.hide());
     this.#root.querySelector('[data-action="start"]')?.addEventListener('click', () => this.#startQuiz());
-    this.#root.querySelector('[data-action="end"]')?.addEventListener('click', () => this.#features.quiz.end());
-    this.#root.querySelector('[data-action="reveal"]')?.addEventListener('click', () => this.#features.quiz.revealSelected());
-    this.#root.querySelector('[data-action="correct"]')?.addEventListener('click', () => this.#features.quiz.markSelectedCorrect());
-    this.#root.querySelector('[data-action="wrong"]')?.addEventListener('click', () => this.#features.quiz.markSelectedWrong());
+    this.#root.querySelector('[data-action="end"]')?.addEventListener('click', () => this.#quiz.end());
+    this.#root.querySelector('[data-action="reveal"]')?.addEventListener('click', () => this.#quiz.revealSelected());
+    this.#root.querySelector('[data-action="correct"]')?.addEventListener('click', () => this.#quiz.markSelectedCorrect());
+    this.#root.querySelector('[data-action="wrong"]')?.addEventListener('click', () => this.#quiz.markSelectedWrong());
 
     const percentInput = this.#root.querySelector('[data-role="hidden-percent"]') as HTMLInputElement | null;
     percentInput?.addEventListener('input', () => this.#syncInputs());
@@ -203,7 +204,7 @@ export class QuizPanel {
 
   #startQuiz(): void {
     this.#syncInputs();
-    this.#features.quiz.start({
+    this.#quiz.start({
       hiddenPercent: this.#hiddenPercent,
       includeCentralNodes: this.#includeCentral
     });

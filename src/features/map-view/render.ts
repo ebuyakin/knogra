@@ -166,6 +166,25 @@ export function renderMap(cy: Core, input: MapRenderInput, baseStyles: Map<NodeI
   return ids;
 }
 
+/**
+ * Rebuild the whole stylesheet for the input's theme over the elements already
+ * drawn: the edge rules, every box's rule at its layout scale, the central and
+ * selected rules. For a re-focus that changes the map's theme (docs/map-view.md
+ * §5.6); arrivals are added afterwards with their own rules.
+ */
+export function rebuildStylesheet(cy: Core, input: MapRenderInput, ids: MapElementIds, baseStyles: Map<NodeId, BoxBaseStyle>): void {
+  const stylesheet: StyleRule[] = [
+    StyleGenerator.generateEdgeStyle(input.themeId),
+    ...StyleGenerator.generateEdgeTypeStyles(input.edgeTypes, input.themeId),
+    BUNDLE_RULE,
+    ...boxRules(input, ids, [...ids.boxes.keys()], baseStyles),
+    ...StyleGenerator.buildCentralAndSelectedRules(input.themeId),
+  ];
+  cy.style().fromJson(stylesheet).update();
+  // Drop any inline size so the regenerated rules take effect.
+  for (const elementId of ids.boxes.values()) cy.getElementById(elementId).removeStyle('width height');
+}
+
 /** Add boxes and lines to a shown map, allocating their ids into `ids` and their rules into the stylesheet. */
 export function addElements(
   cy: Core,
@@ -292,6 +311,8 @@ function buildElements(
         depth: box.depth,
         title: node.title,
         centralNode: box.depth === 0,
+        // The design the box was styled with: the instance contract a hosted feature (Quiz) reads, beside nodeId (docs/map-view.md §7.5).
+        design: resolveDefaultDesign(node),
       },
       // A copy: Cytoscape keeps the object it is given as the element's live
       // position, and the layout is the feature's data, not the instance's.

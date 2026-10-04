@@ -169,6 +169,7 @@ The author's scales are multipliers on the derived ones, per map for all landmar
 Manual scales change the boxes and the leaves around them, never the ring: a leaf is measured from its landmark's rendered edge, and a marker keeps its near edge on the leaf at its rendered size, so W carries a fan outward with the box and M moves each marker out by its own extra depth (decided 2026-09-27; before, the leaf followed the derived size and W grew a box into its markers).
 The clearance stays the budget's, so W moves the box's edge and does not also inflate the air.
 A landmark's leaf also has its own multiplier, `,` and `.` (§5.3), applied after the surface cap, so a fan may be pushed past the surface as the scene's spread may, but never inside its box.
+The focus has the same two entries (2026-10-04): its `scale` is its own size, and its `leaf` is the ring, a multiplier on the default ring radius, since the ring is the focus's leaf (§2); a landmark whose length was dragged keeps it when the ring is moved, as a dragged marker keeps its length when its landmark's leaf is, so what was dragged is what is stored. The focus's size never moves the ring; a spread ring widens the arc every landmark's budget reads.
 
 ## 4. Invariants
 
@@ -226,8 +227,11 @@ Inside the map the keyboard is the map's own, since the scene's bindings never r
     , / .           the selected boxes in / out: a landmark's whole fan, a marker along its own ray
     < / >           the selected boxes enlarge / shrink
     G               re-focus on the selected landmark
-    → / l, ← / h    select the next landmark clockwise / anticlockwise around the ring (§5.2)
+    → / l, ← / h    select the next sibling clockwise / anticlockwise: landmarks around the focus, markers around their landmark (§5.2)
+    ↓ / j, ↑ / k    select one level out / in: focus → landmark → marker and back
+    Space           balloon the selected box if it is small, or collapse it
     [ / ]           previous / next focus
+    (menu) Quiz…    the map quiz (§7.5)
     F               back to the base frame: base zoom, focus at the centre
     = / -           zoom in / out about the focus, for the session
     Enter           leave: open the focus's study scene, created from the map if it has none
@@ -237,8 +241,10 @@ Entering is the handoff of §8: the scene engine transitions the scene into the 
 ### 5.2 Navigating
 
 Navigation is one degree at a time: double-clicking a landmark re-focuses the map on its node, as double-clicking navigates in a scene; a single click selects it, for the scale keys.
-The keyboard selects too (2026-10-04): the right and left arrows, and l and h, move the selection to the next landmark clockwise or anticlockwise around the ring, wrapping; from a selected marker its landmark is the start, and with nothing selected the landmark nearest the top is taken; then G re-focuses, Enter leaves to its scene.
-The order is the drawn order, which is the stored order (§3), so cycling never jumps; up, down, j and k are kept for stepping into a landmark's fan later.
+The keyboard walks the map as the tree it is (2026-10-04): the right and left arrows, l and h, move the selection to the next sibling clockwise or anticlockwise, wrapping, around the focus for landmarks and around the landmark for its markers; down and j step out a level, from the focus or nothing to the landmark nearest the top, from a landmark to the marker nearest its own outward direction, the middle of its fan; up and k step in, marker to landmark, landmark to focus.
+A marker the keyboard selects balloons by itself, since moving the selection by key is an act of inspection and a marker is unreadable otherwise; a landmark balloons only on Space, which toggles the selected box's balloon, and a click never balloons (§5.3).
+Then G re-focuses on a selected landmark, Enter leaves to the focus's scene.
+The sibling order is the drawn order, which is the stored order (§3), so cycling never jumps.
 Markers are not navigation targets.
 A jump of two hops, if ever wanted, is two transitions in sequence, not a new mechanism.
 
@@ -292,7 +298,8 @@ Other maps are not on screen and simply re-derive from the stored bearing when n
 Scale uses the selection-scoped Enlarge / Shrink vocabulary and, in the map container, its keys; a selected box, landmark or marker, gets its own scale.
 All landmarks or all markers of a map can be enlarged or shrunk together from the map menu, which changes the map's default for that role (`landmarkScale`, `markerScale` on the record); a box with its own scale keeps it.
 Scaling never moves the ring (§3 Manual scales); the leaves follow the boxes' rendered edges, so an enlarged landmark carries its fan outward rather than growing into it, and overlaps between neighbours that follow are the author's to accept or to fix.
-Distance is the scene's `,` and `.` (tighten / spread), on the selection: a selected landmark's whole fan moves in or out, its leaf multiplied (`leaf` on its box record) so the change survives a change in crowding; a selected marker moves along its own ray, its `length` written as a drag writes it, so a moved marker is a hand-placed marker; the focus has nothing to move.
+Distance is the scene's `,` and `.` (tighten / spread), on the selection: the selected focus moves its whole ring in or out, every landmark with its fan except those whose length was dragged (`leaf` on the focus's record, §3 Manual scales); a selected landmark's whole fan moves in or out, its leaf multiplied (`leaf` on its box record) so the change survives a change in crowding; a selected marker moves along its own ray, its `length` written as a drag writes it, so a moved marker is a hand-placed marker.
+The focus takes `>` and `<` like any box, its own size, the ring unmoved.
 Drag, scale and distance are the only layout gestures the map has; there is no auto-layout, arrange or rotate in v1.
 
 The order of the landmarks around the focus, and of a fan's markers around their landmark, is not stored anywhere: it is read off the bearings by sorting them, so a drag is the one thing that changes it, and the drawing never does (§3 Drawn directions).
@@ -316,7 +323,7 @@ The map's clicks (decided 2026-10-02; before, a single click ballooned, which fo
     double-click    on a landmark, re-focus; on a marker, balloon
     elsewhere       a single click anywhere collapses an open balloon, as does Escape, which then leaves the map on its next press
 
-Ballooning tweens the box's rendered size to the preview scale about its own centre, raised above its neighbours, and back when collapsed.
+Ballooning tweens the box's rendered size to the preview scale about its own centre, raised above its neighbours, and back when collapsed; a box near the edge of the surface is nudged inward by the least that keeps the balloon wholly on screen, and nudged back on collapse (2026-10-04).
 The balloon is an inline, transient size change, the mechanism grow-arrange uses for entrants; the box's stored scale is untouched and nothing is written.
 A ballooned landmark that becomes the focus is not collapsed first; the move grows it from its ballooned size.
 Neither the tooltip nor the balloon is navigation.
@@ -342,6 +349,8 @@ Chat and notes follow the focus throughout (§7.3), so leaving the map for the n
 `map.themeMode` has two values, and the choice is where continuity matters more to the author.
 `fixed`: every map uses `map.themeId`; continuity inside the map across every focus.
 `scene`: a map uses the theme of the study scene owned by its focus, falling back to the theme of the scene the map was entered from when the focus has none; continuity at the boundary when leaving the map for that scene, at the price of a theme crossfade on re-focus (§5.2).
+Built 2026-10-04: the flow hands the entered scene's theme to `prepare`; a re-focus that changes the theme regenerates the boxes' base styles, crossfades the surface's colour and vignette over the move, and gives the boxes and lines the new theme's styles when the move ends (the map has no ghosts and none were added for this); the map's scene carries the map's theme, so under `scene` the engine's picture matches the target at both boundaries and nothing crossfades there.
+Under `fixed`, entering from a scene in another theme crossfades every landmark through a ghost, since the engine treats a theme difference as a design change (seen 2026-10-03); that is the cost `fixed` chooses.
 
 ### 5.7 Absent by design
 
@@ -373,7 +382,7 @@ The cost is one more database to carry in the workspace file and to clear on res
 
     interface MapView {
       focusNodeId: NodeId;
-      boxes: Record<string, { length?: number; scale?: number; leaf?: number }>;   // key: address, e.g. 'A/B/C'; overrides only; leaf is a landmark's multiplier on its leaf
+      boxes: Record<string, { length?: number; scale?: number; leaf?: number }>;   // key: address, e.g. 'A/B/C'; overrides only; leaf is a landmark's multiplier on its leaf, and on the focus's entry the multiplier on the ring
       landmarkScale?: number;                                         // the author's multiplier on the derived landmark scale; absent = 1
       markerScale?: number;                                           // the author's multiplier on the derived marker scale; absent = 1
       updatedAt: Date;
@@ -515,7 +524,7 @@ Events, the engine announcing phases for the map to react to, were declined beca
     transition    openBehind(scene)                open a given Scene object instantly, nothing written, nothing announced
                   transitionTo(scene)              the three-phase transition from the current scene to a given Scene object, with the usual events; the current scene may be transient
                   ensureScene(nodeId, draft)       the existing find-or-create policy with a draft in place of the offsets rule; the draft receives the id the engine assigns; throws in View mode for a node without a scene
-    map view      prepare(nodeId, surface)         walk, seed, lay out for a surface of the given size, keep; nothing drawn (a hidden surface measures zero, so the flow passes the scene container's size)
+    map view      prepare(nodeId, surface, { fallbackThemeId })   walk, seed, lay out for a surface of the given size, keep; nothing drawn (a hidden surface measures zero, so the flow passes the scene container's size); the entered scene's theme is the fallback under `map.themeMode` 'scene' (§5.6)
                   mapScene()                       the prepared map, or else the shown one, as the map's scene: the focus and the landmarks (§8)
                   sceneDraft(sceneId)              the same skeleton under the given id: the study scene a focus without one gets, and what a scene is reset to
                   takeOver()                       draw the prepared map at the base frame, every marker stowed invisible on its landmark, and show the surface
@@ -554,10 +563,14 @@ The context is scene-keyed: `context-builder.ts` reads the scene record for the 
 The map's composition, focus, landmarks and markers, is the node's real neighbourhood and an equally good description; the seam is a "what is on screen" object built by the scene today and by the map later, consumed by context-builder, with a map variant of the Current Scene Composition section.
 A change inside the AI module, not the map.
 
-Quiz.
-Quiz is built on the scene instance, samples from the scene record, and hides content by styling elements by node id.
-On the map it samples from boxes and hides every box of a node, twins included: either a second Quiz bound to the map instance, or one Quiz over a small surface abstraction, an instance plus the two lookups.
-Not v1.
+Quiz (built 2026-10-04).
+The map has a quiz of its own, a separate session from the scene's: started from the map menu, it samples from every node in the graph (central nodes optionally excluded, as on a scene), masks every box of a hidden node, twins and markers included, and is walked map to map by re-focus, with the arrow keys and Space; a node's status is global to the session, not to a map, so re-focusing shows the next map with its hidden and revealed nodes as they stand.
+A session belongs to the canvas it was started on: while the map quiz runs the map cannot be left (Enter, Escape and the menu items are disabled; End the quiz first), and while a scene quiz runs the map cannot be entered.
+The two never overlap and share nothing; neither knows the other exists.
+One class, two instances (`features.quiz` over the scene instance with nodes in scenes eligible, `features.mapQuiz` over the map instance with every node eligible), the eligibility given at construction; one panel component, two instances, each bound to its quiz.
+The Quiz knows neither canvas by name: it reads an element's node through the instance contract both honour, the node id in `data.nodeId` or else the element id, the design to mask in `data.design`, the theme in the instance's scratch or else the current scene's; the map writes `design` into every box's data and its theme into scratch, the scene instance has carried `design` and `currentSceneId` all along.
+The balloon enlarges a masked box without unmasking it, which is what a quiz wants; the hover tooltip stays silent for a hidden node, or the title would give it away.
+Keys for Reveal, Correct and Wrong are not built on either canvas; the panel's buttons are the way.
 
 ## 8. The handoff
 
@@ -672,7 +685,7 @@ The budget, the floor and the balloon on a shrunk landmark (§5.3) make such a m
 
 Shortcuts.
 The slash is the entry key for now (§5.1); a proper one waits for the leader-key redesign of the keyboard handler.
-The F1 overlay lists the four keys that are the map's own, slash, L / H, Enter, Escape (2026-10-04); the keys that mean on the map what they mean in a scene are not repeated there.
+The F1 overlay lists the keys that are the map's own, slash, H J K L, Space, Enter, Escape (2026-10-04); the keys that mean on the map what they mean in a scene are not repeated there.
 
 ## 11. Staging
 

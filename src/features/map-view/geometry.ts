@@ -38,7 +38,7 @@ export interface Size {
   height: number;
 }
 
-/** The author's adjustments to one box: a centre-to-centre length, a multiplier on the derived scale, and for a landmark a multiplier on its leaf. */
+/** The author's adjustments to one box: a centre-to-centre length, a multiplier on the derived scale, and a multiplier on its leaf: a landmark's fan, or the ring for the focus (§2: the ring is the focus's leaf). */
 export interface BoxOverride {
   length?: number;
   scale?: number;
@@ -315,17 +315,23 @@ export function layoutMapTree(
   const placed = new Map<Address, Placed>();
 
   // Angles and base sizes for every box; lengths for landmarks, which need no scale.
+  // The focus's own record entries: `scale` is its size, `leaf` its ring, the
+  // multiplier on the default ring radius (§2: the ring is the focus's leaf);
+  // a landmark whose length was dragged keeps it, as a dragged marker does.
+  const focusOverride = overrides[String(tree.focusNodeId)];
+  const ringRadius = params.ringRadius * (focusOverride?.leaf ?? 1);
   for (const box of tree.boxes) {
     const base = baseSizes.get(box.nodeId) ?? { width: 0, height: 0 };
     if (box.parentAddress === null) {
-      placed.set(box.address, { box, angle: 0, base, length: 0, derivedScale: 1, scale: 1, sideClearances: NO_CLEARANCE });
+      const scale = focusOverride?.scale ?? 1;
+      placed.set(box.address, { box, angle: 0, base, length: 0, derivedScale: 1, scale, sideClearances: NO_CLEARANCE });
       continue;
     }
     const line = lineByAddress.get(box.address)!;
     const ends = endsByEdge.get(line.edgeId);
     if (!ends) throw new Error(`Map geometry: edge ${line.edgeId} has no bearing`);
     const angle = lineAngle(ends, line.reversed);
-    const length = box.depth === 1 ? (overrides[box.address]?.length ?? params.ringRadius) : 0;
+    const length = box.depth === 1 ? (overrides[box.address]?.length ?? ringRadius) : 0;
     placed.set(box.address, { box, angle, base, length, derivedScale: 1, scale: 1, sideClearances: NO_CLEARANCE });
   }
 

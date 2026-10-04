@@ -12,7 +12,7 @@
  */
 
 import type { Core, EventObject, NodeSingular } from 'cytoscape';
-import type { Edge, EdgeId, NodeId } from '../../core/main-types';
+import type { Edge, EdgeId, NodeId, ThemeId } from '../../core/main-types';
 import { isEditMode } from '../../storage/app-mode';
 import { bearingBetween, endsAfterMove, layoutMapTree, unstretch, type EdgeEnds, type MapAdjustments, type MapGeometryParams, type MapLayout, type Size } from './geometry';
 import type { Address, MapLine, MapTree } from './map-tree';
@@ -21,6 +21,8 @@ import type { BoxBaseStyle, LineBases, MapElementIds } from './render';
 /** Everything the shown map is derived from, plus the derivation. Mutated by adjustments. */
 export interface MapState {
   tree: MapTree;
+  /** The theme the map is drawn in (docs/map-view.md §5.6); base styles and the stylesheet's edge rules are bound to it. */
+  themeId: ThemeId;
   /** Each box's first line, which carries the box's direction; a box's other lines, parallel edges, share it. */
   lineByAddress: Map<Address, MapLine>;
   edgeById: Map<EdgeId, Edge>;

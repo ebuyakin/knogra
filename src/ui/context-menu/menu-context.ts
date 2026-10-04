@@ -48,6 +48,8 @@ export interface MenuDependencies {
   backgroundEditor: BackgroundEditor;
   themePicker: ThemePicker;
   quizPanel: QuizPanel;
+  /** The map quiz's panel, a separate session (map-view.md §7.5). */
+  mapQuizPanel: QuizPanel;
   anchorLinkTooltip: AnchorLinkTooltip;
   pasteStyleDialog: PasteStyleDialog;
   /** The flow between a scene and the map view; the menus never sequence the features themselves. */

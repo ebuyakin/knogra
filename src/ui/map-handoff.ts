@@ -48,10 +48,22 @@ export class MapHandoff {
     this.#deps = deps;
   }
 
+  /** Whether the map can be entered: not while a scene quiz runs, whose session belongs to the scene canvas (map-view.md §7.5). */
+  canEnter(): boolean {
+    const { mapView, quiz } = this.#deps.features;
+    return !mapView.isActive() && !quiz.isActive();
+  }
+
+  /** Whether the map can be left for the entered scene: not while a map quiz runs; End it first. */
+  canBack(): boolean {
+    const { mapView, mapQuiz } = this.#deps.features;
+    return mapView.isActive() && !mapQuiz.isActive();
+  }
+
   /** Scene X to the map of X's central node (§8, entering). */
   async enter(): Promise<void> {
     const { mapView, transition, scene: sceneFeature } = this.#deps.features;
-    if (this.#busy || mapView.isActive()) return;
+    if (this.#busy || !this.canEnter()) return;
     const sceneId = sceneFeature.getCurrentSceneId();
     const scene = sceneId ? graphStore.scenes.find(candidate => candidate.id === sceneId) : undefined;
     if (!scene) return;
@@ -61,7 +73,8 @@ export class MapHandoff {
     try {
       // Steps 1 to 3: only reads until the transition; a failure here leaves the user on scene X, the engine's own handling.
       try {
-        await mapView.prepare(scene.centralNodeId, this.#surface());
+        // The entered scene's theme is the map's fallback under `map.themeMode` 'scene' (map-view.md §5.6).
+        await mapView.prepare(scene.centralNodeId, this.#surface(), { fallbackThemeId: scene.themeId });
         await waitForStep('[handoff] map prepared, nothing drawn');
         // The engine moves the focus and the landmarks, new landmarks growing out of the focus; the markers are the map's, after the swap (map-view.md §8).
         await transition.transitionTo(mapView.mapScene(), { recipe: { arrival: 'grow' } });
@@ -86,16 +99,16 @@ export class MapHandoff {
     }
   }
 
-  /** Whether `leave` can open a scene for the focus: it has one, or Edit mode can create it. */
+  /** Whether `leave` can open a scene for the focus: it has one, or Edit mode can create it; and no map quiz runs. */
   canLeave(): boolean {
     const focus = this.#deps.features.mapView.focusNodeId;
-    return focus !== null && (isEditMode() || graphStore.scenes.some(scene => scene.centralNodeId === focus));
+    return this.canBack() && focus !== null && (isEditMode() || graphStore.scenes.some(scene => scene.centralNodeId === focus));
   }
 
   /** The map to the focus's study scene, created from the map when it has none (§8, leaving). */
   async leave(): Promise<void> {
     const { mapView, transition } = this.#deps.features;
-    if (this.#busy || !mapView.isActive()) return;
+    if (this.#busy || !this.canBack()) return;
     const focus = mapView.focusNodeId;
     if (focus === null) return;
 
@@ -113,8 +126,7 @@ export class MapHandoff {
 
   /** The map back to the scene it was entered from; to the focus's scene if that one is gone. */
   async back(): Promise<void> {
-    const { mapView } = this.#deps.features;
-    if (this.#busy || !mapView.isActive()) return;
+    if (this.#busy || !this.canBack()) return;
     const entered = graphStore.scenes.find(scene => scene.id === this.#enteredSceneId);
     if (!entered) {
       await this.leave();

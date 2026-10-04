@@ -358,7 +358,7 @@ Core Types only
 | **Graph** | `graph.ts` | Graph construction: add/delete nodes and edges |
 | **Transition** | `transition/transition.ts` | Animated scene-to-scene navigation |
 | **Path** | `path/path.ts` | Navigation history tracking and persistence |
-| **Quiz** | `quiz.ts` | Runtime recall mode: hides sampled node content and tracks reveal/self-grade state |
+| **Quiz** | `quiz.ts` | Runtime recall mode: hides sampled node content and tracks reveal/self-grade state; one class, two instances, over the scene instance (nodes in scenes) and the map instance (every node), each a separate session ([map-view.md §7.5](map-view.md)) |
 | **AutoLayout** | `autolayout/autolayout.ts` | Scene-wide re-arrangement anchored on the central node: radial layout (pluggable algorithms), grow & arrange, rotate, and apparent node size (enlarge/shrink) |
 | **Arrange** | `arrange/arrange.ts` | Selection-scoped geometric tools anchored on the selection's own centroid: align, distribute, circle, grid (axis-aligned and diagonal), rotate, tighten/spread, plus a one-shot undo of the last arrangement. Pluggable tool registry — see [arrange-architecture.md](arrange-architecture.md) |
 | **MapView** | `map-view/map-view.ts` | The map view (UI: Helicopter view): a derived, navigable view per node on its own Cytoscape instance, one bearing per edge end across the whole graph. Enters from and leaves to study scenes by a UI flow that drives it and Transition in turn (§3.10 regime) — see [map-view.md](map-view.md) |
@@ -536,7 +536,7 @@ invent a fourth mechanism.
 | Regime | Purpose | Restricts | Owner | Layer | Lifetime |
 |--------|---------|-----------|-------|-------|----------|
 | **View mode** | Protect the graph from accidental edits; reading and presentation | *All* graph mutations; GraphSaver suspended | `storage/app-mode.ts` | Storage | Persisted, long-lived |
-| **Quiz mode** | Test recall | Hides sampled node content; forces View mode | `features/quiz.ts` | Features | Session |
+| **Quiz mode** | Test recall | Hides sampled node content; forces View mode; one session per canvas (scene quiz, map quiz), and the scene↔map handoff is closed while either runs | `features/quiz.ts` (two instances) | Features | Session |
 | **Transition input guard** | Prevent input from corrupting state mid-animation | *All* input, for the duration of one animation | `ui/transition-input-guard.ts` | UI | ~1 second |
 | **Shelf interaction guard** | Prevent commands from disrupting an in-flight AI-shelf animation | *All* input during Add/Remove-from-shelf execution (full block); shelf commands only during post-transition / AI-addition re-arrangement (shelf-only block) | `ui/shelf-interaction-guard.ts` | UI | ~sub-second (one shelf animation) |
 | **Path mode** | Linear guided traversal of a fixed scene sequence | Graph-initiated scene navigation; node/edge/scene **deletion** | `features/path/path.ts` | Features | Session, persisted in `knogra.state` |
