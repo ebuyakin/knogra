@@ -106,9 +106,12 @@ Rewritten 2026-10-02: the engine does the morph through the map's scene; the cro
 
 - [x] spec §8 rewritten with the enter and leave sequences; §5.1, §5.5, §7.3, §7.4, §7.6 (who runs the handoff: a UI flow module; port and events declined), §11; architecture.md §3.5 "sequences across features live in the UI", MapView catalog row, §3.10 regime row
 - [x] engine (02.10, after the transition feature's layering was restored first, see scene-transitions.md §2.1 and the journal): `openBehind(scene)`, `morphTo(scene)`, `ensureScene(nodeId, draft)` as routings over `OpenCloseOrchestrator.open` and `SceneToSceneOrchestrator.morph`; `CurrentScene` holds the transient scene; `goToSceneByNode` and `goToSceneFromPath` guarded by mapViewChanged
-- [ ] map: `prepare(nodeId)`, `mapScene()` pure over tree and layout, `takeOver()`, `arriveTwins()`, `convergeTwins()`; `sceneFromMap` = the map's scene minus markers, for creation
-- [ ] flow: `ui/map-handoff.ts` with enter(), back(), leaveTo(nodeId); the menu and the keys call it; GraphSaver suspended while the map's scene is current
-- [ ] commands: menu "Open this node's scene"; Escape back; G decided
+- [x] map (02–03.10): `prepare(nodeId, surface)`, `mapScene()` = focus and landmarks (pure, `map-scene.ts`), `sceneDraft(id)` = the whole map, `takeOver()`, `arriveMarkers()`, `convergeMarkers(scope)`; the markers are the map's to arrive after the swap, in one tween (spec §8, 03.10); the new scene is the map exactly as shown
+- [x] flow (02.10): `ui/map-handoff.ts`, class MapHandoff with enter(), leave(), back(); the menus and the keys call it; GraphSaver suspended while the map's scene is current; `transitionTo(scene, request)` renamed from morphTo with the terminology (03.10)
+- [x] commands (02.10): map menu "Open the focus's scene (Enter)" and "Back to scene (Esc)"; Enter leaves, Escape backs; G stays re-focus
+- [x] engine arrivals and departures for the handoff: 'grow' in, 'shrink' out (03.10; pluggable phase animators, scene-transitions.md §4.2)
+- [x] the scene a focus without one gets = the map's skeleton, focus and landmarks (03.10; markers exist only on the map)
+- [x] reset a study scene to the map's skeleton (03.10): `ui/scene-reset.ts`, under Scene design → Auto-layout "Reset to map shape…", Edit mode, confirm; carries over title, description, theme, background, edge-type visibility; animated by the engine with 'shrink'
 - [ ] `map.themeMode` `scene`, with the fallback to the entered scene's theme and the crossfade during move
 - [ ] `docs/map-view.md`: status Draft → Current; any place the code diverged, amended
 - [ ] `docs/README.md`: the map-view.md row's status
@@ -116,7 +119,7 @@ Rewritten 2026-10-02: the engine does the morph through the map's scene; the cro
 - [ ] delete this file (Eugene)
 
 Browser:
-- [ ] scene → map: nodes of the scene glide to their ring and leaf places, designs crossfade where the scene's differ, twins' second boxes slide out after the swap
+- [ ] scene → map: landmarks of the scene glide to their ring places, designs crossfade where the scene's differ, new landmarks grow out of the focus, then after the swap every marker grows out of its landmark at once
 - [ ] map → navigate → leave to the new focus's scene: markers depart, landmarks settle, the scene's own transitions still work afterwards; a node without a scene gets one made of its landmarks
 - [ ] back to the entered scene; Escape
 - [ ] measure the move phase on an equation-heavy map

@@ -225,6 +225,15 @@ export async function handleViewKeys(
     return true;
   }
 
+  // / - Helicopter view: enter the map of the current scene's central node
+  // (map-view.md §5.1). A stopgap: every letter is taken, so the slash holds the
+  // place until the leader-key redesign gives the map a proper entry key.
+  if (key === '/' && !event.shiftKey && !ctrl) {
+    event.preventDefault();
+    await context.mapHandoff.enter();
+    return true;
+  }
+
   // Arrow keys / h j k l - Navigate between nodes
   // Shift+<direction>: also pan the viewport to centre the newly selected node
   const navigationDirection = NAVIGATION_KEYS[key];

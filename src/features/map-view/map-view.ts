@@ -19,7 +19,7 @@
  */
 
 import type { Core } from 'cytoscape';
-import type { NodeId, Scene, SceneId } from '../../core/main-types';
+import type { EdgeId, NodeId, Scene, SceneId } from '../../core/main-types';
 import { graphStore } from '../../storage/graph-store';
 import { mapStore } from '../../storage/map-store';
 import { isEditMode } from '../../storage/app-mode';
@@ -27,9 +27,10 @@ import { eventBus } from '../../events/event-bus';
 import { getSetting } from '../../config';
 import { NODE_SCALE_MAX, NODE_SCALE_MIN } from '../../config/node-settings';
 import { getTheme } from '../../styles/themes';
+import { applyCanvasTheme } from '../../styles/canvas-theme';
 import { isDebug } from '../../config/debug-flags';
 import { buildMapTree, firstLineByAddress, lastNodeOfAddress, linesOfBoxes, type Address } from './map-tree';
-import { layoutMapTree, pairKeyOf, siblingEnds, type MapAdjustments, type MapGeometryParams, type Size } from './geometry';
+import { layoutMapTree, normalizeBearing, pairKeyOf, siblingEnds, type EdgeEnds, type MapAdjustments, type MapGeometryParams, type Size } from './geometry';
 import { ensureBearings } from './seeding';
 import {
   addElements,
@@ -49,14 +50,16 @@ import {
 import { wireDragging, type DragRelease, type MapState } from './interaction';
 import { MarkerPreview } from './preview';
 import { MapHistory } from './history';
-import { arrive, depart, move, planRefocus, settle, slideTwins, staleLineIds, stowTwins, type LineTween, type TwinBox } from './refocus-animator';
-import { keptAddress, mapSceneOf, type MapPicture } from './map-scene';
+import { arrive, depart, move, planRefocus, settle, slideStowed, staleLineIds, stowBoxes, type LineTween, type RefocusPlan, type StowedBox } from './refocus-animator';
+import { mapSceneOf, type MapPicture } from './map-scene';
 
 /** `F` returns to the base frame with a short glide rather than a jump. */
 const REFRAME_DURATION_MS = 200;
 
 /** A line whose weight changes by less than this on re-focus is left alone rather than tweened. */
 const WEIGHT_TOLERANCE = 0.01;
+
+const HALF_TURN_DEGREES = 180;
 
 function wait(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
@@ -121,6 +124,44 @@ export class MapView {
     return this.nodeOf(selected.first().id());
   }
 
+  /**
+   * Select the next landmark clockwise (`1`) or anticlockwise (`-1`) around
+   * the ring, wrapping (docs/map-view.md §5.2). From a selected marker its
+   * landmark is the start; with nothing selected the landmark nearest the top
+   * is selected itself. Selection as a click makes it, an open balloon
+   * collapsing as on a click; nothing is written and nothing moves.
+   */
+  selectLandmark(step: 1 | -1): void {
+    const state = this.#state;
+    if (!state) return;
+    // Angle on screen from the focus at the origin, increasing clockwise since y points down; 270 is the top.
+    const angleOf = (address: Address): number => {
+      const position = state.layout.positions.get(address);
+      return position ? normalizeBearing((Math.atan2(position.y, position.x) * HALF_TURN_DEGREES) / Math.PI) : 0;
+    };
+    const ring = state.tree.boxes
+      .filter(box => box.depth === 1)
+      .map(box => ({ address: box.address, angle: angleOf(box.address) }))
+      .sort((left, right) => left.angle - right.angle);
+    if (ring.length === 0) return;
+
+    const selected = this.#cy.$('node:selected');
+    const selectedAddress = selected.length === 1 ? state.addressByElementId.get(selected.first().id()) : undefined;
+    const selectedBox = selectedAddress ? state.tree.boxes.find(box => box.address === selectedAddress) : undefined;
+    const startAddress = selectedBox?.depth === 1 ? selectedBox.address : selectedBox?.depth === 2 ? selectedBox.parentAddress : null;
+    const startIndex = startAddress ? ring.findIndex(entry => entry.address === startAddress) : -1;
+
+    const TOP = 270;
+    const nearestTop = ring.reduce((best, entry, index) => (Math.abs(entry.angle - TOP) < Math.abs(ring[best].angle - TOP) ? index : best), 0);
+    const nextIndex = startIndex < 0 ? nearestTop : (startIndex + step + ring.length) % ring.length;
+    const elementId = state.ids.boxes.get(ring[nextIndex].address);
+    if (!elementId) return;
+
+    this.collapsePreview();
+    this.#cy.$(':selected').unselect();
+    this.#cy.getElementById(elementId).select();
+  }
+
   // ==========================================================================
   // THE HANDOFF (docs/map-view.md §7.6, §8): primitives the UI flow calls in order
   // ==========================================================================
@@ -135,19 +176,19 @@ export class MapView {
     this.#prepared = await this.#derive(focusNodeId, new Map(), surface);
   }
 
-  /** The prepared map, or else the shown one, as the Scene object the engine draws and transitions to. */
+  /** The prepared map, or else the shown one, as the map's scene: the focus and the landmarks, what the engine transitions to and from. */
   mapScene(): Scene {
     return mapSceneOf(this.#picture(), getSetting('map.baseZoom'));
   }
 
-  /** The shown map as the focus's new study scene, exactly as shown, under the id the engine hands in: the map is the prototypical shape of a scene. */
+  /** The same skeleton as a study scene under the id the engine hands in: what a focus without a scene gets, and what a scene is reset to. */
   sceneDraft(id: SceneId): Scene {
     return mapSceneOf(this.#picture(), getSetting('map.baseZoom'), id);
   }
 
   /**
-   * Draw the prepared map and show the surface, the twins' other boxes stowed
-   * on the box the map's scene keeps, so the two canvases hold one picture.
+   * Draw the prepared map and show the surface, every marker stowed invisible
+   * on its landmark, so the two canvases hold one picture: the map's scene.
    */
   takeOver(): void {
     const prepared = this.#prepared;
@@ -155,45 +196,39 @@ export class MapView {
     this.#prepared = null;
 
     const state = this.#mount(prepared);
-    stowTwins(this.#cy, state.tree, state.layout, state.ids, this.#stowedTwins(state));
+    stowBoxes(this.#cy, state.tree, state.layout, state.ids, this.#markers(state));
     const focusNodeId = state.tree.focusNodeId;
     this.#history.reset(focusNodeId);
     eventBus.emit('mapViewChanged', { active: true, focusNodeId });
     if (isDebug('d_scene')) console.log(`[MapView] Took over the map of ${focusNodeId}: ${state.tree.boxes.length} boxes`);
   }
 
-  /** The stowed twins slide out to their own places. */
-  async arriveTwins(): Promise<void> {
+  /** Every marker grows out of its landmark to its own place, in one tween: the re-focus's arriving move. */
+  async arriveMarkers(): Promise<void> {
     const state = this.#state;
     if (!state) return;
-    await slideTwins(this.#cy, state.tree, state.layout, state.ids, this.#stowedTwins(state), 'out', this.#duration('map.arriveDuration'));
+    await slideStowed(this.#cy, state.tree, state.layout, state.ids, this.#markers(state), 'out', this.#duration('map.arriveDuration'));
   }
 
   /**
    * The reverse, before leaving: back to the base frame the map's scene
-   * declares, any balloon collapsed, then the twins converge on their kept
-   * boxes. Afterwards the map shows exactly `mapScene()`.
+   * declares, any balloon collapsed, then every marker shrinks into its
+   * landmark. Afterwards the map shows exactly `mapScene()`.
    */
-  async convergeTwins(): Promise<void> {
+  async convergeMarkers(): Promise<void> {
     const state = this.#state;
     if (!state) return;
     this.collapsePreview();
     this.#cy.$(':selected').unselect();
     await this.#frame(this.#duration('map.departDuration'));
-    await slideTwins(this.#cy, state.tree, state.layout, state.ids, this.#stowedTwins(state), 'in', this.#duration('map.departDuration'));
+    await slideStowed(this.#cy, state.tree, state.layout, state.ids, this.#markers(state), 'in', this.#duration('map.departDuration'));
   }
 
-  /** Every twin box the map's scene does not show, with the box of its node that it does. */
-  #stowedTwins(state: MapState): TwinBox[] {
-    const twins: TwinBox[] = [];
-    for (const [nodeId, addresses] of state.tree.twins) {
-      const kept = keptAddress(state.tree, nodeId);
-      if (!kept) continue;
-      for (const address of addresses) {
-        if (address !== kept) twins.push({ address, keptAddress: kept });
-      }
-    }
-    return twins;
+  /** Every marker with the landmark it hangs from: the boxes that exist only on the map, around the skeleton the engine draws. */
+  #markers(state: MapState): StowedBox[] {
+    return state.tree.boxes
+      .filter(box => box.depth === 2 && box.parentAddress !== null)
+      .map(box => ({ address: box.address, parentAddress: box.parentAddress! }));
   }
 
   /** What the map's scene is made from: the prepared map first, else the shown one at its live layout. */
@@ -221,8 +256,10 @@ export class MapView {
   /**
    * Forget this map's adjustments, lengths and scales, and show it from
    * defaults. With `directions`, also clear the bearings of every edge drawn
-   * on it so they are seeded afresh; bearings are global, so that reaches
-   * every other map those edges appear on. Edit mode only.
+   * on it so they are seeded afresh, keeping the angular order of the boxes
+   * at each parent when `map.resetKeepsOrder` is on (§5.3); bearings are
+   * global, so that reaches every other map those edges appear on. Edit mode
+   * only.
    */
   async reset(options: { directions: boolean }): Promise<void> {
     const state = this.#state;
@@ -239,9 +276,27 @@ export class MapView {
       }
     }
 
-    this.collapsePreview();
-    await this.#present(focusNodeId);
+    await this.#resetTo(state);
     if (isDebug('d_scene')) console.log(`[MapView] Reset map of ${focusNodeId}${options.directions ? ' with directions' : ''}`);
+  }
+
+  /**
+   * Show the same focus from defaults, animated: every box keeps its
+   * address, so this is a re-focus with only the move phase, boxes gliding to
+   * their new places and sizes, lines re-weighting. The seeding keeps the
+   * boxes' angular order when `map.resetKeepsOrder` asks for it.
+   */
+  async #resetTo(old: MapState): Promise<void> {
+    this.#refocusing = true;
+    try {
+      this.collapsePreview();
+      this.#cy.$(':selected').unselect();
+      const orderToKeep = getSetting('map.resetKeepsOrder') ? new Map(old.endsByEdge) : undefined;
+      const derived = await this.#derive(old.tree.focusNodeId, new Map(old.baseStyles), this.#surface(), orderToKeep);
+      await this.#animateTo(old, derived);
+    } finally {
+      this.#refocusing = false;
+    }
   }
 
   /**
@@ -270,7 +325,8 @@ export class MapView {
     const state: MapState = { ...derived.state, ids, addressByElementId: invert(ids) };
     this.#state = state;
 
-    container.style.backgroundColor = getTheme(derived.render.themeId).canvas.background.color;
+    // The same paint as the scene canvas, colour and vignette, so the two surfaces match at the swap.
+    applyCanvasTheme(container, getTheme(derived.render.themeId));
     void this.#frame(0);
     this.#applyGrabbability();
     return state;
@@ -323,8 +379,8 @@ export class MapView {
       await graphStore.updateEdge(unassigned);
     }
 
-    this.collapsePreview();
-    await this.#present(state.tree.focusNodeId);
+    // Only the map on screen can keep its order: the other maps' ends are gone and are seeded fresh when next opened.
+    await this.#resetTo(state);
     if (isDebug('d_scene')) console.log('[MapView] Reset every map and every bearing');
   }
 
@@ -348,59 +404,7 @@ export class MapView {
 
       // Base styles carry over: survivors keep their nodes, and arrivals add theirs.
       const derived = await this.#derive(nodeId, new Map(old.baseStyles), this.#surface());
-      const { tree, layout, baseStyles } = derived.state;
-      const plan = planRefocus(old.tree, tree, old.ids);
-      const animate = getSetting('map.animate');
-      const pause = getSetting('map.phasePause');
-      // A re-focus returns to the base frame, undoing any + or - for the session.
-      const zoom = getSetting('map.baseZoom');
-
-      // Depart: leavers shrink into their parents, then go with their lines.
-      if (animate) {
-        await depart(this.#cy, plan, getSetting('map.departDuration'));
-        await wait(pause);
-      }
-      removeElements(this.#cy, [...plan.leaving.map(leaver => leaver.elementId), ...staleLineIds(old.tree, old.ids, plan)]);
-
-      // Survivors take their new addresses before they move, so borders and depths are right during the glide.
-      const boxByAddress = new Map(tree.boxes.map(box => [box.address, box]));
-      this.#cy.startBatch();
-      for (const { elementId, newAddress } of plan.surviving) {
-        const box = boxByAddress.get(newAddress)!;
-        updateBoxData(this.#cy, elementId, { address: newAddress, depth: box.depth, centralNode: box.depth === 0 });
-      }
-      this.#cy.endBatch();
-      // Reused lines too; a line whose child changes role changes weight, and that is tweened during move, not switched.
-      const lineTweens: LineTween[] = [];
-      for (const { elementId, weight } of lineWeights(derived.render, plan.ids, [...plan.ids.lines.keys()])) {
-        const line = this.#cy.getElementById(elementId);
-        if (line.length === 0) continue;
-        const current = { width: line.numericStyle('width') as number, arrowScale: line.numericStyle('arrow-scale') as number, bundleStep: weight.bundleStep };
-        if (Math.abs(current.width - weight.width) < WEIGHT_TOLERANCE && Math.abs(current.arrowScale - weight.arrowScale) < WEIGHT_TOLERANCE) continue;
-        lineTweens.push({ element: line, weight: { from: current, to: weight } });
-      }
-      const lineByKey = new Map(tree.lines.map(line => [line.key, line]));
-      this.#cy.startBatch();
-      for (const [key, lineId] of plan.ids.lines) {
-        const line = lineByKey.get(key);
-        if (line) updateLineData(this.#cy, lineId, { address: line.address });
-      }
-      this.#cy.endBatch();
-
-      // Move: one movement for every survivor and the zoom; converging twins fade out along the way.
-      if (animate) await move(this.#cy, plan, layout, tree, baseStyles, zoom, lineTweens, getSetting('map.moveDuration'));
-      else settle(this.#cy, plan, layout, zoom, lineTweens);
-      removeElements(this.#cy, plan.converging.map(twin => twin.elementId));
-      restyleBoxes(this.#cy, this.#roleChangers(plan.surviving, old, layout));
-      if (animate) await wait(pause);
-
-      // Arrive: new markers are added at their places and slide out of their parents.
-      addElements(this.#cy, derived.render, plan.ids, plan.arriving, [...linesOfBoxes(tree, plan.arriving).map(line => line.key), ...plan.arrivingLines], baseStyles);
-      if (animate) await arrive(this.#cy, plan, tree, layout, getSetting('map.arriveDuration'));
-
-      this.#state = { ...derived.state, baseStyles, ids: plan.ids, addressByElementId: invert(plan.ids) };
-      void this.#frame(0);
-      this.#applyGrabbability();
+      const plan = await this.#animateTo(old, derived);
       if (options.record) this.#history.push(nodeId);
       eventBus.emit('mapViewChanged', { active: true, focusNodeId: nodeId });
 
@@ -408,6 +412,70 @@ export class MapView {
     } finally {
       this.#refocusing = false;
     }
+  }
+
+  /**
+   * The three phases from the shown map to a derived one (docs/map-view.md
+   * §5.2): leavers depart, survivors move with the zoom, arrivals come out of
+   * their parents. A re-focus has all three; a reset of the same focus has
+   * only the move, since every box keeps its address. Leaves `#state` at the
+   * derived map and returns the plan for the caller's record.
+   */
+  async #animateTo(old: MapState, derived: DerivedMap): Promise<RefocusPlan> {
+    const { tree, layout, baseStyles } = derived.state;
+    const plan = planRefocus(old.tree, tree, old.ids);
+    const animate = getSetting('map.animate');
+    const pause = getSetting('map.phasePause');
+    // Back to the base frame, undoing any + or - for the session.
+    const zoom = getSetting('map.baseZoom');
+
+    // Depart: leavers shrink into their parents, then go with their lines.
+    if (animate && plan.leaving.length > 0) {
+      await depart(this.#cy, plan, getSetting('map.departDuration'));
+      await wait(pause);
+    }
+    removeElements(this.#cy, [...plan.leaving.map(leaver => leaver.elementId), ...staleLineIds(old.tree, old.ids, plan)]);
+
+    // Survivors take their new addresses before they move, so borders and depths are right during the glide.
+    const boxByAddress = new Map(tree.boxes.map(box => [box.address, box]));
+    this.#cy.startBatch();
+    for (const { elementId, newAddress } of plan.surviving) {
+      const box = boxByAddress.get(newAddress)!;
+      updateBoxData(this.#cy, elementId, { address: newAddress, depth: box.depth, centralNode: box.depth === 0 });
+    }
+    this.#cy.endBatch();
+    // Reused lines too; a line whose child changes role changes weight, and that is tweened during move, not switched.
+    const lineTweens: LineTween[] = [];
+    for (const { elementId, weight } of lineWeights(derived.render, plan.ids, [...plan.ids.lines.keys()])) {
+      const line = this.#cy.getElementById(elementId);
+      if (line.length === 0) continue;
+      const current = { width: line.numericStyle('width') as number, arrowScale: line.numericStyle('arrow-scale') as number, bundleStep: weight.bundleStep };
+      if (Math.abs(current.width - weight.width) < WEIGHT_TOLERANCE && Math.abs(current.arrowScale - weight.arrowScale) < WEIGHT_TOLERANCE) continue;
+      lineTweens.push({ element: line, weight: { from: current, to: weight } });
+    }
+    const lineByKey = new Map(tree.lines.map(line => [line.key, line]));
+    this.#cy.startBatch();
+    for (const [key, lineId] of plan.ids.lines) {
+      const line = lineByKey.get(key);
+      if (line) updateLineData(this.#cy, lineId, { address: line.address });
+    }
+    this.#cy.endBatch();
+
+    // Move: one movement for every survivor and the zoom; converging twins fade out along the way.
+    if (animate) await move(this.#cy, plan, layout, tree, baseStyles, zoom, lineTweens, getSetting('map.moveDuration'));
+    else settle(this.#cy, plan, layout, zoom, lineTweens);
+    removeElements(this.#cy, plan.converging.map(twin => twin.elementId));
+    restyleBoxes(this.#cy, this.#roleChangers(plan.surviving, old, layout));
+    if (animate && plan.arriving.length > 0) await wait(pause);
+
+    // Arrive: new markers are added at their places and slide out of their parents.
+    addElements(this.#cy, derived.render, plan.ids, plan.arriving, [...linesOfBoxes(tree, plan.arriving).map(line => line.key), ...plan.arrivingLines], baseStyles);
+    if (animate) await arrive(this.#cy, plan, tree, layout, getSetting('map.arriveDuration'));
+
+    this.#state = { ...derived.state, baseStyles, ids: plan.ids, addressByElementId: invert(plan.ids) };
+    void this.#frame(0);
+    this.#applyGrabbability();
+    return plan;
   }
 
   canGoBack(): boolean {
@@ -545,6 +613,11 @@ export class MapView {
     return this.#preview.elementId !== null;
   }
 
+  /** Whether this box is the one ballooned. */
+  isBallooned(elementId: string): boolean {
+    return this.#preview.elementId === elementId;
+  }
+
   /** Balloon a box that needs it, or collapse it if it is the one already ballooned. */
   togglePreview(elementId: string): void {
     const state = this.#state;
@@ -582,13 +655,13 @@ export class MapView {
    * extended in place. The ring is a fraction of the surface's height, in
    * graph units at the base zoom.
    */
-  async #derive(focusNodeId: NodeId, baseStyles: Map<NodeId, BoxBaseStyle>, surface: Size): Promise<DerivedMap> {
+  async #derive(focusNodeId: NodeId, baseStyles: Map<NodeId, BoxBaseStyle>, surface: Size, orderToKeep?: Map<EdgeId, EdgeEnds>): Promise<DerivedMap> {
     const nodeById = new Map(graphStore.nodes.map(node => [node.id, node]));
     const edgeById = new Map(graphStore.edges.map(edge => [edge.id, edge]));
     const themeId = getSetting('map.themeId');
     const tree = buildMapTree(focusNodeId, graphStore.nodes, graphStore.edges);
     const twinAllowance = getSetting('map.twinAllowance');
-    const endsByEdge = await ensureBearings(tree, edgeById, graphStore.edges, twinAllowance);
+    const endsByEdge = await ensureBearings(tree, edgeById, graphStore.edges, twinAllowance, orderToKeep);
     await ensureBaseStyles({ tree, nodeById, themeId }, baseStyles);
 
     const record = mapStore.getMapView(focusNodeId);

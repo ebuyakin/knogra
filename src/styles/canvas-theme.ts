@@ -1,14 +1,15 @@
 /**
- * Canvas theme operator
+ * Canvas theme
  *
- * Layer 3: the one thing it does is paint a theme's canvas background colour
- * and vignette onto the scene container, with or without a CSS transition.
- * Used by scene opening (instant) and by a transition (crossfaded over the
- * morphing phase). The background image is a different thing and
- * lives in the background layer; this is the colour under it.
+ * The one thing it does is paint a theme's canvas background colour and
+ * vignette onto a Cytoscape container, with or without a CSS transition. Used
+ * by the scene engine for every open (instant) and transition (crossfaded over
+ * the morphing phase), and by the map view for its own surface, so the two
+ * canvases carry the same paint. The background image is a different thing
+ * and lives in the background layer; this is the colour under it.
  */
 
-import type { ColorTheme } from '../../core/style-types';
+import type { ColorTheme } from '../core/style-types';
 
 /** Convert hex color to "r, g, b" string for rgba() */
 function hexToRgb(hex: string): string {

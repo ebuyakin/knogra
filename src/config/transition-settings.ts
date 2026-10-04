@@ -41,6 +41,34 @@ export type SharedBackgroundTiming = 'sequential' | 'parallel';
 export type ArrivalEdgeTiming = 'after' | 'parallel';
 
 /**
+ * Ways of doing each phase of a transition (docs/scene-transitions.md §4.2).
+ * A recipe names one animator per phase; the three `*Animator` settings hold
+ * the user's default recipe, and a caller may override any phase per
+ * transition. Ids are persisted in settings, so an id is never renamed; an
+ * unknown id falls back to the built-in animator in the registry.
+ */
+export type DepartureAnimatorId = 'fly-out' | 'shrink';
+export type MorphingAnimatorId = 'parallel';
+export type ArrivalAnimatorId = 'fly-in' | 'grow';
+
+export interface AnimatorChoice<Id extends string> {
+  id: Id;
+  label: string;
+}
+
+export const DEPARTURE_ANIMATORS: ReadonlyArray<AnimatorChoice<DepartureAnimatorId>> = [
+  { id: 'fly-out', label: 'Fly out — departing nodes fly off the viewport edge' },
+  { id: 'shrink', label: 'Shrink — departing nodes fold into the node they hang from' },
+];
+export const MORPHING_ANIMATORS: ReadonlyArray<AnimatorChoice<MorphingAnimatorId>> = [
+  { id: 'parallel', label: 'Parallel — shared nodes move, rescale and crossfade together' },
+];
+export const ARRIVAL_ANIMATORS: ReadonlyArray<AnimatorChoice<ArrivalAnimatorId>> = [
+  { id: 'fly-in', label: 'Fly in — arriving nodes fly in from the viewport edge' },
+  { id: 'grow', label: 'Grow — arriving nodes grow out of the node they hang from' },
+];
+
+/**
  * Phase 2: Morphing timings, the shared nodes moving, rescaling and crossfading in parallel
  */
 export interface MorphTimings {
@@ -122,6 +150,10 @@ export interface CloseSceneTimings {
 export interface TransitionSettings extends DepartureTimings, SharedTimings, MorphTimings, ArrivalTimings, OpenSceneTimings, CloseSceneTimings {
   /** Transition mode: animated (the three phases) or fade (quick crossfade) */
   transitionMode: 'animated' | 'fade';
+  /** The default recipe: which animator does each phase */
+  departureAnimator: DepartureAnimatorId;
+  morphingAnimator: MorphingAnimatorId;
+  arrivalAnimator: ArrivalAnimatorId;
   /** Phase 1: Edge timing mode */
   departureEdgeTiming: DepartureEdgeTiming;
   /** Phase 2: Background timing mode */
@@ -141,7 +173,12 @@ export interface TransitionSettings extends DepartureTimings, SharedTimings, Mor
 export const TRANSITION_DEFAULTS: TransitionSettings = {
   // Transition mode
   transitionMode: 'animated',
-  
+
+  // The default recipe
+  departureAnimator: 'fly-out',
+  morphingAnimator: 'parallel',
+  arrivalAnimator: 'fly-in',
+
   // Phase 1: Departure timings
   departureEdgesFadeOut: [500, 200],
   departureLayerDuration: [400, 0],

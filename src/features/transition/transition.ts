@@ -26,7 +26,7 @@ import { CurrentScene } from './current-scene';
 import { draftFromCurrent, ensureScene, findSceneByCentral, sceneIdFor } from './scene-resolution';
 
 import { OpenCloseOrchestrator, type CloseMode, type OpenMode } from './opening-closing/open-close-orchestrator';
-import { SceneToSceneOrchestrator } from './scene-to-scene/scene-to-scene-orchestrator';
+import { SceneToSceneOrchestrator, type TransitionRequest } from './scene-to-scene/scene-to-scene-orchestrator';
 import { startTransition, type TransitionRecordHandle } from '../../utils/diagnostics/transition-buffer';
 
 // ============================================================================
@@ -247,7 +247,7 @@ export class Transition {
    * is, sceneChanged and the path's scene:changed; a transient target is not,
    * and becomes the transient current scene.
    */
-  async transitionTo(scene: Scene): Promise<void> {
+  async transitionTo(scene: Scene, request?: TransitionRequest): Promise<void> {
     const stored = graphStore.scenes.some(s => s.id === scene.id);
     if (isDebug('d_transition')) console.log(`[d_transition] transitionTo: ${scene.id}${stored ? '' : ' (transient)'}`);
     const record = { kind: 'toNode' as const, from: this.#current.id() ?? null, note: stored ? 'map handoff: to scene' : 'map handoff: to the map\'s scene' };
@@ -260,7 +260,7 @@ export class Transition {
         return;
       }
       rec.setCentrals({ from: currentScene.centralNodeId });
-      await this.#executeTo(currentScene, scene, false, rec, stored);
+      await this.#executeTo(currentScene, scene, false, rec, stored, request);
       if (stored) this.#cy.emit('scene:changed', [scene.id]);
     });
   }
@@ -384,15 +384,23 @@ export class Transition {
    * what only Transition does: the current-scene scratch, saving an
    * auto-created scene, announcing. `announce` emits sceneChanged at the end;
    * a transient target (map-view.md §8) is not announced, since AppState would
-   * record a scene the store does not have. The caller owns
-   * transitionStart/End and the transition record's failure path.
+   * record a scene the store does not have. `request` is what the caller asks
+   * beyond the scenes, animators for some phases; the rest comes from the
+   * settings. The caller owns transitionStart/End and the transition record's
+   * failure path.
    */
-  async #executeTo(currentScene: Scene, targetScene: Scene, isNewScene: boolean, rec: TransitionRecordHandle, announce: boolean): Promise<SceneId> {
-
+  async #executeTo(
+    currentScene: Scene,
+    targetScene: Scene,
+    isNewScene: boolean,
+    rec: TransitionRecordHandle,
+    announce: boolean,
+    request?: TransitionRequest
+  ): Promise<SceneId> {
     rec.setTarget({ to: targetScene.id, isNewScene });
     rec.setCentrals({ to: targetScene.centralNodeId });
 
-    const report = await this.#sceneToSceneOrchestrator.transition(currentScene, targetScene, { isNewScene });
+    const report = await this.#sceneToSceneOrchestrator.transition(currentScene, targetScene, { isNewScene, ...request });
     rec.classify({ shared: report.shared, departing: report.departing, arriving: report.arriving });
     if (report.viewport) rec.viewport(report.viewport);
 

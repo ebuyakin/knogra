@@ -13,6 +13,7 @@ import { getSetting } from '../../config';
 import { exportWorkspace, showImportDialog, newWorkspace } from '../../storage/workspace';
 import { exportDocument, showBuildDocumentDialog, showUpdateDocumentDialog } from '../../storage/markdown';
 import { SettingsModal } from '../components/settings-modal';
+import { resetSceneToMap } from '../scene-reset';
 
 export function buildCanvasMenu(deps: MenuDependencies, position: MenuPosition): MenuItem[] {
   const editMode = isEditMode();
@@ -140,6 +141,14 @@ function buildSceneDesignMenu(deps: MenuDependencies, editMode: boolean): MenuIt
             enabled: editMode,
             action: () => {
               deps.features.autolayout.growAndArrange(deps.features.scene.getCentralNodeId(), 4);
+            }
+          },
+          { label: '', separator: true },
+          {
+            label: 'Reset to map shape…',
+            enabled: editMode,
+            action: () => {
+              resetSceneToMap(deps);
             }
           }
         ]

@@ -276,6 +276,10 @@ Application settings and user preferences.
 - Built-in and custom color themes
 - Scene theme is resolved by `scene.themeId`; there is no separate global current theme state
 
+**Canvas theme** (`canvas-theme.ts`)
+- Paints a theme's canvas colour and vignette onto a Cytoscape container, optionally crossfaded
+- The one paint routine for both surfaces: the scene engine on open and transition, the map view on its own surface (moved here from the transition feature on 2026-10-03)
+
 **Designs** (`styles/designs/`)
 - Built-in node renderers and design registry that converts node data, scene design parameters, and theme into Cytoscape node styles
 
@@ -304,8 +308,7 @@ transition/
     current-scene.ts         # Which scene the instance shows; the only writer of the scratch id
     scene-resolution.ts      # Find a scene by its central node; create-or-refuse policy; the drafts
     opening-closing/         # Open/close scene orchestrator and animators
-    scene-to-scene/          # The three-phase transition: orchestrator, animators (departure, morphing, arrival) and operators
-    canvas-theme-operator.ts # The container's background colour and vignette
+    scene-to-scene/          # The three-phase transition: orchestrator; one interface per phase with animators chosen by recipe (animators.ts, recipe.ts, animator-registry.ts); the animators and their helpers
     fold-state-handler.ts    # Fold-state application after scene changes
     step-debug.ts            # Dev-only step-through mode
 
@@ -495,6 +498,7 @@ A flow is a UI module that calls two or more features in a fixed order on behalf
 |------|---------|
 | `components/editor-openers.ts` | Open an editor, then apply its result: node content through Node, then style through Scene |
 | `map-handoff.ts` | The handoff: enter (scene to map), leave (map to the focus's study scene), back (map to the entered scene); the map feature and the transition engine in turn ([map-view.md §8](map-view.md)) |
+| `scene-reset.ts` | Reset a study scene to its map's skeleton: the map feature drafts it, the store takes it, the engine transitions into it ([map-view.md §8](map-view.md)) |
 
 #### Panels (`ui/panels/`)
 

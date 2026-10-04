@@ -49,6 +49,8 @@ export interface RefocusPlan {
  * a safe separator.
  */
 export function rewriteAddress(address: Address, oldFocus: NodeId, newFocus: NodeId): Address {
+  // The same focus again, as after a reset: every address is its own.
+  if (oldFocus === newFocus) return address;
   const viaNewFocus = `${oldFocus}/${newFocus}`;
   if (address === viaNewFocus) return String(newFocus);
   if (address.startsWith(`${viaNewFocus}/`)) return `${newFocus}${address.slice(viaNewFocus.length)}`;
@@ -235,45 +237,46 @@ export function settle(cy: Core, plan: RefocusPlan, newLayout: MapLayout, zoom: 
 }
 
 // ============================================================================
-// TWINS IN THE HANDOFF
+// MARKERS IN THE HANDOFF
 // ============================================================================
 
-/** A twin box the map's scene does not show, and the box of the same node it does (map-scene.ts `keptAddress`). */
-export interface TwinBox {
+/** A box the engine's picture does not show, and the box it hangs from. In a handoff that is every marker (docs/map-view.md §8). */
+export interface StowedBox {
   address: Address;
-  keptAddress: Address;
+  parentAddress: Address;
 }
 
 /**
- * Stow the twins: on their kept box, invisible, beneath it, their lines
+ * Stow boxes: on their parent box, invisible, beneath it, their lines
  * invisible. The map taken over from the engine then shows exactly the map's
- * scene (docs/map-view.md §8 step 4), until `slideTwins` brings them out.
+ * scene (docs/map-view.md §8 step 4), until `slideStowed` brings them out.
  */
-export function stowTwins(cy: Core, newTree: MapTree, newLayout: MapLayout, ids: MapElementIds, twins: TwinBox[]): void {
+export function stowBoxes(cy: Core, newTree: MapTree, newLayout: MapLayout, ids: MapElementIds, boxes: StowedBox[]): void {
   cy.startBatch();
-  for (const twin of twins) {
-    const node = boxElement(cy, ids, twin.address);
-    const kept = newLayout.positions.get(twin.keptAddress);
-    if (!node || !kept) continue;
-    node.position({ x: kept.x, y: kept.y });
+  for (const box of boxes) {
+    const node = boxElement(cy, ids, box.address);
+    const parent = newLayout.positions.get(box.parentAddress);
+    if (!node || !parent) continue;
+    node.position({ x: parent.x, y: parent.y });
     node.style({ opacity: 0, 'z-index': BENEATH_Z_INDEX });
-    for (const line of lineElements(cy, newTree, ids, twin.address)) line.style({ opacity: 0 });
+    for (const line of lineElements(cy, newTree, ids, box.address)) line.style({ opacity: 0 });
   }
   cy.endBatch();
 }
 
 /**
- * Stowed twins slide out to their own places and fade in (`out`, after the
- * engine has transitioned to the map's scene), or slide back onto their kept box
- * and fade (`in`, before the engine takes the picture back); their lines
- * with them. The arriving and converging moves of a re-focus, for the handoff.
+ * Stowed boxes grow out of their parent box to their own places, fading in
+ * (`out`, after the engine has transitioned to the map's scene), or shrink
+ * back into it and fade (`in`, before the engine takes the picture back);
+ * their lines with them. One tween for all of them: the re-focus's arriving
+ * and departing moves, for the handoff.
  */
-export function slideTwins(
+export function slideStowed(
   cy: Core,
   tree: MapTree,
   layout: MapLayout,
   ids: MapElementIds,
-  twins: TwinBox[],
+  boxes: StowedBox[],
   direction: 'out' | 'in',
   duration: number
 ): Promise<void> {
@@ -281,18 +284,18 @@ export function slideTwins(
   const opacity = out ? { from: 0, to: 1 } : { from: 1, to: 0 };
   const movers: Mover[] = [];
   const lines: LineTween[] = [];
-  for (const twin of twins) {
-    const node = boxElement(cy, ids, twin.address);
-    const own = layout.positions.get(twin.address);
-    const kept = layout.positions.get(twin.keptAddress);
-    if (!node || !own || !kept) continue;
+  for (const box of boxes) {
+    const node = boxElement(cy, ids, box.address);
+    const own = layout.positions.get(box.address);
+    const parent = layout.positions.get(box.parentAddress);
+    if (!node || !own || !parent) continue;
     if (!out) node.style('z-index', BENEATH_Z_INDEX);
-    movers.push({ element: node, from: out ? { x: kept.x, y: kept.y } : { x: own.x, y: own.y }, to: out ? own : kept, opacity });
-    for (const line of lineElements(cy, tree, ids, twin.address)) lines.push({ element: line, opacity });
+    movers.push({ element: node, from: out ? { x: parent.x, y: parent.y } : { x: own.x, y: own.y }, to: out ? own : parent, opacity });
+    for (const line of lineElements(cy, tree, ids, box.address)) lines.push({ element: line, opacity });
   }
 
   return runTween(cy, movers, lines, { from: cy.zoom(), to: cy.zoom() }, cy.pan(), duration, out ? easeOutCubic : easeInCubic).then(() => {
-    // Arrived twins are ordinary boxes again; converged ones stay stowed until the map is hidden.
+    // Arrived boxes are ordinary boxes again; converged ones stay stowed until the map is hidden.
     if (!out) return;
     cy.startBatch();
     for (const mover of movers) mover.element.removeStyle('opacity z-index');

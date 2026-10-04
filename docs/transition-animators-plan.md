@@ -30,7 +30,8 @@ One mechanism serves both: a phase is an interface, an animator is one implement
       animators.ts                     the three interfaces and their context types (§3.2). Types only.
       recipe.ts                        TransitionRecipe, the id unions, resolveRecipe(override) = override, else the settings, else the built-in
       animator-registry.ts             createDeparture(id, cy), createMorphing(id, cy, backgroundRenderer), createArrival(id, cy); unknown id falls back to the built-in
-      cascade.ts                       helpers an animator may use: graphDistances(scene, centralId, view) → Map<NodeId, { distance, parent }>, layersByDistance, bucketEdgesByLayer, viewportEdgePoint, delay. Not part of any interface.
+      cascade.ts                       helpers an animator may use: graphReach(scene, centralId, endpointsOf) → Map<NodeId, { distance, parent }>, layersByDistance, bucketEdges, instanceEndpoints, directionBetween, viewportEdgePoint, delay. Not part of any interface.
+      arrival-elements.ts              helpers an arrival animator may use: presentEdges (the folded-endpoint filter), addArrivingNodes (at a start position per node, styled), addArrivingEdges, applyArrivingEdgeStyles. Not part of any interface.
       departure-fly-out.ts             today's departure-animator.ts, class DepartureFlyOut implementing DepartureAnimator; takes over the orchestrator's departure branch logic (old central departing or shared; edges before or in parallel)
       departure-shrink.ts              new, class DepartureShrink (§3.4)
       morphing-parallel.ts             today's shared-core-animator.ts, class MorphingParallel implementing MorphingAnimator; its operators stay in morphing/ (today's shared-core-animation/)
@@ -39,7 +40,7 @@ One mechanism serves both: a phase is an interface, an animator is one implement
 
     Files and classes are named role first, variant second, so the folder sorts by phase and a new variant lands beside its siblings.
 
-    src/config/transition-settings.ts  DEPARTURE_ANIMATORS, MORPHING_ANIMATORS, ARRIVAL_ANIMATORS as { id, label } lists; settings `departure`, `morphing`, `arrival` holding ids, defaults 'fly-out', 'parallel', 'fly-in'
+    src/config/transition-settings.ts  the id unions, DEPARTURE_ANIMATORS, MORPHING_ANIMATORS, ARRIVAL_ANIMATORS as { id, label } lists; settings `departureAnimator`, `morphingAnimator`, `arrivalAnimator` holding ids, defaults 'fly-out', 'parallel', 'fly-in'
     src/config/setting-definitions.ts  three select rows under Transition, one per phase
     src/features/transition/transition.ts   transitionTo(scene, recipe?: Partial<TransitionRecipe>); every other entry point passes none
     src/ui/map-handoff.ts              enter passes { arrival: 'grow' }; leave and back pass { departure: 'shrink' }
@@ -106,7 +107,7 @@ Step-debug pauses stay with the implementations: today's `[1.x]` and `[3.x]` sta
     type TransitionRecipe = { departure: DepartureAnimatorId; morphing: MorphingAnimatorId; arrival: ArrivalAnimatorId };
 
     resolveRecipe(override?: Partial<TransitionRecipe>): TransitionRecipe
-      per phase: override[phase] ?? getSetting(`transition.${phase}`) ?? built-in
+      per phase: override[phase] ?? getSetting(`transition.${phase}Animator`); an id the registry does not know → the built-in
 
     SceneToSceneOrchestrator.transition(current, target, { isNewScene, recipe? })
       resolves the recipe, obtains the three animators from the registry (constructed once per id and kept), runs them in order
@@ -132,15 +133,16 @@ Both reuse the cascade helpers; neither adds a timing setting.
 Each step ends with type-check, lint, and the browser check named; the next step starts only after that.
 
     [x] 0  Eugene: the four git mv of §3.1 with the imports, eslintrc paths and comments following; committed 2026-10-03 as its own boundary
-    [ ] 1  Interfaces, recipe, registry, settings; orchestrator runs via the registry; the three existing classes implement the interfaces, fly-out and fly-in taking the orchestrator's branch logic into their run methods.
-           No behaviour change. Browser: an ordinary transition, a transition where the old central departs, a path step; identical to before; step mode shows the same stage names.
-    [ ] 2  cascade.ts: the BFS (now returning parents), layering, edge bucketing and the viewport edge point extracted from fly-out and fly-in, which use them.
-           No behaviour change. Browser: the same three checks.
-    [ ] 3  grow-arrival.ts; the settings UI rows; map-handoff enter passes { arrival: 'grow' }.
-           Browser: enter the map, markers grow out of their landmarks in two layers; set transition.arrival to 'grow' in Settings and watch an ordinary transition.
-    [ ] 4  shrink-departure.ts; map-handoff leave and back pass { departure: 'shrink' }.
+    [x] 1  Interfaces, recipe, registry, settings; orchestrator runs via the registry; the three existing classes implement the interfaces, fly-out and fly-in taking the orchestrator's branch logic into their run methods.
+           No behaviour change. Browser: an ordinary transition, a transition where the old central departs, a path step; identical to before; step mode shows the same stage names. Verified 2026-10-03.
+    [x] 2  cascade.ts: the BFS (now returning parents), layering, edge bucketing and the viewport edge point extracted from fly-out and fly-in, which use them.
+           No behaviour change. Browser: the same three checks. Verified 2026-10-03.
+    [x] 3  arrival-grow.ts; arrival-elements.ts (the adding of arriving nodes and edges, shared with fly-in); the settings UI rows; map-handoff enter passes { recipe: { arrival: 'grow' } }. Verified 2026-10-03 after 3b.
+    [x] 3b Seen on 2026-10-03 while checking grow: X's markers morphed instead of leaving and growing back; then, with a `morphOnly` request making them travel, the twins' second boxes still arrived on the map after the engine's markers, two steps. Resolved by level, not by node (map-view.md §8): the map's scene is the focus and the landmarks only; the engine moves those, and the map grows every marker out of its landmark in one tween after the swap (`arriveMarkers`), shrinking them back before leaving (`convergeMarkers`). `morphOnly` and its reclassification were removed as unnecessary. Grow runs its layers one after another, since a fixed stagger launched children from a parent still in flight; and `addArrivingNodes` copies a start position, since Cytoscape adopts the object it is given.
+           Browser: enter, landmarks X lacked grow out of the focus, then every marker grows out of its landmark together; leave, every marker shrinks into its landmark, then landmarks Y lacks depart and Y's other nodes arrive.
+    [x] 4  departure-shrink.ts; departure-elements.ts (zoom out the central, fade edges, remove the departed; shared with fly-out); map-handoff leave and back pass { recipe: { departure: 'shrink' } }. Verified 2026-10-03.
            Browser: leave and back, markers shrink into their landmarks; the ordinary transition with 'shrink' selected.
-    [ ] 5  Docs: scene-transitions.md §2.1 tree (phase interfaces and registry), §2.2 (where the registry sits in the layer rules), §4.2 (the recipe; phases 1 and 3 described per animator), appendix; map-view.md §8 step 3 and leave step 4 name the animators; architecture.md transition folder listing. Then delete this file.
+    [x] 5  Docs: scene-transitions.md §2.1 tree and the paragraph on interfaces, registry and helpers, §4.2 (the recipe, the coupling, phases 1 and 3 per animator), appendix; map-view.md §8 step 3 and leave step 4 name the animators; architecture.md transition folder listing. Done 2026-10-03. Delete this file (Eugene).
 
 ## 5. Not in this round
 

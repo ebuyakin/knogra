@@ -33,11 +33,14 @@ export class MapBoxTooltip {
 
   #setupEventListeners(): void {
     this.#cy.on('mouseover', 'node', (event: EventObject) => {
-      if (!this.#needsPreview(event)) return;
+      // A ballooned box is readable as it is; the tooltip would sit on top of it.
+      if (!this.#needsPreview(event) || this.#features.mapView.isBallooned(event.target.id() as string)) return;
       this.#show(event.target.data('title') as string, event.target.renderedPosition());
     });
     this.#cy.on('mouseout', 'node', () => this.hide());
     this.#cy.on('grab', 'node', () => this.hide());
+    // The clicks that balloon a box (right-click, double-click) take the tooltip away first.
+    this.#cy.on('cxttap dbltap', () => this.hide());
     this.#cy.on('tap', () => this.#features.mapView.collapsePreview());
   }
 

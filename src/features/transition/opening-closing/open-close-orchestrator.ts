@@ -22,7 +22,7 @@ import { OpenSceneAnimator } from './open-scene-animator';
 import { CloseSceneAnimator } from './close-scene-animator';
 import { FoldStateHandler } from '../fold-state-handler';
 import { checkSceneInvariant } from '../transition-invariants';
-import { applyCanvasTheme } from '../canvas-theme-operator';
+import { applyCanvasTheme } from '../../../styles/canvas-theme';
 import { getHiddenNodeIds } from '../element-classification-utils';
 import { resolveScenePan } from '../../utils/cy/viewport-utils';
 

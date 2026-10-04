@@ -58,6 +58,18 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     ]
   },
   {
+    // The map's other keys (G, [ ], W, M, > <, , ., F, + −) mean on the map what
+    // they mean in a scene and are not repeated here.
+    title: 'Helicopter view',
+    column: 2,
+    shortcuts: [
+      { key: '/', description: 'Open the map of this scene' },
+      { key: 'L / H', description: 'Select next / previous landmark (or Arrows)' },
+      { key: 'Enter', description: 'Open the focus\'s scene' },
+      { key: 'Escape', description: 'Back to the scene you came from' },
+    ]
+  },
+  {
     title: 'Scene: Editing',
     column: 3,
     shortcuts: [

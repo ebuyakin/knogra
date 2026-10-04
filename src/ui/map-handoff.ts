@@ -23,6 +23,12 @@ import { graphSaver, type GraphSaverSuspension } from '../storage/graph-saver';
 import { eventBus } from '../events/event-bus';
 import { isEditMode } from '../storage/app-mode';
 import { isDebug } from '../config/debug-flags';
+import { waitForStep } from '../features/transition/step-debug';
+
+/** Resolves after the browser has painted a frame with the current DOM and canvases: two animation frames, since the first may be the one already scheduled. */
+function paintedFrame(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
 
 export interface MapHandoffDeps {
   features: FeatureAPI;
@@ -56,7 +62,10 @@ export class MapHandoff {
       // Steps 1 to 3: only reads until the transition; a failure here leaves the user on scene X, the engine's own handling.
       try {
         await mapView.prepare(scene.centralNodeId, this.#surface());
-        await transition.transitionTo(mapView.mapScene());
+        await waitForStep('[handoff] map prepared, nothing drawn');
+        // The engine moves the focus and the landmarks, new landmarks growing out of the focus; the markers are the map's, after the swap (map-view.md §8).
+        await transition.transitionTo(mapView.mapScene(), { recipe: { arrival: 'grow' } });
+        await waitForStep('[handoff] engine shows the map\'s scene; swap next');
       } catch (err) {
         console.error('[MapHandoff] Entering the map failed before the map was shown', err);
         mapView.hide();
@@ -67,7 +76,10 @@ export class MapHandoff {
       this.#enteredSceneId = scene.id;
       this.#suspension = suspension;
       mapView.takeOver();
-      await mapView.arriveTwins();
+      // The same frame's grace on this side: the map surface is shown the tick its elements are added.
+      await paintedFrame();
+      await waitForStep('[handoff] map taken over, markers stowed');
+      await mapView.arriveMarkers();
       if (isDebug('d_scene')) console.log(`[MapHandoff] Entered the map from ${scene.id}`);
     } finally {
       this.#busy = false;
@@ -89,6 +101,7 @@ export class MapHandoff {
 
     let target: Scene;
     try {
+      // A scene made now is the map's skeleton, focus and landmarks, so leaving to it moves nothing once the markers have gone.
       target = await transition.ensureScene(focus, sceneId => mapView.sceneDraft(sceneId));
     } catch (err) {
       // View mode and no scene: stay on the map.
@@ -110,14 +123,27 @@ export class MapHandoff {
     await this.#leaveTo(entered, entered.centralNodeId);
   }
 
+  /**
+   * Steps 1 to 4 of leaving (map-view.md §8): every marker shrinks into its
+   * landmark, the engine takes the skeleton the map leaves behind, and
+   * transitions from it to the target.
+   */
   async #leaveTo(target: Scene, targetNodeId: NodeId): Promise<void> {
     const { mapView, transition } = this.#deps.features;
     this.#busy = true;
     try {
-      await mapView.convergeTwins();
-      await transition.openBehind(mapView.mapScene());
+      const behind = mapView.mapScene();
+      await mapView.convergeMarkers();
+      await waitForStep('[handoff] markers converged; map shows the map\'s scene');
+      await transition.openBehind(behind);
+      // Cytoscape paints on its own animation frame: hidden the same tick it was opened, the engine's canvas would show
+      // one unpainted frame at the swap (seen as a flicker on leaving, 2026-10-04; gone with any pause here).
+      await paintedFrame();
+      await waitForStep('[handoff] engine opened the map\'s scene behind the map');
       mapView.hide();
-      await transition.transitionTo(target);
+      await waitForStep('[handoff] map hidden; engine canvas showing');
+      // Landmarks the target lacks fold into the focus, the mirror of growing out of it on the way in.
+      await transition.transitionTo(target, { recipe: { departure: 'shrink' } });
       if (isDebug('d_scene')) console.log(`[MapHandoff] Left the map for ${target.id} (${targetNodeId})`);
     } finally {
       this.#enteredSceneId = null;

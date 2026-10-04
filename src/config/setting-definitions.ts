@@ -12,6 +12,7 @@ import { PROVIDER_REGISTRY } from './ai-providers';
 import { DESIGN_MANIFEST } from './design-manifest';
 import { THEME_MANIFEST } from './theme-manifest';
 import { AUTOLAYOUT_ALGORITHMS } from './autolayout-settings';
+import { ARRIVAL_ANIMATORS, DEPARTURE_ANIMATORS, MORPHING_ANIMATORS } from './transition-settings';
 
 // ============================================================================
 // TYPES
@@ -439,6 +440,27 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           { value: 'animated', label: 'Animated' },
           { value: 'fade', label: 'Fade (quick)' }
         ]
+      },
+      {
+        key: 'transition.departureAnimator',
+        label: 'Departure',
+        description: 'How nodes that are not in the next scene leave',
+        type: 'select',
+        options: DEPARTURE_ANIMATORS.map(animator => ({ value: animator.id, label: animator.label }))
+      },
+      {
+        key: 'transition.morphingAnimator',
+        label: 'Morphing',
+        description: 'How nodes in both scenes move to their new places',
+        type: 'select',
+        options: MORPHING_ANIMATORS.map(animator => ({ value: animator.id, label: animator.label }))
+      },
+      {
+        key: 'transition.arrivalAnimator',
+        label: 'Arrival',
+        description: 'How nodes new to the next scene appear',
+        type: 'select',
+        options: ARRIVAL_ANIMATORS.map(animator => ({ value: animator.id, label: animator.label }))
       }
     ],
     children: [
@@ -755,169 +777,25 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
     id: 'map',
     label: 'Helicopter view',
     icon: '◇',
-    description: 'One derived map per node in which every edge keeps one direction across the whole graph. Distances and sizes are adjustable per map; directions are shared by all maps.',
+    description: 'A map of one node: the focus in the middle, its landmarks (direct neighbours) on a ring around it, and each landmark\'s markers (the neighbours\' neighbours, as miniatures) in a fan beside it. Every edge keeps one direction across all maps, so moving from map to map never turns anything; distances and sizes are adjustable per map.',
     settings: [
       {
         key: 'map.baseZoom',
         label: 'Base Zoom',
-        description: 'Zoom of the map: at 1 a node is the size its design specifies, as in a scene at zoom 1. The one knob for screen size',
+        description: 'Zoom of the map. At 1 a node is the size its design specifies, as in a scene at zoom 1. The one knob for screen size',
         type: 'number',
         min: 0.25,
         max: 3,
         step: 0.05
       },
       {
-        key: 'map.ringRadius',
-        label: 'Ring Radius',
-        description: 'Distance from the focus to the first-degree nodes straight above or below it, as a fraction of half the screen height',
-        type: 'number',
-        min: 0.2,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.horizontalStretch',
-        label: 'Horizontal Stretch',
-        description: 'Widens the map sideways; 1 is a circle, set it to the screen\'s aspect to fill the width',
-        type: 'number',
-        min: 1,
-        max: 3,
-        step: 0.05
-      },
-      {
-        key: 'map.arcLandmarkShare',
-        label: 'Arc Landmark Share',
-        description: 'Each first-degree node owns a sector of the ring; its arc is shared between the node, a marker on each side, the clearance on each side and breathing space on each side. This weight is the node\'s; it shrinks to fit its share',
-        type: 'number',
-        min: 0,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.arcMarkerShare',
-        label: 'Arc Marker Share',
-        description: 'The weight of a marker to the side of the node, counted on both sides; markers shrink to fit it',
-        type: 'number',
-        min: 0,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.arcClearanceShare',
-        label: 'Arc Clearance Share',
-        description: 'The weight of the space between the node\'s side and its markers, counted on both sides; it squeezes the leaf sideways when the sector is narrow',
-        type: 'number',
-        min: 0,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.arcBreathingShare',
-        label: 'Arc Breathing Share',
-        description: 'The weight of the air between a branch and its neighbour, counted on both sides',
-        type: 'number',
-        min: 0,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.leafClearance',
-        label: 'Leaf Clearance',
-        description: 'Clear space between a first-degree node\'s side and its markers when its sector has room, as a fraction of the node\'s height; a narrow sector lowers it',
-        type: 'number',
-        min: 0,
-        max: 3,
-        step: 0.05
-      },
-      {
-        key: 'map.leafAspect',
-        label: 'Leaf Aspect',
-        description: 'The markers\' ellipse around a first-degree node: its radius away from the focus as a multiple of its radius to the side; 1 is round',
-        type: 'number',
-        min: 0.5,
-        max: 4,
-        step: 0.1
-      },
-      {
-        key: 'map.markerScale',
-        label: 'Marker Scale',
-        description: 'A marker\'s size as a fraction of its first-degree node\'s, before crowding lowers it',
-        type: 'number',
-        min: 0.1,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.markerGap',
-        label: 'Marker Gap',
-        description: 'Minimum space between neighbouring markers of one first-degree node, as a fraction of their size; they shrink until it holds',
-        type: 'number',
-        min: 0,
-        max: 3,
-        step: 0.05
-      },
-      {
-        key: 'map.scaleFloor',
-        label: 'Marker Scale Floor',
-        description: 'The smallest fraction of its default a crowded marker may shrink to; below it, overlap is accepted',
-        type: 'number',
-        min: 0.05,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.landmarkFloor',
-        label: 'Landmark Scale Floor',
-        description: 'The smallest scale a crowded first-degree node may shrink to; the readable floor. Neighbours are turned apart, within the deviation below, to keep it',
-        type: 'number',
-        min: 0.2,
-        max: 1,
-        step: 0.05
-      },
-      {
-        key: 'map.landmarkDeviation',
-        label: 'Landmark Deviation',
-        description: 'How far a first-degree node may be drawn from its stored direction, in degrees, so that neighbours stay apart at the readable floor; the stored direction is unchanged, and a drag adopts the drawn one. 0 draws stored directions exactly',
-        type: 'number',
-        min: 0,
-        max: 90,
-        step: 5
-      },
-      {
-        key: 'map.twinAllowance',
-        label: 'Twin Allowance',
-        description: 'How far the two ends of an edge may point away from exact opposition, in degrees, so each node can arrange its own neighbours; the line between two focuses turns by at most this on a re-focus. 0 keeps the ends rigidly opposite',
-        type: 'number',
-        min: 0,
-        max: 90,
-        step: 5
-      },
-      {
-        key: 'map.previewScale',
-        label: 'Preview Scale',
-        description: 'Scale a small box balloons to when clicked; every marker, and any first-degree node crowding shrank below this',
-        type: 'number',
-        min: 0.2,
-        max: 2,
-        step: 0.05
-      },
-      {
-        key: 'map.lineScalePower',
-        label: 'Line Scale Power',
-        description: 'How much a line thins with the node it leads to: its width and arrow are multiplied by the node\'s scale to this power; 1 fully proportional, 0 never',
-        type: 'number',
-        min: 0,
-        max: 1,
-        step: 0.05
-      },
-      {
         key: 'map.themeMode',
         label: 'Theme',
-        description: 'One theme for every map, or the theme of the focus node\'s own scene',
+        description: 'One theme for every map, or the theme of the focus\'s own scene',
         type: 'select',
         options: [
           { value: 'fixed', label: 'Fixed theme for all maps' },
-          { value: 'scene', label: 'Follow the focus node\'s scene' }
+          { value: 'scene', label: 'Follow the focus\'s scene' }
         ]
       },
       {
@@ -926,48 +804,236 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         description: 'The theme every map uses when Theme is fixed',
         type: 'select',
         options: THEME_MANIFEST.map(theme => ({ value: theme.id, label: theme.label }))
+      }
+    ],
+    children: [
+      {
+        id: 'map-ring',
+        label: 'Ring',
+        settings: [
+          {
+            key: 'map.ringRadius',
+            label: 'Ring Radius',
+            description: 'How far the landmarks sit from the focus, as a fraction of half the screen height; the distance straight above or below the focus',
+            type: 'number',
+            min: 0.2,
+            max: 1,
+            step: 0.05
+          },
+          {
+            key: 'map.horizontalStretch',
+            label: 'Horizontal Stretch',
+            description: 'Widens the ring sideways into an ellipse. 1 is a circle; the screen\'s own aspect fills its width',
+            type: 'number',
+            min: 1,
+            max: 3,
+            step: 0.05
+          }
+        ]
       },
       {
-        key: 'map.animate',
-        label: 'Animate',
-        description: 'Animate moving the focus to a neighbouring node instead of snapping',
-        type: 'boolean'
+        id: 'map-landmarks',
+        label: 'Landmarks',
+        settings: [
+          {
+            key: 'map.landmarkFloor',
+            label: 'Landmark Scale Floor',
+            description: 'The smallest a crowded landmark may shrink to, as a fraction of full size: the readable floor. Crowded landmarks are first turned apart (Landmark Deviation) to keep it',
+            type: 'number',
+            min: 0.2,
+            max: 1,
+            step: 0.05
+          },
+          {
+            key: 'map.landmarkDeviation',
+            label: 'Landmark Deviation',
+            description: 'How far a landmark may be drawn away from its stored direction so that crowded landmarks stay readable, in degrees; the stored direction is not changed, and the clockwise order never is. 0 draws every landmark exactly where its direction says',
+            type: 'number',
+            min: 0,
+            max: 90,
+            step: 5
+          },
+          {
+            key: 'map.arcLandmarkShare',
+            label: 'Sector: Landmark Share',
+            description: 'Each landmark owns a sector of the ring, divided by weight between the landmark itself, a marker on each side, the clearance on each side and breathing space on each side; what does not fit its share shrinks. This is the landmark\'s weight',
+            type: 'number',
+            min: 0,
+            max: 1,
+            step: 0.05
+          },
+          {
+            key: 'map.arcMarkerShare',
+            label: 'Sector: Marker Share',
+            description: 'The weight of a marker beside the landmark, counted on both sides',
+            type: 'number',
+            min: 0,
+            max: 1,
+            step: 0.05
+          },
+          {
+            key: 'map.arcClearanceShare',
+            label: 'Sector: Clearance Share',
+            description: 'The weight of the gap between the landmark and its markers, counted on both sides; a narrow sector squeezes it first',
+            type: 'number',
+            min: 0,
+            max: 1,
+            step: 0.05
+          },
+          {
+            key: 'map.arcBreathingShare',
+            label: 'Sector: Breathing Share',
+            description: 'The weight of the air between one landmark\'s fan and the next, counted on both sides',
+            type: 'number',
+            min: 0,
+            max: 1,
+            step: 0.05
+          }
+        ]
       },
       {
-        key: 'map.departDuration',
-        label: 'Depart Duration',
-        description: 'Leaving markers slide into their parents and fade (ms)',
-        type: 'number',
-        min: 0,
-        max: 2000,
-        step: 50
+        id: 'map-markers',
+        label: 'Markers',
+        settings: [
+          {
+            key: 'map.markerScale',
+            label: 'Marker Scale',
+            description: 'A marker\'s size as a fraction of its landmark\'s, before crowding shrinks it',
+            type: 'number',
+            min: 0.1,
+            max: 1,
+            step: 0.05
+          },
+          {
+            key: 'map.markerGap',
+            label: 'Marker Gap',
+            description: 'Least space between neighbouring markers of one landmark, as a fraction of their size; they shrink until it holds',
+            type: 'number',
+            min: 0,
+            max: 3,
+            step: 0.05
+          },
+          {
+            key: 'map.scaleFloor',
+            label: 'Marker Scale Floor',
+            description: 'The smallest a crowded marker may shrink to, as a fraction of Marker Scale; below it, overlap is accepted',
+            type: 'number',
+            min: 0.05,
+            max: 1,
+            step: 0.05
+          },
+          {
+            key: 'map.leafClearance',
+            label: 'Leaf Clearance',
+            description: 'Gap between a landmark and its markers when there is room, as a fraction of the landmark\'s height; a narrow sector lowers it',
+            type: 'number',
+            min: 0,
+            max: 3,
+            step: 0.05
+          },
+          {
+            key: 'map.leafAspect',
+            label: 'Leaf Aspect',
+            description: 'The shape of the ellipse a landmark\'s markers sit on: its length away from the focus as a multiple of its width. 1 is round',
+            type: 'number',
+            min: 0.5,
+            max: 4,
+            step: 0.1
+          },
+          {
+            key: 'map.previewScale',
+            label: 'Preview Scale',
+            description: 'The size a small box grows to when right-clicked or double-clicked, so it can be read in place; every marker, and any landmark that crowding shrank below this',
+            type: 'number',
+            min: 0.2,
+            max: 2,
+            step: 0.05
+          }
+        ]
       },
       {
-        key: 'map.moveDuration',
-        label: 'Move Duration',
-        description: 'Every remaining node moves and resizes in one movement (ms)',
-        type: 'number',
-        min: 0,
-        max: 3000,
-        step: 50
+        id: 'map-directions',
+        label: 'Directions',
+        settings: [
+          {
+            key: 'map.twinAllowance',
+            label: 'Twin Allowance',
+            description: 'How far the two ends of an edge may point away from exactly opposite, in degrees, so that each node can arrange its own neighbours. 0 keeps them rigidly opposite; higher lets the line between two focuses turn by more on a re-focus',
+            type: 'number',
+            min: 0,
+            max: 90,
+            step: 5
+          },
+          {
+            key: 'map.resetKeepsOrder',
+            label: 'Reset Keeps Order',
+            description: 'Resetting directions re-spaces landmarks and markers evenly in the clockwise order they have now, so a sequence you arranged by dragging survives the tidying. Off: directions are chosen afresh, order not kept',
+            type: 'boolean'
+          }
+        ]
       },
       {
-        key: 'map.arriveDuration',
-        label: 'Arrive Duration',
-        description: 'New markers slide out of their parents and fade in (ms)',
-        type: 'number',
-        min: 0,
-        max: 2000,
-        step: 50
+        id: 'map-lines',
+        label: 'Lines',
+        settings: [
+          {
+            key: 'map.lineScalePower',
+            label: 'Line Scale Power',
+            description: 'How much a line thins with the box it leads to: its width and arrow are multiplied by the box\'s scale to this power. 1 fully proportional, 0 never',
+            type: 'number',
+            min: 0,
+            max: 1,
+            step: 0.05
+          }
+        ]
       },
       {
-        key: 'map.phasePause',
-        label: 'Pause Between Phases',
-        description: 'Hold between depart, move and arrive (ms); 0 normally, raise it to watch each phase',
-        type: 'number',
-        min: 0,
-        max: 3000,
-        step: 100
+        id: 'map-animation',
+        label: 'Animation',
+        settings: [
+          {
+            key: 'map.animate',
+            label: 'Animate',
+            description: 'Animate re-focusing and resetting instead of snapping',
+            type: 'boolean'
+          },
+          {
+            key: 'map.departDuration',
+            label: 'Depart Duration',
+            description: 'Leaving markers slide into their landmarks and fade (ms); also the markers folding away before leaving the map',
+            type: 'number',
+            min: 0,
+            max: 2000,
+            step: 50
+          },
+          {
+            key: 'map.moveDuration',
+            label: 'Move Duration',
+            description: 'Every remaining box moves and resizes in one movement (ms); also a reset',
+            type: 'number',
+            min: 0,
+            max: 3000,
+            step: 50
+          },
+          {
+            key: 'map.arriveDuration',
+            label: 'Arrive Duration',
+            description: 'New markers slide out of their landmarks and fade in (ms); also the markers growing out after entering the map',
+            type: 'number',
+            min: 0,
+            max: 2000,
+            step: 50
+          },
+          {
+            key: 'map.phasePause',
+            label: 'Pause Between Phases',
+            description: 'Hold between depart, move and arrive (ms); 0 normally, raise it to watch each phase',
+            type: 'number',
+            min: 0,
+            max: 3000,
+            step: 100
+          }
+        ]
       }
     ]
   },

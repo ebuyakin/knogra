@@ -647,12 +647,41 @@ function relaxRing(landmarks: Placed[], params: MapGeometryParams): Map<Address,
     }
   }
 
+  // Compress, never clamp. A block whose members would move farther than the cap
+  // is shrunk as a whole toward the stored angles until its largest displacement
+  // is the cap: members keep their order and their proportions. Capping each
+  // member on its own could swap two neighbours (seen 2026-10-03). The drawn
+  // order is the stored order (§3 Drawn directions).
   const cap = params.landmarkDeviation;
+  const places = new Array<number>(count);
   for (const block of blocks) {
+    const displacements = block.members.map((member, index) => placeOf(block, index) - unrolled[member]);
+    const largest = Math.max(...displacements.map(Math.abs));
+    const factor = largest > cap ? cap / largest : 1;
     block.members.forEach((member, index) => {
-      const displacement = placeOf(block, index) - unrolled[member];
-      deviations.set(landmarks[order[member]].box.address, Math.max(-cap, Math.min(cap, displacement)));
+      places[member] = unrolled[member] + displacements[index] * factor;
     });
+  }
+
+  // The run must not close the gap it was cut at, or the last landmark would
+  // pass the first on the other side; the whole run is compressed the same way.
+  const first = order[0];
+  const last = order[count - 1];
+  const gapNeeded = halfNeeds[first] + halfNeeds[last];
+  const storedSpan = unrolled[count - 1] - unrolled[0];
+  const placedSpan = places[count - 1] - places[0];
+  const spanAllowed = Math.max(storedSpan, FULL_TURN - gapNeeded);
+  if (placedSpan > spanAllowed) {
+    const factor = placedSpan > storedSpan ? (spanAllowed - storedSpan) / (placedSpan - storedSpan) : 0;
+    for (let step = 0; step < count; step++) places[step] = unrolled[step] + (places[step] - unrolled[step]) * factor;
+  }
+
+  for (let step = 0; step < count; step++) {
+    // Should be impossible after the two compressions; said aloud rather than silently drawn if it ever is.
+    if (step > 0 && places[step] < places[step - 1]) {
+      console.warn(`[Map geometry] relaxRing reordered ${landmarks[order[step - 1]].box.address} and ${landmarks[order[step]].box.address}`);
+    }
+    deviations.set(landmarks[order[step]].box.address, places[step] - unrolled[step]);
   }
   return deviations;
 }

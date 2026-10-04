@@ -35,7 +35,6 @@ module.exports = {
         'src/features/transition/fold-state-handler.ts',
         'src/features/transition/opening-closing/open-close-orchestrator.ts',
         'src/features/transition/opening-closing/open-scene-animator.ts',
-        'src/features/transition/scene-to-scene/arrival-fly-in.ts',
         'src/features/transition/scene-to-scene/morphing-parallel.ts',
         'src/features/transition/scene-to-scene/morphing/ghost-operator.ts',
         'src/features/transition/scene-to-scene/morphing/transition-analysis-operator.ts',

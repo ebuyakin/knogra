@@ -1,7 +1,7 @@
 # Scene Manipulation & Transition Specification
 
 > **Status:** Current  
-> **Last reviewed:** 2026-10-03 (terminology in §1.3: transition, morphing, re-focus, handoff; §2 and §4 after the layering was restored on 2026-10-02)  
+> **Last reviewed:** 2026-10-03 (pluggable phase animators and the recipe in §2.1 and §4.2; terminology in §1.3; §2 and §4 after the layering was restored on 2026-10-02)  
 > **Authority:** Canonical source for scene manipulation, scene transitions, fold semantics, and related invariants.  
 > **Replaces:** [transition-sequence-spec.md](transition-sequence-spec.md), transition-related sections of [fold-unfold-design.md](fold-unfold-design.md)  
 > **Related:** [Documentation map](README.md), [Architecture](architecture.md), [Background design](background-design.md)
@@ -103,19 +103,22 @@ FeatureAPI (facade)
 │   │   ├── OpenSceneAnimator
 │   │   ├── CloseSceneAnimator
 │   │   └── FoldStateHandler
-│   └── SceneToSceneOrchestrator     transition(current, target, options)
-│       ├── DepartureAnimator
-│       ├── SharedCoreAnimator
+│   └── SceneToSceneOrchestrator     transition(current, target, { isNewScene, recipe? })
+│       ├── animator-registry        id → animator, one table per phase; recipe.ts resolves the ids (the request, else the settings)
+│       ├── DepartureAnimator        'fly-out' DepartureFlyOut, 'shrink' DepartureShrink
+│       ├── MorphingAnimator         'parallel' MorphingParallel
 │       │   ├── BackgroundOperator
 │       │   ├── TransitionAnalysisOperator
 │       │   └── GhostOperator
-│       ├── ArrivalAnimator
+│       ├── ArrivalAnimator          'fly-in' ArrivalFlyIn, 'grow' ArrivalGrow
 │       └── FoldStateHandler
 ├── Path                (navigation history)
 └── SceneBackground     (background images)
 ```
 
-Shared by both orchestrators, Layer 3: `canvas-theme-operator` (the container's colour and vignette) and `step-debug` (the dev step-through pause). Pure, under both: `element-classification-utils` and `transition-invariants`.
+Each phase of a transition is an interface (`animators.ts`: one `run(context)` per phase, the context the same for every implementation of that phase), an animator is one implementation named by an id, and a recipe names one animator per phase (§4.2). The orchestrator obtains its animators from the registry by id, one instance per id kept for reuse, and knows no implementation; files and classes are named role first, variant second, so the folder sorts by phase. Helper libraries an animator may use, not part of any interface: `cascade.ts` (the BFS from the central giving distance and parent, layers, edge buckets, the viewport edge point), `arrival-elements.ts` (adding arriving nodes and edges with their styles), `departure-elements.ts` (the central's zoom-out, fading edges, removing the departed).
+
+Shared by both orchestrators, Layer 3: `step-debug` (the dev step-through pause). Pure, under both: `element-classification-utils` and `transition-invariants`. The container's colour and vignette are painted by `styles/canvas-theme.ts`, a Styles-layer routine the map view uses for its own surface too (moved out of this feature on 2026-10-03 for that reason).
 
 The layering was restored on 2026-10-02: until then `Transition` ran the transition itself (classification, the phases, the central flag, the background, fold state, the stylesheet prune, 950 lines) and the orchestrator was three phase methods; the open modes and an inline fade path lived in `Transition` too, beside a stale `openFade` in the orchestrator. The map handoff (map-view.md §8), which needs `transition` and an instant `open` with Scene objects as Layer 1 primitives, was the occasion. The refactor was six extractions with no behaviour change, each verified in the browser; its plan was a temporary document, deleted when done.
 
@@ -271,7 +274,7 @@ Navigation from path panel (back/forward/breadcrumb). No `scene:changed`; the pa
 Opens a scene from scratch (initial load, theme change, non-adjacent navigation). `Transition` looks the scene up, makes it current, picks the mode, calls `OpenCloseOrchestrator.open(scene, mode)` and emits `sceneChanged`. The orchestrator:
 
 1. `cy.elements().remove()` — clear current
-2. Canvas theme from the scene's theme (`canvas-theme-operator`; instant for `'instant'`, else the `openBgFadeIn` setting)
+2. Canvas theme from the scene's theme (`styles/canvas-theme.ts`; instant for `'instant'`, else the `openBgFadeIn` setting)
 3. Base stylesheet (edge rule, edge type rules, central/selected rules, edge type visibility)
 4. Viewport (saved or fit-to-content)
 5. **Instant mode**: `openInstant()` + `FoldStateHandler.apply()`
@@ -296,7 +299,11 @@ Closes current scene: `Transition` picks the mode, calls `OpenCloseOrchestrator.
 
 ### 4.2 The three-phase transition
 
-`SceneToSceneOrchestrator.transition(currentScene, targetScene, { isNewScene })`, called by `Transition` when the target scene's central node is **visible** in the current scene (and by `transitionTo` for the map handoff). `Transition` resolves the target first (§4.3); the orchestrator takes both scenes as objects and returns a `TransitionReport` (what it classified, the zoom change) for the dev record. It never writes the current-scene scratch, never saves and never announces: `Transition` does those after `transition` returns, in that order (save the auto-created scene, make the target current, `sceneChanged`).
+`SceneToSceneOrchestrator.transition(currentScene, targetScene, { isNewScene, recipe? })`, called by `Transition` when the target scene's central node is **visible** in the current scene (and by `transitionTo` for the map handoff). `Transition` resolves the target first (§4.3); the orchestrator takes both scenes as objects and returns a `TransitionReport` (what it classified, the zoom change) for the dev record. It never writes the current-scene scratch, never saves and never announces: `Transition` does those after `transition` returns, in that order (save the auto-created scene, make the target current, `sceneChanged`).
+
+**The recipe.** Which animator does each phase: `{ departure, morphing, arrival }`, three ids, plain data (`recipe.ts`). A caller may name any phase in its `TransitionRequest` (`transitionTo(scene, { recipe })`; the map handoff asks for `grow` on the way in and `shrink` on the way out); what it leaves out comes from the settings `transition.departureAnimator`, `transition.morphingAnimator`, `transition.arrivalAnimator`, the user's default recipe, shown as three select rows under Transitions; an id the registry does not know, a setting left by a removed animator, falls back to the built-in. The ids are persisted in settings and never renamed. The glue between the phases is the orchestrator's and belongs to no animator: classification, the central flag swap and the canvas theme crossfade before morphing, fold state, the invariant and the stylesheet reconciliation after arrival.
+
+**A coupling between phases, kept as glue:** the morphing animator brings in a new central that is arriving (stage 2.3.C), so the orchestrator removes it, and its edges to shared nodes, from the arrival context (`#arrivingAfterMorphing`). A second morphing animator would have to honour this or the glue would change.
 
 #### Phase 0: Preparation
 
@@ -313,14 +320,17 @@ Closes current scene: `Transition` picks the mode, calls `OpenCloseOrchestrator.
 
 #### Phase 1: Departure (`DepartureAnimator`)
 
-Removes elements not in new scene.
+Removes elements not in new scene. Contract: when `run` resolves, every departing node and edge is out of the instance.
 
+`'fly-out'` (`DepartureFlyOut`, the default):
 1. **Edge fade out** (if `departureEdgeTiming === 'before'`): departing edges fade to opacity 0, then removed
-2. **Node fly out**: departing nodes fly toward viewport edge, cascaded by BFS distance from central (farthest first)
-3. **Old central zoom out** (if old central is departing): shrinks to 20% while fading
+2. **Node fly out**: departing nodes fly toward viewport edge, away from the old central, cascaded by BFS distance from central (farthest first) with `departureLayerDuration` and `departureLayerStagger`; in `'parallel'` edge timing each edge fades with the layer of its outermost departing endpoint, edges between two staying nodes with the first
+3. **Old central zoom out** (if old central is departing): shrinks to 20% while fading, its edges with it
 4. All departed elements removed from Cytoscape after animation
 
-#### Phase 2: Morphing (`SharedCoreAnimator`)
+`'shrink'` (`DepartureShrink`): each departing node slides into the current position of its parent, the neighbour on its path back to the central, fading out, edges fading with their layer; layers farthest first, one after another, so a parent is still there when its children fold into it; a node with no path fades in place; a departing old central zooms out as above. The stagger and edge-timing settings are fly-out's. The mirror of `'grow'`; the map handoff leaves with it (map-view.md §8).
+
+#### Phase 2: Morphing (`MorphingAnimator`, `'parallel'` = `MorphingParallel`)
 
 Transforms shared elements from old state to new state. **All sub-stages run in parallel.**
 
@@ -354,11 +364,13 @@ Transforms shared elements from old state to new state. **All sub-stages run in 
 
 #### Phase 3: Arrival (`ArrivalAnimator`)
 
-Introduces elements new to the scene.
+Introduces elements new to the scene. Contract: when `run` resolves, every arriving node and edge is in the instance, visible, at its target. Both animators add the nodes first, invisible at their start positions with their stylesheet rules (`arrival-elements.ts`), and leave edges whose endpoint is neither arriving nor in the instance to the fold handler.
 
-1. **Node fly in**: arriving nodes fly from viewport edge to target positions, cascaded by BFS distance (closest first)
-2. **Edge fade in**: edges connected to arriving nodes fade in
-3. Nodes added to Cytoscape at off-screen positions, styled, then animated
+`'fly-in'` (`ArrivalFlyIn`, the default):
+1. **Node fly in**: arriving nodes fly from past the viewport edge, along the ray from the new central, to their targets, cascaded by BFS distance (closest first) with `arrivalLayerDuration` and `arrivalLayerStagger`
+2. **Edge fade in**: with the layer of the outermost arriving endpoint (`'parallel'` edge timing), or all after the nodes (`'after'`)
+
+`'grow'` (`ArrivalGrow`): each arriving node starts at the target position of its parent, the neighbour on its path back to the central, and slides to its own place fading in, edges fading with their layer; a node with no path grows out of the central; layers closest first, one after another, so a parent has landed when its children set out (a fixed stagger launched children from a parent still in flight). The stagger and edge-timing settings are fly-in's. On the map's scene: landmarks grow out of the focus (map-view.md §8).
 
 #### Post-Phase: Fold State Application (`FoldStateHandler`)
 
@@ -669,11 +681,18 @@ IndexedDB Persistence
 | `src/features/scene/fold-manager.ts` | Fold/unfold state and animation |
 | `src/features/transition/transition.ts` | Top-level transition router |
 | `src/features/transition/opening-closing/open-close-orchestrator.ts` | Open/close scene orchestrator |
-| `src/features/transition/scene-to-scene/scene-to-scene-orchestrator.ts` | The three-phase transition orchestrator: departure, morphing, arrival |
+| `src/features/transition/scene-to-scene/scene-to-scene-orchestrator.ts` | The three-phase transition orchestrator: departure, morphing, arrival, by recipe |
+| `src/features/transition/scene-to-scene/animators.ts` | The three phase interfaces and their contexts (types only) |
+| `src/features/transition/scene-to-scene/recipe.ts` | `TransitionRecipe`; resolve a request against the settings |
+| `src/features/transition/scene-to-scene/animator-registry.ts` | Animator id → constructor, one table per phase; unknown id → built-in |
+| `src/features/transition/scene-to-scene/departure-fly-out.ts`, `departure-shrink.ts` | The departure animators |
+| `src/features/transition/scene-to-scene/morphing-parallel.ts` + `morphing/` | The morphing animator and its operators (background, analysis, ghosts) |
+| `src/features/transition/scene-to-scene/arrival-fly-in.ts`, `arrival-grow.ts` | The arrival animators |
+| `src/features/transition/scene-to-scene/cascade.ts`, `arrival-elements.ts`, `departure-elements.ts` | Helper libraries animators may use; not part of any interface |
 | `src/features/transition/element-classification-utils.ts` | Pure functions: classify elements by inclusion and by fold visibility, get hidden IDs |
 | `src/features/transition/scene-resolution.ts` | Find a scene by central node; create-or-refuse policy; pure drafts (auto-create) |
 | `src/features/transition/current-scene.ts` | Which scene the instance shows, stored or transient; the only writer of the scratch id |
-| `src/features/transition/canvas-theme-operator.ts` | The container's background colour and vignette |
+| `src/styles/canvas-theme.ts` | The container's background colour and vignette (Styles layer; shared with the map view) |
 | `src/features/transition/fold-state-handler.ts` | Post-transition fold setup |
 | `src/storage/graph-store.ts` | IndexedDB interface with in-memory cache |
 | `src/storage/graph-saver.ts` | Auto-save listener (Cytoscape → GraphStore) |

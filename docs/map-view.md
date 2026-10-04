@@ -82,8 +82,8 @@ Use these words and no others in code, comments, settings and UI copy for this f
     handoff     Moving between a scene and the map (§8): enter, scene to the map of its central node; leave, map to the focus's study scene; back, map to the scene it was entered from.
                 A transition to or from the map's scene plus the map's own moves; neither a transition nor a re-focus on its own.
 
-    map's scene The map as a Scene object (§8): the picture the scene engine draws and transitions to or from during a handoff.
-                Transient under its own id; the same object under an engine id is the study scene a focus without one gets.
+    map's scene The focus and the landmarks of a map as a Scene object (§8): the picture the scene engine draws and transitions to or from during a handoff; the markers are the map's own and arrive after the swap.
+                Transient, never persisted. The same object under an engine id is the study scene a focus without one gets, and what a scene is reset to: the skeleton the map and its scenes share. Markers exist only on the map.
 
     map view    The feature, and one instance of it: the map of one focus.
                 Helicopter view in the UI only.
@@ -125,7 +125,9 @@ Drawn directions (decided 2026-10-02).
 A landmark's stored direction is a target, not a pixel: the map draws it as close to the stored direction as the ring's readability allows, moved by at most `map.landmarkDeviation` degrees, and never stores the difference.
 The reason is that a direction can be right where it was set and unreadable elsewhere: a marker placed near its landmark's trunk is a legitimate choice on that map, and the same two edges are landmarks on the neighbour's map, where no scale makes them legible side by side; no seeding rule prevents what an author did on purpose.
 Each landmark needs a half-sector at which the budget below would give it the readable floor, `map.landmarkFloor`: its pitch along the tangent at that floor, over the box's share, through the arc per degree at its radius.
-The ring is cut at its widest gap and read as a line; landmarks that would sit closer than their needs allow form a block, spaced within by their needs and placed so that its members' displacements cancel, and blocks that then touch merge, so three landmarks on one direction spread into three places centred on where they were; order around the focus is kept by construction, each displacement is capped last, and a ring that is genuinely full saturates its caps and the budget shrinks what is left.
+The ring is cut at its widest gap and read as a line; landmarks that would sit closer than their needs allow form a block, spaced within by their needs and placed so that its members' displacements cancel, and blocks that then touch merge, so three landmarks on one direction spread into three places centred on where they were.
+The drawn order around the focus is the stored order, always (guaranteed 2026-10-03): a block whose members would move farther than the cap is compressed as a whole toward the stored directions until its largest displacement is the cap, so its members keep their order and their proportions, and the run is compressed the same way if it would close the gap it was cut at; capping each landmark on its own, the first rule, could swap two neighbours in a crowded block, which is what made the order look random.
+A ring that is genuinely full therefore saturates its cap and the budget shrinks what is left; crowding changes spacing and sizes, never order.
 A pairwise relaxation was tried first (2026-10-02) and left the third of three coincident landmarks behind: pushing a pair apart by half the shortfall each sent one of them past the next neighbour, which the pair never looked at.
 A landmark's fan moves with it as a whole; the fan's own angles are untouched, and when the landmark becomes the focus its fan becomes the ring at the stored directions.
 Markers are not deviated: a crowded fan is the scale's problem, a crowded ring is readability's.
@@ -216,7 +218,7 @@ This follows from I2 and I7 and is the property the whole design exists to provi
 ### 5.1 Entering
 
 From a scene, the canvas menu item Helicopter view opens the map focused on the scene's central node; inside the map, the menu offers Open the focus's scene and Back to scene.
-No entry shortcut in v1: the scene's keyboard namespace is nearly exhausted (layout-architecture.md §1.1), and an entry key waits for the leader-key redesign of the keyboard handler, a separate task already on the roadmap.
+The slash key does the same from a scene, as a stopgap (2026-10-03): the scene's keyboard namespace is exhausted (layout-architecture.md §1.1), and the proper entry key waits for the leader-key redesign of the keyboard handler, a separate task already on the roadmap.
 Inside the map the keyboard is the map's own, since the scene's bindings never run while it is shown, and keys are chosen to read as their scene counterparts do:
 
     W / Shift+W     all landmarks enlarge / shrink
@@ -224,6 +226,7 @@ Inside the map the keyboard is the map's own, since the scene's bindings never r
     , / .           the selected boxes in / out: a landmark's whole fan, a marker along its own ray
     < / >           the selected boxes enlarge / shrink
     G               re-focus on the selected landmark
+    → / l, ← / h    select the next landmark clockwise / anticlockwise around the ring (§5.2)
     [ / ]           previous / next focus
     F               back to the base frame: base zoom, focus at the centre
     = / -           zoom in / out about the focus, for the session
@@ -234,6 +237,8 @@ Entering is the handoff of §8: the scene engine transitions the scene into the 
 ### 5.2 Navigating
 
 Navigation is one degree at a time: double-clicking a landmark re-focuses the map on its node, as double-clicking navigates in a scene; a single click selects it, for the scale keys.
+The keyboard selects too (2026-10-04): the right and left arrows, and l and h, move the selection to the next landmark clockwise or anticlockwise around the ring, wrapping; from a selected marker its landmark is the start, and with nothing selected the landmark nearest the top is taken; then G re-focuses, Enter leaves to its scene.
+The order is the drawn order, which is the stored order (§3), so cycling never jumps; up, down, j and k are kept for stepping into a landmark's fan later.
 Markers are not navigation targets.
 A jump of two hops, if ever wanted, is two transitions in sequence, not a new mechanism.
 
@@ -290,11 +295,16 @@ Scaling never moves the ring (§3 Manual scales); the leaves follow the boxes' r
 Distance is the scene's `,` and `.` (tighten / spread), on the selection: a selected landmark's whole fan moves in or out, its leaf multiplied (`leaf` on its box record) so the change survives a change in crowding; a selected marker moves along its own ray, its `length` written as a drag writes it, so a moved marker is a hand-placed marker; the focus has nothing to move.
 Drag, scale and distance are the only layout gestures the map has; there is no auto-layout, arrange or rotate in v1.
 
-Resetting, from the map menu, Edit mode only.
+The order of the landmarks around the focus, and of a fan's markers around their landmark, is not stored anywhere: it is read off the bearings by sorting them, so a drag is the one thing that changes it, and the drawing never does (§3 Drawn directions).
+Two sources of truth for one ring were considered and declined (2026-10-03): a stored order and the bearings would disagree the moment one changed without the other, and whichever won would make the other redundant; autolayout reads its angular order off the screen for the same reason.
+
+Resetting, from the map menu, Edit mode only; animated (2026-10-03) as a re-focus with only the move phase, since every box keeps its address: boxes glide to their new places and sizes, lines re-weight, over `map.moveDuration`.
 Distances and sizes: the map's record is deleted and the map is shown from defaults; nothing outside this map changes.
 Directions too: in addition, the bearing of every edge drawn on this map is cleared and seeded afresh by §6.5.
+With `map.resetKeepsOrder` (default on) the seeding is handed the ends as they were, and at each box re-spaces the free ends evenly in the order they had, turned to move least, so a sequence the author dragged into being survives the tidying, as autolayout's angular order does; off, the seeding chooses freely, as for a map that never had directions.
 Bearings are global, so this reaches every other map those edges appear on, and the menu says so.
 Every map and every direction: all map records and all bearings in the workspace, behind a confirmation; the clean slate for judging the defaults.
+It keeps the order of the map on screen under the same setting; the other maps' ends are gone by the time they are opened, and they are seeded fresh.
 
 Reading a small box without leaving the map.
 A box needs a preview when it is drawn below `map.previewScale`: every marker, and a landmark that crowding shrank below readable (extended to landmarks 2026-09-27; the shrinking is accepted, the balloon makes it livable).
@@ -324,7 +334,7 @@ Filtering is the intended answer to hubs (§10).
 ### 5.5 Leaving
 
 Enter opens the current focus's study scene (leave); Escape returns to the scene the map was entered from (back); both by the handoff of §8: the scene engine transitions the map's scene into the target on its own instance.
-If the focus has no scene, one is created: the map exactly as shown (§8), under the existing edit-mode guard; in View mode the command is unavailable for a focus without a scene, as navigation to such a node is from a scene.
+If the focus has no scene, one is created: the map's skeleton, focus and landmarks exactly as shown (§8), under the existing edit-mode guard; in View mode the command is unavailable for a focus without a scene, as navigation to such a node is from a scene.
 Chat and notes follow the focus throughout (§7.3), so leaving the map for the node's scene changes nothing in the learning space.
 
 ### 5.6 Theme
@@ -405,6 +415,7 @@ Under a new `map` settings domain, data only, in `config/`:
     map.landmarkFloor         the least scale a crowded landmark may reach, the readable floor (default 0.6)
     map.landmarkDeviation     how far a landmark may be drawn from its stored direction, in degrees, to keep the ring readable (default 45); 0 draws stored directions exactly
     map.twinAllowance         how far the two ends of an edge may diverge from exact opposition, in degrees (default 30); 0 makes them rigid, as before 2026-09-28
+    map.resetKeepsOrder       a reset of directions keeps the angular order of the boxes at each parent and re-spaces them evenly (default on); off seeds afresh (§5.3)
     map.previewScale          rendered scale of a ballooned box (default 1); a box drawn below it can be ballooned, whichever its role
     map.lineScalePower        a line's width and arrow scale are its type's times its box's scale to this power (default 0.5); 1 fully proportional, 0 never
     map.twinLinks             draw dotted links between twins (v2; default off)
@@ -426,6 +437,7 @@ An end whose partner end is assigned is coupled: it prefers the exact reverse of
 An end whose partner end is also unassigned is free, and both ends are decided together: the box's free ends, together, are spread evenly into the gaps between the spokes it already has, each gap taking a share in proportion to its width, the same margin at both ends of a gap, so that a whole map at once, as after a reset, comes out equally spaced, five landmarks at 72 degrees rather than four right angles and a fifth splitting one.
 Which free end takes which slot is chosen so that the far ends land as clear as possible of the spokes their own boxes already have, the far end of each being set to the exact reverse of the slot it gets; this is what stops the third edge of a triangle from being planted into a direction its far end already uses (decided 2026-09-28, the one-ended rule did exactly that on every triangle).
 The slots themselves do not move for the far ends: a box with no spokes may turn its whole set, a pure rotation, but with spokes present the set stays put, because shifting it toward a spoke halves the margin there and the parent's evenness is what is looked at (a shifted fan put a marker on its landmark's trunk, 2026-09-28).
+A reset that keeps order (§5.3) hands the seeding the ends as they were before it cleared them; the free ends of a box then take the slots in the order of their previous angles, the cyclic start and, with no spokes, the rotation chosen so that they move least in total, and the far ends get no say: the order is the author's and outranks their clearance (2026-10-03).
 Around the whole circle, at the focus and at a landmark alike: a node's neighbours have one set of directions that serves both its views, the ring when it is the focus and the leaf when it is a landmark, and the ring is the view that is read.
 A sector rule that fanned a landmark's markers ahead of it was tried and dropped on 2026-09-26: it crowded the same node's landmarks into that sector when it became the focus.
 One new edge with both ends free therefore lands in the middle of the widest gap at its parent, the rule single-node placement uses (node-placement.md), shifted within that gap if its far end asks for it.
@@ -504,11 +516,11 @@ Events, the engine announcing phases for the map to react to, were declined beca
                   transitionTo(scene)              the three-phase transition from the current scene to a given Scene object, with the usual events; the current scene may be transient
                   ensureScene(nodeId, draft)       the existing find-or-create policy with a draft in place of the offsets rule; the draft receives the id the engine assigns; throws in View mode for a node without a scene
     map view      prepare(nodeId, surface)         walk, seed, lay out for a surface of the given size, keep; nothing drawn (a hidden surface measures zero, so the flow passes the scene container's size)
-                  mapScene()                       the prepared map, or else the shown one, as a Scene object (§8)
-                  sceneDraft(sceneId)              the shown map as the focus's new study scene under the given id: the same object
-                  takeOver()                       draw the prepared map at the base frame, twins' other boxes stowed on the box the map's scene keeps, and show the surface
-                  arriveTwins()                    the stowed boxes slide out to their places
-                  convergeTwins()                  the reverse, before leaving, after a glide back to the base frame
+                  mapScene()                       the prepared map, or else the shown one, as the map's scene: the focus and the landmarks (§8)
+                  sceneDraft(sceneId)              the same skeleton under the given id: the study scene a focus without one gets, and what a scene is reset to
+                  takeOver()                       draw the prepared map at the base frame, every marker stowed invisible on its landmark, and show the surface
+                  arriveMarkers()                  the markers grow out of their landmarks to their places, in one tween
+                  convergeMarkers()                the reverse, before leaving, after a glide back to the base frame; the map then shows the map's scene
                   hide()                           as now, also discarding anything prepared
     flow          enter(), leave(), back(): the sequences of §8; the GraphSaver suspension while the map's scene is current; the scene the map was entered from
 
@@ -533,7 +545,7 @@ Adding from the shelf on the map is a later, map-owned operation: add a node con
 Path panel.
 The Path feature is a sequence of scene ids recorded from the scene instance.
 The map's history (`history.ts`) is a sequence of focuses.
-In v1 the panel keeps showing the scene history and greys itself while the map is active; later it renders whichever history is active.
+In v1 the panel greys itself while the map is active (built 2026-10-03): the breadcrumb strip empties and every control but help is disabled, which is also the one sign, with no UI added, that the canvas is showing a map; later it may render whichever history is active.
 Saved paths that include map visits would be an optional field on the Path record beside `scenes`, additive; not opened until the map has earned it.
 
 Chat.
@@ -554,19 +566,20 @@ So the engine does the transition, on its own instance, and the map's part is to
 The handoff has three forms: enter, scene to the map of its central node; leave, map to the focus's study scene; back, map to the scene it was entered from (§2).
 
 The map's scene.
-A Scene object reproducing the shown map: one node per map node, at its box's map position, in the node's default design at the box's rendered scale; the edges the map draws, the lines of the kept boxes, and no other edge between those nodes; the map's base frame as viewport (the focus at the focal point, the base zoom); no fold state.
-A node with twins appears once, at its kept box: its landmark box when it has one, otherwise its first box.
-Edges the map does not draw are left out on purpose (2026-10-02): the engine's arrival faded in every edge among the shown nodes and the swap then dropped them, a seam and a moment of clutter; the engine's picture must be the map's picture.
-Under its own id, `map:<focus>`, which can never be a stored scene's, it is transient and never persisted; under an id the engine assigns it is a stored scene (below).
+A Scene object holding the focus and the landmarks of the shown map, each at its map position in the node's default design at its rendered scale, with the focus-to-landmark lines and no other edge; the map's base frame as viewport (the focus at the focal point, the base zoom); no fold state; id `map:<focus>`, which can never be a stored scene's, transient and never persisted.
+The markers are not in it, by design (2026-10-03): a scene shows a node once, and a twin has two boxes, so the engine could never arrive every marker; the earlier picture with the markers in it had the engine arrive most of them and the map the twins' second boxes afterwards, two visible steps.
+So the division is by level: the engine moves what a scene can show, the focus and the landmarks; the map moves what only a map can show, the markers, all of them in one tween after the swap, the re-focus's arriving move.
+Edges the map does not draw are left out for the same reason (2026-10-02): the engine's picture must be the map's picture at the swap.
 It is a pure function of the map tree and the layout (`map-scene.ts`), built in the map feature and handed to the engine by the flow (§7.6).
+Under an id the engine assigns, the same object is the study scene a focus without one receives, and what a study scene is reset to (below): the focus and the landmarks are what the map and its scenes have in common, the skeleton that carries the visual continuity between them, and markers are the map's alone (decided 2026-10-03).
 
 Entering the map from scene X, the flow in order; the user is watching the scene canvas throughout.
 
     1  the map feature prepares the map of X's central node for the surface's size: walks, seeds, lays out, keeps the result; nothing is drawn and its surface stays hidden
     2  the map feature produces the map's scene from what it prepared
-    3  the engine transitions from X to that object, its ordinary three phases: nodes of X with no box on the map depart; nodes on both morph to their map places and sizes; a node X drew in a design other than its default crossfades through a ghost; nodes the map has and X had not arrive, with the map's lines; X's folded nodes are handled as always; the viewport glides to the map's frame. At the end the scene canvas shows the map's picture
-    4  the map feature takes over: draws its prepared map on its own surface at the base frame, a twin's other boxes stowed on its kept box, invisible, and shows the surface; the two canvases hold the same picture, so nothing visible changes
-    5  the map feature arrives the twins: the stowed boxes slide out to their own places and fade in, with their lines
+    3  the engine transitions from X to that object, its ordinary three phases with the 'grow' arrival (scene-transitions.md §4.2): nodes of X that are not the focus or a landmark depart, X's markers among them; landmarks X held morph to their map places and sizes; a landmark X drew in a design other than its default crossfades through a ghost; landmarks X did not hold grow out of the focus, with their lines; X's folded nodes are handled as always; the viewport glides to the map's frame. At the end the scene canvas shows the focus and the landmarks
+    4  the map feature takes over: draws its prepared map on its own surface at the base frame, every marker stowed on its landmark, invisible, and shows the surface; the two canvases hold the same picture, so nothing visible changes. The flow waits for a painted frame before going on, here and before hiding the map on the way out: Cytoscape paints on its own animation frame, and a canvas shown or revealed the tick it was filled flickers once (seen 2026-10-04)
+    5  the map feature arrives the markers: all of them grow out of their landmarks to their own places in one tween, fading in, with their lines, twins' second boxes among them
     6  the engine is told nothing more; its hidden canvas holds the map's scene as current, and the flow holds a GraphSaver suspension, taken before step 3, until a stored scene is current again, since a save now would insert a scene the store does not have
 
 Input is blocked as for any transition: step 3 raises the engine's own guard, steps 4 and 5 are short.
@@ -574,18 +587,26 @@ If step 1, 2 or 3 fails, the flow releases the suspension and discards the prepa
 
 Leaving the map for scene Y, the focus's study scene, is the mirror.
 
-    1  the map glides back to its base frame, any balloon collapses, and the twins converge: a node's other boxes slide into its kept box and fade
+    1  the map glides back to its base frame, any balloon collapses, and the markers converge: every marker shrinks into its landmark and fades, in one tween; the map now shows the map's scene
     2  the engine opens the map's scene instantly on its hidden canvas; the two pictures are identical in geometry and design
     3  the map's surface hides; the scene canvas shows; nothing visible changes
-    4  the engine transitions from the map's scene to scene Y: boxes Y does not hold depart, shared nodes morph, nodes whose scene design differs from their default crossfade through ghosts, nodes Y holds and the map did not arrive, edges and fold state as in any transition, path history and sceneChanged as in any transition; the flow releases the suspension once a stored scene is current (if step 4 fails with the map's scene still current, on the next sceneChanged instead)
+    4  the engine transitions from the map's scene to scene Y with the 'shrink' departure (scene-transitions.md §4.2): landmarks Y does not hold shrink into the focus, the focus and the landmarks Y holds morph, nodes whose scene design differs from their default crossfade through ghosts, every other node of Y arrives, former markers among them, edges and fold state as in any transition, path history and sceneChanged as in any transition; the flow releases the suspension once a stored scene is current (if step 4 fails with the map's scene still current, on the next sceneChanged instead)
 
 Back to the entered scene is the same with scene X as the target and nothing to create; if X no longer exists, back behaves as leave.
+Leaving to a scene made just now from the map (below) is the ordinary leave: once the markers have gone the two pictures are identical and step 4 moves nothing.
 
 What the engine needs is small: entry points that take a Scene object rather than look a record up, to open the map's scene instantly and to transition to it, with nothing written.
 While the map's scene is the scene instance's current scene, GraphSaver is suspended, or its first viewport event would insert a scene that is not in the store; this is part of the map regime (§7.4), during which scene commands are unavailable anyway.
 
-A Y without a study scene gets one on leaving: the map exactly as shown, markers and rendered scales included, under the id the engine assigns, through the existing edit-mode guard (decided 2026-10-02; the earlier draft, landmarks only at scale 1, was dropped).
-The map is the prototypical shape of a scene, so nothing visible changes except the twins converging, and the author's first study scene of Y is the map of Y; the engine's offsets rule, which builds a new scene from the scene one came from, is not used from the map.
+A Y without a study scene gets one on leaving: the map's skeleton, the focus and the landmarks exactly as shown, rendered scales and default designs included, under the id the engine assigns, through the existing edit-mode guard (decided 2026-10-03, replacing the whole-map draft of 2026-10-02, which in turn had replaced landmarks at scale 1).
+The author adds the second layer in the study scene by the scene's ordinary means; markers are not copied, so a twin never has to be reconciled and a reset (below) and a creation give the same shape.
+It is the engine's own rule for a scene born of a scene, the central and its direct connections, applied with the map's geometry; the offsets rule itself is not used from the map.
+Resetting an existing study scene to the map is the same object under the scene's own id, with the scene's title, description, theme, background and edge-type visibility carried over, written to the store and then transitioned to with the 'shrink' departure, so the reset is animated like any navigation: `ui/scene-reset.ts`, a flow beside the handoff's, under Scene design → Auto-layout as "Reset to map shape", Edit mode, confirmed (2026-10-03).
+After a reset the scene is the map's skeleton exactly, so entering the map from it moves nothing but the markers growing out, and leaving back to it nothing but the markers folding in.
+
+Tried and dropped on 2026-10-03: keeping the markers in the map's scene and telling the engine that only the focus and the landmarks may morph, other nodes present on both sides departing and arriving instead (a `morphOnly` request with a reclassification pass).
+It worked, and left the twins' second boxes arriving on the map after the engine had arrived every other marker: two steps where the eye wants one.
+Taking the markers out of the engine's picture made the option unnecessary, so it was removed rather than kept.
 
 The cost that remains is the one the engine always pays: shared nodes whose scale changes tween their size and re-rasterise each frame, and on a map-to-scene transition that is most of them; to be measured on an equation-heavy map before any shortcut is taken.
 
@@ -650,8 +671,8 @@ A node with forty neighbours has forty landmarks, and the viewport cannot pan (�
 The budget, the floor and the balloon on a shrunk landmark (§5.3) make such a map usable; filtering (§5.4) is the intended answer to making it readable, and whether an unfiltered hub also needs a cap is left until one is seen.
 
 Shortcuts.
-An entry key from the scene waits for the leader-key redesign of the keyboard handler; the map's own keys are in §5.1.
-The F1 shortcut overlay does not list them yet.
+The slash is the entry key for now (§5.1); a proper one waits for the leader-key redesign of the keyboard handler.
+The F1 overlay lists the four keys that are the map's own, slash, L / H, Enter, Escape (2026-10-04); the keys that mean on the map what they mean in a scene are not repeated there.
 
 ## 11. Staging
 

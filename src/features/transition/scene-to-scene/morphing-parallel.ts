@@ -1,13 +1,17 @@
 /**
- * SharedCoreAnimator
- * Phase 2: Handles shared movement animations for scene transitions.
- * All transformations (background, position, design) run in parallel.
+ * MorphingParallel — the 'parallel' morphing animator (animators.ts)
+ *
+ * The shared nodes move, rescale and crossfade design all at once, with the
+ * background crossfading alongside (or before and after, in sequential
+ * background mode) and the viewport gliding to the target's. Nodes whose
+ * design changes crossfade through ghosts (morphing/ghost-operator.ts).
  */
 
 import type { Core } from 'cytoscape';
 import type { NodeId, Scene } from '../../../core/main-types';
 import type { BackgroundRenderer } from '../../../background/background-renderer';
 import type { SharedBackgroundTiming } from '../../../config/transition-settings';
+import type { MorphingAnimator, MorphingContext } from './animators';
 
 import { graphStore } from '../../../storage/graph-store';
 import { getSetting } from '../../../config';
@@ -67,7 +71,8 @@ interface Mover {
   h1?: number;
 }
 
-export class SharedCoreAnimator {
+export class MorphingParallel implements MorphingAnimator {
+  readonly id = 'parallel' as const;
   #cy: Core;
   #backgroundOperator: BackgroundOperator;
   #analyzer: TransitionAnalysisOperator;
@@ -81,17 +86,13 @@ export class SharedCoreAnimator {
   }
 
   // ==========================================================================
-  // SHARED PHASE EXECUTION (New Parallel Logic)
+  // THE PHASE
   // ==========================================================================
 
-  async executeSharedPhase(
-    sharedElements: NodeId[],
-    currentScene: Scene,
-    targetScene: Scene,
-    targetPositions: TargetPositions,
-    targetScales: Record<NodeId, number>,
-    isNewScene: boolean
-  ): Promise<void> {
+  async run({ nodes: sharedElements, currentScene, targetScene, targetPositions, targetScales, isNewScene }: MorphingContext): Promise<void> {
+    if (isDebug('d_transition')) console.log('[Transition.Morphing] Executing the parallel morphing phase');
+    await waitForStep('[2.0] Morphing phase starting');
+
     const { morphDuration, morphDelay, crossfadeTiming } = this.#getMorphTiming();
     const bgTiming = getSetting('transition.sharedBackgroundTiming') as SharedBackgroundTiming;
 
@@ -163,6 +164,7 @@ export class SharedCoreAnimator {
     this.#commitEdgeData(analysis, targetScene);
 
     await this.#delay(morphDelay);
+    await waitForStep('[2.5] Morphing phase complete');
   }
 
   // ==========================================================================
@@ -708,18 +710,6 @@ export class SharedCoreAnimator {
   async #delay(ms: number): Promise<void> {
     if (ms <= 0) return;
     return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  // ==========================================================================
-  // BACKGROUND DELEGATIONS (used by PhaseOrchestrator)
-  // ==========================================================================
-
-  async loadBackground(scene: Scene): Promise<void> {
-    return this.#backgroundOperator.loadBackground(scene);
-  }
-
-  clearBackground(): void {
-    this.#backgroundOperator.clearBackground();
   }
 }
 

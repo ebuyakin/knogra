@@ -6,8 +6,9 @@
  *
  * The map's keyboard is its own: the scene's bindings never run while it is
  * shown, so nothing here competes with them. Keys are chosen to read as their
- * scene counterparts do. Entering the map from a scene still has no key; that
- * one lives in the scene's exhausted namespace and waits for the leader key.
+ * scene counterparts do. Entering the map from a scene is the slash in
+ * view-bindings.ts, a stopgap in the scene's exhausted namespace until the
+ * leader key.
  */
 
 import type { KeyboardContext } from '../keyboard-context';
@@ -16,7 +17,16 @@ import { getSetting } from '../../../config';
 export async function handleMapKeys(context: KeyboardContext, event: KeyboardEvent, key: string, ctrl: boolean): Promise<boolean> {
   const { mapView } = context.features;
   if (!mapView.isActive()) return false;
-  if (ctrl) return true;
+  // Chords: settings, save and the diagnostics snapshot are the app's, not the
+  // scene's, and pass on to the workspace keys. The rest are swallowed: opening
+  // or replacing the workspace under a shown map has no map answer yet, and a
+  // chord claimed without preventDefault would reach the browser.
+  if (ctrl) {
+    const passesThrough = key === ',' || key === 's' || (key === 'd' && event.shiftKey);
+    if (passesThrough) return false;
+    event.preventDefault();
+    return true;
+  }
 
   const step = getSetting('node.scaleStep');
 
@@ -39,6 +49,14 @@ export async function handleMapKeys(context: KeyboardContext, event: KeyboardEve
   if (key === 'w' || key === 'm') {
     event.preventDefault();
     await mapView.scaleGroup(key === 'w' ? 'landmarks' : 'markers', event.shiftKey ? 1 / step : step);
+    return true;
+  }
+
+  // Arrows and h / l: the selection moves around the ring, as the scene's arrows and h j k l move it between nodes;
+  // on a ring the two directions that exist are clockwise and anticlockwise. Up, down, j, k are kept for the fan.
+  if (key === 'arrowright' || key === 'l' || key === 'arrowleft' || key === 'h') {
+    event.preventDefault();
+    mapView.selectLandmark(key === 'arrowright' || key === 'l' ? 1 : -1);
     return true;
   }
 

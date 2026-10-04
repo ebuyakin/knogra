@@ -50,6 +50,9 @@ export const MAP_DEFAULTS = {
   /** How far the two ends of an edge may diverge from exact opposition, in degrees; 0 makes them rigid (docs/map-view.md I2). */
   twinAllowance: 30,
 
+  /** A reset of directions keeps the boxes' angular order at each parent, re-spacing them evenly; off seeds afresh with no regard to order (docs/map-view.md §5.3). */
+  resetKeepsOrder: true,
+
   /** Rendered scale of a ballooned box; any box drawn below it balloons on click. Transient; the stored scale is untouched. */
   previewScale: 1,
 

@@ -1,51 +1,111 @@
 /**
- * DepartureAnimator
- * Phase 1: Handles departure animations for scene transitions
- * - Edge fade out
- * - Node fly out
- * - Central node zoom out
+ * DepartureFlyOut — the 'fly-out' departure animator (animators.ts)
+ *
+ * Departing nodes fly out past the viewport edge, away from the old central,
+ * in cascade layers by graph distance, farthest first; their edges fade with
+ * their layer or all before (`transition.departureEdgeTiming`); a departing
+ * old central shrinks in place after the others have gone.
  */
 
 import type { Core } from 'cytoscape';
 import type { NodeId, EdgeId, Scene } from '../../../core/main-types';
 import type { DepartureTimings } from '../../../config/transition-settings';
+import type { DepartureAnimator, DepartureContext, Position } from './animators';
 
 import { getSetting } from '../../../config';
 import { isDebug } from '../../../config/debug-flags';
+import { waitForStep } from '../step-debug';
+import { bucketEdges, delay, directionBetween, graphReach, instanceEndpoints, layersByDistance, viewportEdgePoint, type Extent } from './cascade';
+import { removeDeparted, zoomOutCentral } from './departure-elements';
 
 type TimingKey = keyof DepartureTimings;
 
-interface Position {
-  x: number;
-  y: number;
-}
+/** How far past the viewport edge a departing node flies, in graph units. */
+const OFFSCREEN_MARGIN = 50;
 
-export class DepartureAnimator {
+export class DepartureFlyOut implements DepartureAnimator {
+  readonly id = 'fly-out' as const;
   #cy: Core;
 
   constructor(cy: Core) {
     this.#cy = cy;
   }
 
+  async run({ nodes, edges, currentScene, targetScene, viewportCenter }: DepartureContext): Promise<void> {
+    const oldCentralDeparting = !targetScene.nodes[currentScene.centralNodeId];
+    const edgeTiming = getSetting('transition.departureEdgeTiming');
+
+    // The old central's position gives every departing node its direction.
+    const oldCentralNode = this.#cy.getElementById(currentScene.centralNodeId);
+    const oldCentralPosition: Position = oldCentralNode.length > 0 ? oldCentralNode.position() : viewportCenter;
+
+    if (isDebug('d_transition')) console.log(`[Transition.Departure] oldCentralDeparting: ${oldCentralDeparting}, edgeTiming: ${edgeTiming}`);
+    await waitForStep('[1.0] Departure phase starting');
+
+    if (edgeTiming === 'before') {
+      // ── Mode A: Edges fade out first, then nodes cascade ──
+      await this.#fadeOutEdges(edges);
+      await waitForStep('[1.1] fadeOutEdges complete');
+
+      if (oldCentralDeparting) {
+        // Branch B: the old central departs after the others, shrinking in place
+        const nonCentralDeparting = nodes.filter(id => id !== currentScene.centralNodeId);
+        await this.#flyOutNodes(nonCentralDeparting, [], currentScene.centralNodeId, oldCentralPosition, currentScene);
+        await waitForStep('[1.2.B.1] flyOutNodes cascade (non-central) complete');
+        await zoomOutCentral(this.#cy, currentScene.centralNodeId);
+        await waitForStep('[1.2.B.2] zoomOutCentralNode complete');
+      } else {
+        // Branch A: the old central stays (is shared)
+        await this.#flyOutNodes(nodes, [], currentScene.centralNodeId, oldCentralPosition, currentScene);
+        await waitForStep('[1.2.A] flyOutNodes cascade complete');
+      }
+      return;
+    }
+
+    // ── Mode B: Edges fade in parallel with nodes (cascaded per layer) ──
+    if (oldCentralDeparting) {
+      // Branch B: the old central departs after the others; its edges fade with it
+      const centralId = currentScene.centralNodeId;
+      const nonCentralDeparting = nodes.filter(id => id !== centralId);
+      const centralEdges: EdgeId[] = [];
+      const nonCentralEdges: EdgeId[] = [];
+      for (const edgeId of edges) {
+        const edge = this.#cy.getElementById(edgeId);
+        if (edge.length === 0) continue;
+        if (edge.source().id() === centralId || edge.target().id() === centralId) centralEdges.push(edgeId);
+        else nonCentralEdges.push(edgeId);
+      }
+
+      await this.#flyOutNodes(nonCentralDeparting, nonCentralEdges, centralId, oldCentralPosition, currentScene);
+      await waitForStep('[1.2.B.1] flyOutNodes cascade + edges (non-central) complete');
+      await Promise.all([zoomOutCentral(this.#cy, centralId), this.#fadeOutEdges(centralEdges)]);
+      await waitForStep('[1.2.B.2] zoomOutCentralNode + fadeOutEdges (central) complete');
+      return;
+    }
+
+    // Branch A: the old central stays (is shared)
+    await this.#flyOutNodes(nodes, edges, currentScene.centralNodeId, oldCentralPosition, currentScene);
+    await waitForStep('[1.2.A] flyOutNodes cascade + edges complete');
+  }
+
   /**
    * Stage 1.1: Fade out edges connected to departing nodes
    */
-  async fadeOutEdges(edgeIds: EdgeId[]): Promise<void> {
+  async #fadeOutEdges(edgeIds: EdgeId[]): Promise<void> {
     if (edgeIds.length === 0) {
       if (isDebug('d_departure')) console.log('[1.1] fadeOutEdges: no edges to fade');
       return;
     }
-    
-    const { duration, delay } = this.#getTiming('departureEdgesFadeOut');
-    if (isDebug('d_departure')) console.log(`[1.1] fadeOutEdges: ${edgeIds.length} edges, duration=${duration}ms, delay=${delay}ms`);
-    
+
+    const { duration, delay: delayAfter } = this.#getTiming('departureEdgesFadeOut');
+    if (isDebug('d_departure')) console.log(`[1.1] fadeOutEdges: ${edgeIds.length} edges, duration=${duration}ms, delay=${delayAfter}ms`);
+
     const edges = this.#cy.collection();
     edgeIds.forEach(id => edges.merge(this.#cy.getElementById(id)));
-    
+
     edges.animate({ style: { opacity: 0 }, duration, easing: 'ease-in' });
-    await this.#delay(duration + delay);
-    
-    // Remove edges after animation
+    await delay(duration + delayAfter);
+
     this.#cy.remove(edges);
     if (isDebug('d_departure')) console.log('[1.1] fadeOutEdges: complete, edges removed');
   }
@@ -53,9 +113,10 @@ export class DepartureAnimator {
   /**
    * Stage 1.2.A/B.1: Fly departing nodes out in cascade layers.
    * Nodes at greater graph distance from central depart first.
-   * Edges fade with their outermost endpoint's layer.
+   * Edges fade with their outermost endpoint's layer; edges between two
+   * staying nodes have no layer and fade with the first.
    */
-  async flyOutNodes(
+  async #flyOutNodes(
     nodeIds: NodeId[],
     edgeIds: EdgeId[],
     centralNodeId: NodeId,
@@ -67,290 +128,63 @@ export class DepartureAnimator {
       return;
     }
 
-    const [layerDuration] = getSetting('transition.departureLayerDuration') as [number, number];
-    const [layerStagger] = getSetting('transition.departureLayerStagger') as [number, number];
+    const [layerDuration] = getSetting('transition.departureLayerDuration');
+    const [layerStagger] = getSetting('transition.departureLayerStagger');
 
-    // BFS from central node to compute graph distances (within current scene)
-    const distances = this.#computeGraphDistances(centralNodeId, currentScene);
-    const departingSet = new Set(nodeIds);
-
-    // Group departing nodes by distance layer
-    const layers = new Map<number, NodeId[]>();
-    for (const id of nodeIds) {
-      const dist = distances.get(id) ?? 999;
-      if (!layers.has(dist)) layers.set(dist, []);
-      layers.get(dist)!.push(id);
-    }
-
-    // Sort layers: farthest first (descending distance)
-    const sortedDistances = [...layers.keys()].sort((a, b) => b - a);
-
-    // Assign each edge to a layer.
-    //   - Anchored edges (≥1 endpoint departing): layer = outermost endpoint's distance.
-    //   - Shared-to-shared edges (both endpoints stay in cy): fade immediately
-    //     in parallel with the first cascade layer; otherwise they'd pop out
-    //     abruptly at the end (or, with zero departing nodes, never fade at all).
-    const sharedToSharedEdges: EdgeId[] = [];
-    const edgeLayerMap = new Map<number, EdgeId[]>();
-    for (const edgeId of edgeIds) {
-      const edge = this.#cy.getElementById(edgeId);
-      if (edge.length === 0) continue;
-      const srcId = edge.source().id() as NodeId;
-      const tgtId = edge.target().id() as NodeId;
-      const srcDist = departingSet.has(srcId) ? (distances.get(srcId) ?? 999) : -1;
-      const tgtDist = departingSet.has(tgtId) ? (distances.get(tgtId) ?? 999) : -1;
-      const maxDist = Math.max(srcDist, tgtDist);
-      if (maxDist < 0) {
-        sharedToSharedEdges.push(edgeId);
-      } else {
-        if (!edgeLayerMap.has(maxDist)) edgeLayerMap.set(maxDist, []);
-        edgeLayerMap.get(maxDist)!.push(edgeId);
-      }
-    }
+    const endpointsOf = instanceEndpoints(this.#cy);
+    const reach = graphReach(currentScene, centralNodeId, endpointsOf);
+    const layers = layersByDistance(nodeIds, reach, 'farthest-first');
+    const buckets = bucketEdges(edgeIds, new Set(nodeIds), reach, endpointsOf);
 
     if (isDebug('d_departure')) {
-      const layerSummary = sortedDistances.map(d => `d${d}:[${layers.get(d)!.join(',')}]`).join(' ');
-      console.log(`[1.2] flyOutNodes: ${nodeIds.length} nodes, ${sortedDistances.length} layers, ${sharedToSharedEdges.length} shared-shared edges, stagger=${layerStagger}ms, duration=${layerDuration}ms | ${layerSummary}`);
+      const layerSummary = layers.map(layer => `d${layer.distance}:[${layer.nodes.join(',')}]`).join(' ');
+      console.log(`[1.2] flyOutNodes: ${nodeIds.length} nodes, ${layers.length} layers, ${buckets.sharedToShared.length} shared-shared edges, stagger=${layerStagger}ms, duration=${layerDuration}ms | ${layerSummary}`);
     }
 
-    // Get viewport bounds for fly-out target calculation
     const extent = this.#cy.extent();
-    const margin = 50;
-
-    // Launch layers with stagger — each layer is a Promise
     const layerPromises: Promise<void>[] = [];
-
-    // Layer for shared→shared edges (no node anchor): fade immediately, in
-    // parallel with the first cascade layer. Mirrors arrival-fly-in's handling.
-    if (sharedToSharedEdges.length > 0) {
-      layerPromises.push(
-        this.#animateLayer(
-          [], sharedToSharedEdges, centralPosition, extent, margin,
-          layerDuration, 0
-        )
-      );
+    if (buckets.sharedToShared.length > 0) {
+      layerPromises.push(this.#animateLayer([], buckets.sharedToShared, centralPosition, extent, layerDuration, 0));
     }
-
-    for (let i = 0; i < sortedDistances.length; i++) {
-      const dist = sortedDistances[i];
-      const layerNodeIds = layers.get(dist)!;
-      const layerEdgeIds = edgeLayerMap.get(dist) ?? [];
-      const staggerDelay = i * layerStagger;
-
-      const layerPromise = this.#animateLayer(
-        layerNodeIds, layerEdgeIds, centralPosition, extent, margin,
-        layerDuration, staggerDelay
-      );
-      layerPromises.push(layerPromise);
-    }
-
-    // Wait for all layers to finish
+    layers.forEach((layer, index) => {
+      layerPromises.push(this.#animateLayer(layer.nodes, buckets.byDistance.get(layer.distance) ?? [], centralPosition, extent, layerDuration, index * layerStagger));
+    });
     await Promise.all(layerPromises);
 
-    // Remove all departed nodes and edges
-    const toRemove = this.#cy.collection();
-    nodeIds.forEach(id => toRemove.merge(this.#cy.getElementById(id)));
-    edgeIds.forEach(id => toRemove.merge(this.#cy.getElementById(id)));
-    this.#cy.remove(toRemove);
-
+    removeDeparted(this.#cy, nodeIds, edgeIds);
     if (isDebug('d_departure')) console.log('[1.2] flyOutNodes: complete, nodes+edges removed');
   }
-
-  /**
-   * Stage 1.2.B.2: Zoom out central node (shrink at position)
-   * Used when old central is departing
-   */
-  async zoomOutCentralNode(nodeId: NodeId): Promise<void> {
-    const node = this.#cy.getElementById(nodeId);
-    if (node.length === 0) {
-      if (isDebug('d_departure')) console.log(`[1.2.B.2] zoomOutCentralNode: node ${nodeId} not found`);
-      return;
-    }
-    
-    const { duration, delay } = this.#getTiming('departureCentralZoomOut');
-    if (isDebug('d_departure')) console.log(`[1.2.B.2] zoomOutCentralNode: ${nodeId}, duration=${duration}ms`);
-    
-    // Get current dimensions
-    const currentWidth = node.width();
-    const currentHeight = node.height();
-    
-    // Shrink to 20% of current size while fading out
-    const targetWidth = currentWidth * 0.2;
-    const targetHeight = currentHeight * 0.2;
-    
-    node.animate({
-      style: {
-        opacity: 0,
-        width: targetWidth,
-        height: targetHeight
-      }
-    }, {
-      duration,
-      easing: 'ease-in'
-    });
-    
-    await this.#delay(duration + delay);
-    
-    // Remove the node after animation
-    this.#cy.remove(node);
-    if (isDebug('d_departure')) console.log('[1.2.B.2] zoomOutCentralNode: complete, node removed');
-  }
-
-  // ==========================================================================
-  // PRIVATE: CASCADE HELPERS
-  // ==========================================================================
 
   /** Animate one layer of nodes + edges after a stagger delay. */
   async #animateLayer(
     nodeIds: NodeId[],
     edgeIds: EdgeId[],
     centralPosition: Position,
-    extent: { x1: number; y1: number; x2: number; y2: number },
-    margin: number,
+    extent: Extent,
     duration: number,
     staggerDelay: number
   ): Promise<void> {
-    if (staggerDelay > 0) {
-      await this.#delay(staggerDelay);
-    }
+    await delay(staggerDelay);
 
-    // Animate nodes flying out
     for (const id of nodeIds) {
       const node = this.#cy.getElementById(id);
       if (node.length === 0) continue;
-
-      const pos = node.position();
-      let dx = pos.x - centralPosition.x;
-      let dy = pos.y - centralPosition.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < 1) { dx = 0; dy = -1; }
-      else { dx /= dist; dy /= dist; }
-
-      const targetPos = this.#findViewportEdgePoint(pos, { x: dx, y: dy }, extent, margin);
-      node.animate({ position: targetPos, style: { opacity: 0 }, duration, easing: 'ease-in' });
+      const position = node.position();
+      const targetPosition = viewportEdgePoint(position, directionBetween(centralPosition, position), extent, OFFSCREEN_MARGIN);
+      node.animate({ position: targetPosition, style: { opacity: 0 }, duration, easing: 'ease-in' });
     }
 
-    // Animate edges fading out (in parallel with their layer's nodes)
     for (const edgeId of edgeIds) {
       const edge = this.#cy.getElementById(edgeId);
       if (edge.length === 0) continue;
       edge.animate({ style: { opacity: 0 }, duration, easing: 'ease-in' });
     }
 
-    await this.#delay(duration);
+    await delay(duration);
   }
-
-  /**
-   * BFS from central node to compute graph distances within the scene.
-   * Only traverses edges present in the scene.
-   */
-  #computeGraphDistances(centralNodeId: NodeId, scene: Scene): Map<NodeId, number> {
-    const distances = new Map<NodeId, number>();
-    distances.set(centralNodeId, 0);
-
-    // Build adjacency from scene edges
-    const adjacency = new Map<NodeId, NodeId[]>();
-    const sceneEdgeIds = Object.keys(scene.edges);
-    for (const edgeId of sceneEdgeIds) {
-      const edgeData = scene.edges[edgeId];
-      if (!edgeData) continue;
-      // Scene edges store sourceId/targetId — look them up from graphStore
-      const edge = this.#cy.getElementById(edgeId);
-      if (edge.length === 0) continue;
-      const src = edge.source().id() as NodeId;
-      const tgt = edge.target().id() as NodeId;
-      if (!adjacency.has(src)) adjacency.set(src, []);
-      if (!adjacency.has(tgt)) adjacency.set(tgt, []);
-      adjacency.get(src)!.push(tgt);
-      adjacency.get(tgt)!.push(src);
-    }
-
-    // BFS
-    const queue: NodeId[] = [centralNodeId];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      const currentDist = distances.get(current)!;
-      const neighbors = adjacency.get(current) ?? [];
-      for (const neighbor of neighbors) {
-        if (!distances.has(neighbor)) {
-          distances.set(neighbor, currentDist + 1);
-          queue.push(neighbor);
-        }
-      }
-    }
-
-    return distances;
-  }
-
-  // ==========================================================================
-  // PRIVATE UTILITIES
-  // ==========================================================================
 
   #getTiming(key: TimingKey): { duration: number; delay: number } {
-    const [duration, delay] = getSetting(`transition.${key}`);
-    return { duration, delay };
-  }
-
-  #delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Find where a ray from a point in a given direction exits the viewport
-   * Returns a point just outside the viewport edge
-   */
-  #findViewportEdgePoint(
-    origin: Position,
-    direction: { x: number; y: number },
-    extent: { x1: number; y1: number; x2: number; y2: number },
-    margin: number
-  ): Position {
-    // Extend viewport bounds by margin
-    const left = extent.x1 - margin;
-    const right = extent.x2 + margin;
-    const top = extent.y1 - margin;
-    const bottom = extent.y2 + margin;
-    
-    // Find intersection with each edge and take the closest positive t
-    let minT = Infinity;
-    
-    // Left edge (x = left): t = (left - origin.x) / direction.x
-    if (direction.x !== 0) {
-      const t = (left - origin.x) / direction.x;
-      if (t > 0) minT = Math.min(minT, t);
-    }
-    
-    // Right edge (x = right)
-    if (direction.x !== 0) {
-      const t = (right - origin.x) / direction.x;
-      if (t > 0) minT = Math.min(minT, t);
-    }
-    
-    // Top edge (y = top)
-    if (direction.y !== 0) {
-      const t = (top - origin.y) / direction.y;
-      if (t > 0) minT = Math.min(minT, t);
-    }
-    
-    // Bottom edge (y = bottom)
-    if (direction.y !== 0) {
-      const t = (bottom - origin.y) / direction.y;
-      if (t > 0) minT = Math.min(minT, t);
-    }
-    
-    // If no intersection found (shouldn't happen), fallback to origin offset
-    if (minT === Infinity) {
-      return {
-        x: origin.x + direction.x * 500,
-        y: origin.y + direction.y * 500
-      };
-    }
-    
-    // Return point at intersection
-    return {
-      x: origin.x + direction.x * minT,
-      y: origin.y + direction.y * minT
-    };
+    const [duration, delayAfter] = getSetting(`transition.${key}`);
+    return { duration, delay: delayAfter };
   }
 }

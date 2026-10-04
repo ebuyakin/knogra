@@ -1,27 +1,23 @@
 /**
  * Map scene
  *
- * The map as a Scene object: the picture the scene engine can draw and
- * transition to, which is how the map is entered and left (docs/map-view.md
- * §8). One node
- * per map node at its kept box's position, in the node's default design at
- * the box's rendered scale; the edges the map draws, the lines of the kept
- * boxes, and no other edge between those nodes, since the map does not show
- * them and the engine's picture must match the map's at the swap; the map's
- * base frame as the viewport; no fold state. The focus is at the map's
- * origin, so the focal point is the origin and the engine centres it as the
- * map does.
+ * The map as a Scene object: the focus and the landmarks with their lines,
+ * every node in its default design at its box's rendered scale, the map's
+ * base frame as viewport with the focus at the focal point, no fold state
+ * (docs/map-view.md §8). This skeleton is what the map and a study scene have
+ * in common and what carries the visual continuity between them; markers
+ * exist only on the map and are the map's to add and remove around it.
  *
- * Under its own id the object is transient, never persisted. Under an id the
+ * Under its own id, `map:<focus>`, it is the map's scene, the transient
+ * picture the engine transitions to and from in a handoff. Under an id the
  * engine assigns it is the study scene a focus without one gets when the map
- * is left for it: the map is the prototypical shape of a scene, so the new
- * scene is the map exactly as shown and nothing visible changes (§8). Pure:
- * plain data in, a plain object out.
+ * is left for it, and what a study scene is reset to. Pure: plain data in, a
+ * plain object out.
  */
 
 import type { Edge, EdgeId, Node, NodeId, Scene, SceneId, ThemeId } from '../../core/main-types';
 import type { MapLayout } from './geometry';
-import type { Address, MapBox, MapTree } from './map-tree';
+import type { MapBox, MapTree } from './map-tree';
 import { resolveDefaultDesign } from './default-design';
 
 /** What the shown or the prepared map has that a scene is made from. */
@@ -38,21 +34,15 @@ export function mapSceneId(focusNodeId: NodeId): SceneId {
   return `map:${focusNodeId}`;
 }
 
-/**
- * The one box of a node the map's scene keeps: its landmark box when it has
- * one, otherwise its first box. A twin's other boxes converge on it before
- * leaving and arrive from it after entering.
- */
-export function keptAddress(tree: MapTree, nodeId: NodeId): Address | undefined {
-  const boxes = tree.boxes.filter(box => box.nodeId === nodeId);
-  return (boxes.find(box => box.depth === 1) ?? boxes[0])?.address;
+/** The focus and the landmarks as a scene: the map's scene under its own id, a study scene under the engine's. */
+export function mapSceneOf(picture: MapPicture, zoom: number, id: SceneId = mapSceneId(picture.tree.focusNodeId)): Scene {
+  const boxes = picture.tree.boxes.filter(box => box.depth <= 1);
+  return buildScene(picture, boxes, id, zoom);
 }
 
-/** The map as a scene: transient under its own id, a study scene under one the engine assigns. */
-export function mapSceneOf({ tree, layout, nodeById, edgeById, themeId }: MapPicture, zoom: number, id: SceneId = mapSceneId(tree.focusNodeId)): Scene {
-  const kept = keptBoxes(tree);
+function buildScene({ tree, layout, nodeById, edgeById, themeId }: MapPicture, boxes: MapBox[], id: SceneId, zoom: number): Scene {
   const nodes: Scene['nodes'] = {};
-  for (const box of kept) {
+  for (const box of boxes) {
     const node = nodeById.get(box.nodeId);
     const position = layout.positions.get(box.address);
     if (!node || !position) continue;
@@ -63,10 +53,11 @@ export function mapSceneOf({ tree, layout, nodeById, edgeById, themeId }: MapPic
     };
   }
 
-  const keptAddresses = new Set(kept.map(box => box.address));
+  // The lines of the chosen boxes and no other edge: the engine's picture must be the map's at the swap.
+  const addresses = new Set(boxes.map(box => box.address));
   const edges: Scene['edges'] = {};
   for (const line of tree.lines) {
-    if (!keptAddresses.has(line.address) || !edgeById.has(line.edgeId)) continue;
+    if (!addresses.has(line.address) || !edgeById.has(line.edgeId)) continue;
     edges[line.edgeId] = { design: { id: 'default', params: {} } };
   }
 
@@ -82,18 +73,4 @@ export function mapSceneOf({ tree, layout, nodeById, edgeById, themeId }: MapPic
     createdAt: now,
     updatedAt: now,
   };
-}
-
-/** One box per node, the kept one, in tree order. */
-function keptBoxes(tree: MapTree): MapBox[] {
-  const kept: MapBox[] = [];
-  const seen = new Set<NodeId>();
-  for (const box of tree.boxes) {
-    if (seen.has(box.nodeId)) continue;
-    seen.add(box.nodeId);
-    const address = keptAddress(tree, box.nodeId);
-    const keptBox = tree.boxes.find(candidate => candidate.address === address);
-    if (keptBox) kept.push(keptBox);
-  }
-  return kept;
 }

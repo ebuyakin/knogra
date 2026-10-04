@@ -8,11 +8,15 @@
  * Listens to: cy.on('path:updated') — emitted for movement *and* for mode
  * changes, so one subscription covers both; there is no need to also listen to
  * `pathModeChanged`, which exists for modules that are not re-rendered anyway.
+ * And to `mapViewChanged`: while the map is shown the panel greys itself, every
+ * control but help disabled and the breadcrumbs empty, which is also how the
+ * user knows the canvas is a map (map-view.md §7.5).
  */
 
 import type { Core } from 'cytoscape';
 import type { SceneId } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
+import { eventBus } from '../../events/event-bus';
 import { graphStore } from '../../storage/graph-store';
 import { PathManager } from '../components/path-manager';
 import { PathJumpList } from '../components/path-manager/path-jump-list';
@@ -25,6 +29,8 @@ export class PathPanel {
   #features: FeatureAPI;
   #container: HTMLElement;
   #visible: boolean = true;
+  /** The map view is shown: scene navigation has no subject, so the panel greys itself. */
+  #mapActive: boolean = false;
   #window = new BreadcrumbWindow();
   #manager: PathManager;
   #jumpList = new PathJumpList();
@@ -42,6 +48,10 @@ export class PathPanel {
 
     // Listen for path updates
     this.#cy.on('path:updated', () => {
+      this.#render();
+    });
+    eventBus.on('mapViewChanged', ({ active }) => {
+      this.#mapActive = active;
       this.#render();
     });
   }
@@ -121,11 +131,13 @@ export class PathPanel {
       `;
     }).join('<span class="path-chevron">›</span>');
 
-    const content = breadcrumbs;
+    // On the map there is no scene history to show and no scene to navigate: the strip empties and the controls grey out.
+    const onMap = this.#mapActive;
+    const content = onMap ? '' : breadcrumbs;
 
     // Check for anchor scene
     const anchorSceneId = this.#getAnchorSceneId();
-    const hasAnchor = anchorSceneId !== null;
+    const hasAnchor = anchorSceneId !== null && !onMap;
 
     // Build icons (all 16x16 with consistent sizing)
     const homeIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 7.5l6-5.5 6 5.5M4 6.5v7h3v-4h2v4h3v-7"/></svg>`;
@@ -150,13 +162,13 @@ export class PathPanel {
     const leftControls = `
       <div class="path-controls path-controls-left">
         <button class="path-btn" data-action="home" title="Go to anchor node" ${!hasAnchor ? 'disabled' : ''}>${homeIcon}</button>
-        <button class="path-btn ${pathMode ? 'active' : ''}" data-action="paths" title="${pathTitle}">${pathIcon}</button>
+        <button class="path-btn ${pathMode ? 'active' : ''}" data-action="paths" title="${pathTitle}" ${onMap ? 'disabled' : ''}>${pathIcon}</button>
       </div>
     `;
 
     // Right controls (first, back, forward, last)
-    const canGoBack = this.#features.path.canGoBack();
-    const canGoForward = this.#features.path.canGoForward();
+    const canGoBack = this.#features.path.canGoBack() && !onMap;
+    const canGoForward = this.#features.path.canGoForward() && !onMap;
     const rightControls = `
       <div class="path-controls path-controls-right">
         <button class="path-btn" data-action="first" title="Go to first" ${!canGoBack ? 'disabled' : ''}>«</button>

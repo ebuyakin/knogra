@@ -18,6 +18,12 @@
  * the third edge of a triangle being planted into a direction its far end
  * already uses, which one-ended seeding did on every triangle.
  *
+ * A reset that keeps the angular order (docs/map-view.md §5.3) hands in the
+ * ends as they were before it cleared them: the free ends of a box then take
+ * the even slots in that order, rotated to move least, instead of the
+ * assignment the far ends would prefer, so the author's sequence around the
+ * ring survives the tidying.
+ *
  * The map depends on the graph alone, never on a scene's composition: the
  * map is the basis a scene is made from, not the reverse. A normal edit that
  * saves normally, never a whole-graph migration.
@@ -25,7 +31,7 @@
 
 import type { Edge, EdgeId, NodeId } from '../../core/main-types';
 import { graphStore } from '../../storage/graph-store';
-import { angleAtEnd, distributeBearings, normalizeBearing, pairKeyOf, resolveEnds, reverseBearing, siblingEnds, signedAngleBetween, type EdgeEnds } from './geometry';
+import { angleAtEnd, distributeBearings, lineAngle, normalizeBearing, pairKeyOf, resolveEnds, reverseBearing, siblingEnds, signedAngleBetween, type EdgeEnds } from './geometry';
 import { firstLineByAddress, type Address, type MapBox, type MapLine, type MapTree } from './map-tree';
 
 /** An edge's ends as stored: each may be missing. */
@@ -50,10 +56,17 @@ const EXHAUSTIVE_LIMIT = 6;
 /**
  * Read every line's edge ends, assigning and persisting the missing ones.
  * Parents are visited in tree order; `allEdges` supplies the far ends' other
- * spokes, which may lie off this map. Returns resolved ends for every edge
- * on the map.
+ * spokes, which may lie off this map. With `previous`, the ends as they were
+ * before a reset cleared them, free ends keep their angular order at each box.
+ * Returns resolved ends for every edge on the map.
  */
-export async function ensureBearings(tree: MapTree, edgeById: Map<EdgeId, Edge>, allEdges: Edge[], allowance: number): Promise<Map<EdgeId, EdgeEnds>> {
+export async function ensureBearings(
+  tree: MapTree,
+  edgeById: Map<EdgeId, Edge>,
+  allEdges: Edge[],
+  allowance: number,
+  previous?: Map<EdgeId, EdgeEnds>
+): Promise<Map<EdgeId, EdgeEnds>> {
   const stored = new Map<EdgeId, StoredEnds>();
   for (const edge of allEdges) stored.set(edge.id, { source: edge.bearing, target: edge.bearingBack });
   const edgesByNode = incidence(allEdges);
@@ -79,8 +92,10 @@ export async function ensureBearings(tree: MapTree, edgeById: Map<EdgeId, Edge>,
 
     const free = unseeded.filter(item => partnerEnd(item.line, stored) === undefined);
     if (free.length > 0) {
-      const farSpokes = free.map(item => spokesOfNode(item.far, item.line.edgeId, edgesByNode, stored));
-      const angles = placeFreeEnds(spokes, free.length, farSpokes);
+      const before = previous ? free.map(item => previous.get(item.line.edgeId)) : [];
+      const angles = before.length > 0 && before.every(ends => ends !== undefined)
+        ? placeFreeEndsInOrder(spokes, free.map((item, index) => lineAngle(before[index]!, item.line.reversed)))
+        : placeFreeEnds(spokes, free.length, free.map(item => spokesOfNode(item.far, item.line.edgeId, edgesByNode, stored)));
       free.forEach((item, index) => {
         setNearEnd(item.line, angles[index], stored);
         setFarEnd(item.line, reverseBearing(angles[index]), stored);
@@ -329,6 +344,36 @@ function placeFreeEnds(spokes: number[], count: number, farSpokes: number[][]): 
       bestScore = score;
       bestAngles = angles;
     }
+  }
+  return bestAngles;
+}
+
+/**
+ * Angles for free ends that keep the angular order they had: the even slots
+ * (`distributeBearings`) are handed out in the order of the previous angles,
+ * the cyclic start chosen, and with no spokes the whole set turned within its
+ * range, so that the ends move least in total. The far ends get no say; the
+ * order is the author's and outranks their clearance.
+ */
+function placeFreeEndsInOrder(spokes: number[], previousAngles: number[]): number[] {
+  const count = previousAngles.length;
+  const slots = distributeBearings(spokes, count).sort((left, right) => left - right);
+  const byAngle = [...Array(count).keys()].sort((left, right) => previousAngles[left] - previousAngles[right]);
+  const range = spokes.length === 0 ? 180 / count : 0;
+
+  let bestAngles: number[] = new Array<number>(count);
+  let bestCost = Infinity;
+  for (let start = 0; start < count; start++) {
+    const differences = byAngle.map((end, rank) => signedAngleBetween(slots[(rank + start) % count], previousAngles[end]));
+    const mean = differences.reduce((sum, value) => sum + value, 0) / count;
+    const phase = Math.max(-range, Math.min(range, mean));
+    const cost = differences.reduce((sum, value) => sum + Math.abs(value - phase), 0);
+    if (cost >= bestCost) continue;
+    bestCost = cost;
+    bestAngles = new Array<number>(count);
+    byAngle.forEach((end, rank) => {
+      bestAngles[end] = normalizeBearing(slots[(rank + start) % count] + phase);
+    });
   }
   return bestAngles;
 }

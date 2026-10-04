@@ -3,20 +3,24 @@
  *
  * Layer 1 orchestrator of the three-phase transition from one scene to
  * another on the instance (scene-transitions.md §4.2): classification, then
- * departure, morphing, arrival, with the central flag swapped and the canvas
- * theme crossfaded between them, then fold state, the invariant and the
- * stylesheet reconciliation. `transition` takes both scenes as objects and
- * leaves the instance showing the second; it never decides which scene is
- * current, never saves and never announces, which is Transition's.
+ * departure, morphing, arrival, each run by the animator the recipe names
+ * (recipe.ts, animators.ts), with the glue between them that belongs to no
+ * phase: the central flag swapped and the canvas theme crossfaded before
+ * morphing, fold state, the invariant and the stylesheet reconciliation after
+ * arrival. `transition` takes both scenes as objects and leaves the instance
+ * showing the second; it never decides which scene is current, never saves
+ * and never announces, which is Transition's.
  *
- * Owns DepartureAnimator, SharedCoreAnimator, ArrivalAnimator (Layer 2) and
- * its own FoldStateHandler.
+ * Creates its Layer 2 animators through the registry, one per id, kept for
+ * reuse, and knows no implementation; owns its FoldStateHandler.
  */
 
 import type { Core } from 'cytoscape';
 import type { NodeId, EdgeId, Scene } from '../../../core/main-types';
-import type { TransitionElements, TargetPositions, InstanceView } from '../element-classification-utils';
+import type { TransitionElements, InstanceView } from '../element-classification-utils';
 import type { BackgroundRenderer } from '../../../background/background-renderer';
+import type { ArrivalAnimator, DepartureAnimator, MorphingAnimator, Position } from './animators';
+import type { TransitionRecipe } from './recipe';
 
 import { graphStore } from '../../../storage/graph-store';
 import { getSetting } from '../../../config';
@@ -24,23 +28,16 @@ import { isDebug } from '../../../config/debug-flags';
 import { getTheme } from '../../../styles/themes';
 import { StyleGenerator } from '../../../styles/style-generator';
 
-import { DepartureAnimator } from './departure-fly-out';
-import { SharedCoreAnimator } from './morphing-parallel';
-import { ArrivalAnimator } from './arrival-fly-in';
+import { resolveRecipe } from './recipe';
+import { createArrivalAnimator, createDepartureAnimator, createMorphingAnimator } from './animator-registry';
 import { FoldStateHandler } from '../fold-state-handler';
 import { checkSceneInvariant } from '../transition-invariants';
-import { applyCanvasTheme } from '../canvas-theme-operator';
+import { applyCanvasTheme } from '../../../styles/canvas-theme';
 import { classifyElements, buildTargetPositions, foldsDiffer, reclassifyForFold, keepAnimatedEdges } from '../element-classification-utils';
-import { waitForStep } from '../step-debug';
 
 // ============================================================================
 // TYPES
 // ============================================================================
-
-interface Position {
-  x: number;
-  y: number;
-}
 
 /** What a transition classified and how the viewport moved, for the dev transition record Transition keeps. */
 export interface TransitionReport {
@@ -50,22 +47,31 @@ export interface TransitionReport {
   viewport: { fromZoom: number; toZoom: number } | null;
 }
 
+/** What a caller may ask of one transition beyond the two scenes. */
+export interface TransitionRequest {
+  /** Which animator does each phase; what is left out comes from the settings. */
+  recipe?: Partial<TransitionRecipe>;
+}
+
+export interface TransitionOptions extends TransitionRequest {
+  isNewScene: boolean;
+}
+
 // ============================================================================
 // SCENE-TO-SCENE ORCHESTRATOR CLASS
 // ============================================================================
 
 export class SceneToSceneOrchestrator {
   #cy: Core;
-  #departureAnimator: DepartureAnimator;
-  #sharedCoreAnimator: SharedCoreAnimator;
-  #arrivalAnimator: ArrivalAnimator;
+  #backgroundRenderer: BackgroundRenderer;
+  #departures = new Map<string, DepartureAnimator>();
+  #morphings = new Map<string, MorphingAnimator>();
+  #arrivals = new Map<string, ArrivalAnimator>();
   #foldState: FoldStateHandler;
 
   constructor(cy: Core, backgroundRenderer: BackgroundRenderer) {
     this.#cy = cy;
-    this.#departureAnimator = new DepartureAnimator(cy);
-    this.#sharedCoreAnimator = new SharedCoreAnimator(cy, backgroundRenderer);
-    this.#arrivalAnimator = new ArrivalAnimator(cy);
+    this.#backgroundRenderer = backgroundRenderer;
     this.#foldState = new FoldStateHandler(cy);
   }
 
@@ -74,11 +80,13 @@ export class SceneToSceneOrchestrator {
   // ==========================================================================
 
   /** The transition from `currentScene`, which the instance shows, to `targetScene`. */
-  async transition(currentScene: Scene, targetScene: Scene, options: { isNewScene: boolean }): Promise<TransitionReport> {
+  async transition(currentScene: Scene, targetScene: Scene, options: TransitionOptions): Promise<TransitionReport> {
     const extent = this.#cy.extent();
     const viewportCenter: Position = { x: (extent.x1 + extent.x2) / 2, y: (extent.y1 + extent.y2) / 2 };
+    const recipe = resolveRecipe(options.recipe);
 
     if (isDebug('d_transition')) {
+      console.log(`[d_transition] recipe: ${recipe.departure} / ${recipe.morphing} / ${recipe.arrival}`);
       console.log(`[d_transition] currentScene (${currentScene.id}) edges:`, Object.keys(currentScene.edges));
       console.log(`[d_transition] targetScene (${targetScene.id}) edges:`, Object.keys(targetScene.edges));
       console.log(`[d_transition] Cytoscape edges:`, this.#cy.edges().map(e => e.id()));
@@ -104,7 +112,14 @@ export class SceneToSceneOrchestrator {
       viewport: targetScene.viewport?.zoom > 0 ? { fromZoom: this.#cy.zoom(), toZoom: targetScene.viewport.zoom } : null,
     };
 
-    await this.#departure(elements, currentScene, targetScene, viewportCenter);
+    // Phase 1
+    await this.#departure(recipe).run({
+      nodes: elements.departingNodes,
+      edges: elements.departingEdges,
+      currentScene,
+      targetScene,
+      viewportCenter,
+    });
 
     // Swap central node styling before movement — hints causality:
     // "we chose a new center, now everything rearranges"
@@ -115,8 +130,23 @@ export class SceneToSceneOrchestrator {
     const morphDuration = getSetting('transition.morphDuration');
     applyCanvasTheme(this.#cy.container(), getTheme(targetThemeId), morphDuration[0]);
 
-    await this.#morphing(elements, currentScene, targetScene, targetPositions, targetScales, options.isNewScene);
-    await this.#arrival(elements, targetScene, targetPositions, viewportCenter);
+    // Phase 2
+    await this.#morphing(recipe).run({
+      nodes: elements.sharedNodes,
+      currentScene,
+      targetScene,
+      targetPositions,
+      targetScales,
+      isNewScene: options.isNewScene,
+    });
+
+    // Phase 3
+    await this.#arrival(recipe).run({
+      ...this.#arrivingAfterMorphing(elements, targetScene),
+      targetScene,
+      targetPositions,
+      viewportCenter,
+    });
 
     // Apply fold state for target scene: add hidden nodes, hide them, write scratch
     await this.#foldState.apply(targetScene, targetThemeId);
@@ -133,6 +163,60 @@ export class SceneToSceneOrchestrator {
       console.log(`[d_transition] targetScene.edges should be:`, Object.keys(targetScene.edges));
     }
     return report;
+  }
+
+  // ==========================================================================
+  // THE ANIMATORS
+  // ==========================================================================
+
+  #departure(recipe: TransitionRecipe): DepartureAnimator {
+    let animator = this.#departures.get(recipe.departure);
+    if (!animator) {
+      animator = createDepartureAnimator(recipe.departure, this.#cy);
+      this.#departures.set(recipe.departure, animator);
+    }
+    return animator;
+  }
+
+  #morphing(recipe: TransitionRecipe): MorphingAnimator {
+    let animator = this.#morphings.get(recipe.morphing);
+    if (!animator) {
+      animator = createMorphingAnimator(recipe.morphing, this.#cy, this.#backgroundRenderer);
+      this.#morphings.set(recipe.morphing, animator);
+    }
+    return animator;
+  }
+
+  #arrival(recipe: TransitionRecipe): ArrivalAnimator {
+    let animator = this.#arrivals.get(recipe.arrival);
+    if (!animator) {
+      animator = createArrivalAnimator(recipe.arrival, this.#cy);
+      this.#arrivals.set(recipe.arrival, animator);
+    }
+    return animator;
+  }
+
+  /**
+   * The coupling between morphing and arrival (animators.ts): a new central
+   * that is arriving is brought in by the morphing phase, so arrival gets the
+   * other arriving nodes, and the arriving edges minus those between that
+   * central and shared nodes, which morphing faded in with it.
+   */
+  #arrivingAfterMorphing(elements: TransitionElements, targetScene: Scene): { nodes: NodeId[]; edges: EdgeId[] } {
+    const centralId = targetScene.centralNodeId;
+    if (!elements.arrivingNodes.includes(centralId)) {
+      return { nodes: elements.arrivingNodes, edges: elements.arrivingEdges };
+    }
+    const sharedSet = new Set(elements.sharedNodes);
+    const edges = elements.arrivingEdges.filter(edgeId => {
+      const edge = graphStore.edges.find(e => e.id === edgeId);
+      if (!edge) return true;
+      const centralToShared =
+        (edge.sourceId === centralId && sharedSet.has(edge.targetId)) ||
+        (edge.targetId === centralId && sharedSet.has(edge.sourceId));
+      return !centralToShared;
+    });
+    return { nodes: elements.arrivingNodes.filter(id => id !== centralId), edges };
   }
 
   // ==========================================================================
@@ -158,7 +242,7 @@ export class SceneToSceneOrchestrator {
   /**
    * Remove hidden stowaways that will arrive visibly. FoldStateHandler.apply()
    * from the previous transition may have added hidden nodes to cy; if they
-   * are now classified as arriving, remove them so ArrivalAnimator can add
+   * are now classified as arriving, remove them so the arrival animator can add
    * them fresh.
    */
   #removeHiddenStowaways(arrivingNodes: NodeId[]): void {
@@ -171,6 +255,10 @@ export class SceneToSceneOrchestrator {
       }
     }
   }
+
+  // ==========================================================================
+  // GLUE BETWEEN PHASES
+  // ==========================================================================
 
   /**
    * Update central node styling via data flag toggle. Cytoscape re-evaluates
@@ -220,217 +308,5 @@ export class SceneToSceneOrchestrator {
       ...filteredStylesheet,
       ...StyleGenerator.buildCentralAndSelectedRules(targetThemeId)
     ]).update();
-  }
-
-  // ==========================================================================
-  // PHASE 1: DEPARTURE
-  // ==========================================================================
-
-  /**
-   * Phase 1: DEPARTURE
-   * Handles removal of elements that exist in old scene but not in new scene
-   */
-  async #departure(
-    elements: TransitionElements,
-    currentScene: Scene,
-    targetScene: Scene,
-    viewportCenter: Position
-  ): Promise<void> {
-    const oldCentralDeparting = !targetScene.nodes[currentScene.centralNodeId];
-    const edgeTiming = getSetting('transition.departureEdgeTiming');
-
-    // Get old central node position for direction calculation
-    const oldCentralNode = this.#cy.getElementById(currentScene.centralNodeId);
-    const oldCentralPosition: Position = oldCentralNode.length > 0
-      ? oldCentralNode.position()
-      : viewportCenter;  // Fallback to viewport center
-
-    if (isDebug('d_transition')) console.log(`[Transition.Departure] oldCentralDeparting: ${oldCentralDeparting}, edgeTiming: ${edgeTiming}`);
-    await waitForStep('[1.0] Departure phase starting');
-
-    if (edgeTiming === 'before') {
-      // ── Mode A: Edges fade out first, then nodes cascade ──
-
-      // Stage 1.1: All departing edges fade out
-      await this.#departureAnimator.fadeOutEdges(elements.departingEdges);
-      await waitForStep('[1.1] fadeOutEdges complete');
-
-      if (oldCentralDeparting) {
-        // Branch B: Old central is departing
-
-        // Stage 1.2.B.1: Non-central nodes cascade fly-out (no edges — already faded)
-        const nonCentralDeparting = elements.departingNodes.filter(
-          id => id !== currentScene.centralNodeId
-        );
-        await this.#departureAnimator.flyOutNodes(
-          nonCentralDeparting, [], currentScene.centralNodeId,
-          oldCentralPosition, currentScene
-        );
-        await waitForStep('[1.2.B.1] flyOutNodes cascade (non-central) complete');
-
-        // Stage 1.2.B.2: Central node zooms out (shrinks in place)
-        await this.#departureAnimator.zoomOutCentralNode(currentScene.centralNodeId);
-        await waitForStep('[1.2.B.2] zoomOutCentralNode complete');
-      } else {
-        // Branch A: Old central stays (is shared)
-
-        // Stage 1.2.A: All departing nodes cascade fly-out (no edges — already faded)
-        await this.#departureAnimator.flyOutNodes(
-          elements.departingNodes, [], currentScene.centralNodeId,
-          oldCentralPosition, currentScene
-        );
-        await waitForStep('[1.2.A] flyOutNodes cascade complete');
-      }
-    } else {
-      // ── Mode B: Edges fade in parallel with nodes (cascaded per layer) ──
-
-      if (oldCentralDeparting) {
-        // Branch B: Old central is departing
-
-        const nonCentralDeparting = elements.departingNodes.filter(
-          id => id !== currentScene.centralNodeId
-        );
-        const centralId = currentScene.centralNodeId;
-
-        // Split edges: central-connected vs non-central
-        const centralEdges: string[] = [];
-        const nonCentralEdges: string[] = [];
-        for (const edgeId of elements.departingEdges) {
-          const edge = this.#cy.getElementById(edgeId);
-          if (edge.length === 0) continue;
-          const srcId = edge.source().id();
-          const tgtId = edge.target().id();
-          if (srcId === centralId || tgtId === centralId) {
-            centralEdges.push(edgeId);
-          } else {
-            nonCentralEdges.push(edgeId);
-          }
-        }
-
-        // Stage 1.2.B.1: Non-central nodes cascade fly-out + their edges fade per layer
-        await this.#departureAnimator.flyOutNodes(
-          nonCentralDeparting, nonCentralEdges as any, currentScene.centralNodeId,
-          oldCentralPosition, currentScene
-        );
-        await waitForStep('[1.2.B.1] flyOutNodes cascade + edges (non-central) complete');
-
-        // Stage 1.2.B.2: Central node zooms out + its edges fade (parallel)
-        await Promise.all([
-          this.#departureAnimator.zoomOutCentralNode(centralId),
-          this.#departureAnimator.fadeOutEdges(centralEdges as any)
-        ]);
-        await waitForStep('[1.2.B.2] zoomOutCentralNode + fadeOutEdges (central) complete');
-      } else {
-        // Branch A: Old central stays (is shared)
-
-        // Stage 1.2.A: All departing nodes cascade fly-out + edges fade per layer
-        await this.#departureAnimator.flyOutNodes(
-          elements.departingNodes, elements.departingEdges,
-          currentScene.centralNodeId, oldCentralPosition, currentScene
-        );
-        await waitForStep('[1.2.A] flyOutNodes cascade + edges complete');
-      }
-    }
-  }
-
-  // ==========================================================================
-  // PHASE 2: MORPHING
-  // ==========================================================================
-
-  /**
-   * Phase 2: MORPHING
-   * The shared nodes, those in both scenes, move, rescale and crossfade design
-   */
-  async #morphing(
-    elements: TransitionElements,
-    currentScene: Scene,
-    targetScene: Scene,
-    targetPositions: TargetPositions,
-    targetScales: Record<NodeId, number>,
-    isNewScene: boolean
-  ): Promise<void> {
-    if (isDebug('d_transition')) console.log('[Transition.SharedMovement] Executing parallel shared phase');
-    await waitForStep('[2.0] SharedMovement phase starting');
-
-    await this.#sharedCoreAnimator.executeSharedPhase(
-      elements.sharedNodes,
-      currentScene,
-      targetScene,
-      targetPositions,
-      targetScales,
-      isNewScene
-    );
-    
-    await waitForStep('[2.5] SharedMovement phase complete');
-  }
-
-
-  // ==========================================================================
-  // PHASE 3: ARRIVAL
-  // ==========================================================================
-
-  /**
-   * Phase 3: ARRIVAL
-   * Handles entry of nodes that exist in new scene but not in old scene
-   */
-  async #arrival(
-    elements: TransitionElements,
-    targetScene: Scene,
-    targetPositions: TargetPositions,
-    viewportCenter: Position
-  ): Promise<void> {
-    // Get new central node position for direction calculation
-    const newCentralPosition = targetPositions[targetScene.centralNodeId] ?? viewportCenter;
-
-    // New central was handled in Phase 2.3.C, so filter it out
-    const newCentralIsArriving = elements.arrivingNodes.includes(targetScene.centralNodeId);
-    const nodesToFlyIn = newCentralIsArriving
-      ? elements.arrivingNodes.filter(id => id !== targetScene.centralNodeId)
-      : elements.arrivingNodes;
-
-    // Filter edges: exclude edges between central and SHARED nodes (already faded in during 2.3.C.3)
-    // But INCLUDE edges between central and ARRIVING nodes (they need to fade in here)
-    const sharedSet = new Set(elements.sharedNodes);
-    const edgesToFadeIn = newCentralIsArriving
-      ? elements.arrivingEdges.filter(edgeId => {
-          const edge = graphStore.edges.find(e => e.id === edgeId);
-          if (!edge) return true;
-
-          // Check if edge connects central to a shared node (already handled in 2.3.C.3)
-          const centralToShared =
-            (edge.sourceId === targetScene.centralNodeId && sharedSet.has(edge.targetId)) ||
-            (edge.targetId === targetScene.centralNodeId && sharedSet.has(edge.sourceId));
-
-          // Exclude only central-to-shared edges; keep central-to-arriving edges
-          return !centralToShared;
-        })
-      : elements.arrivingEdges;
-
-    const edgeTiming = getSetting('transition.arrivalEdgeTiming');
-
-    if (isDebug('d_transition')) console.log(`[Transition.Arrival] nodesToFlyIn: ${nodesToFlyIn.length}, edgesToFadeIn: ${edgesToFadeIn.length}, edgeTiming: ${edgeTiming}`);
-    await waitForStep('[3.0] Arrival phase starting');
-
-    if (edgeTiming === 'after') {
-      // ── Mode A: Nodes cascade fly-in, then edges fade in ──
-
-      // Stage 3.1: Arriving nodes cascade fly-in (no edges — will fade after)
-      await this.#arrivalAnimator.flyInNodes(
-        nodesToFlyIn, [], targetPositions, newCentralPosition, targetScene
-      );
-      await waitForStep('[3.1] flyInNodes cascade complete');
-
-      // Stage 3.2: Edges to arriving nodes fade in
-      await this.#arrivalAnimator.fadeInEdges(edgesToFadeIn, targetScene);
-      await waitForStep('[3.2] fadeInEdges complete');
-    } else {
-      // ── Mode B: Nodes cascade fly-in + edges fade per layer (parallel) ──
-
-      // Stage 3.1+3.2: Nodes cascade fly-in with edges fading per layer
-      await this.#arrivalAnimator.flyInNodes(
-        nodesToFlyIn, edgesToFadeIn, targetPositions, newCentralPosition, targetScene
-      );
-      await waitForStep('[3.1+3.2] flyInNodes cascade + edges complete');
-    }
   }
 }
