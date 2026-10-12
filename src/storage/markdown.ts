@@ -113,8 +113,8 @@ async function collectConversationEntries(): Promise<{
 /**
  * Images become markdown links, never bytes: a base64 data URL is unreadable to
  * humans and models alike, and would dwarf the prose it belongs to
- * (markdown-architecture §5.8). An uploaded image has no URL to link, so it is
- * omitted and counted — the workspace file is where image bytes live.
+ * (markdown-architecture §5.8). An uploaded or generated image has no URL to
+ * link, so it is omitted and counted — the workspace file is where image bytes live.
  */
 function withImageLinks(message: { content: string; attachments?: ChatImageAttachment[] }): {
   content: string;

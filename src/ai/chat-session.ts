@@ -256,6 +256,38 @@ export class ChatSession {
   }
 
   /**
+   * Ask the model something beside the conversation, with the conversation's
+   * full context and none of its persistence: the same system prompt and
+   * history a turn would carry, plus `instruction` as the last user message.
+   * Nothing is stored, no event fires, the session state does not change, and
+   * the next real turn is unaware this happened. Used to draft a note's picture
+   * description (docs/ai/chat-image-generation.md §3.1a). The one provider call
+   * through this class that writes no turn.
+   */
+  async draftAside(instruction: string): Promise<string> {
+    if (!this.#provider) await this.tryAutoInit();
+    const provider = this.#provider;
+    if (!provider) throw new Error('Add an AI provider API key in Settings first.');
+    if (!this.#currentNodeId) throw new Error('No node loaded');
+
+    const systemPrompt = buildSystemPrompt(this.#buildContext());
+    if (!systemPrompt) {
+      throw new Error('The node this conversation belongs to is no longer in the graph.');
+    }
+
+    const providerMessages: ProviderMessage[] = [
+      ...this.#toProviderMessages(),
+      { role: 'user', content: instruction }
+    ];
+    if (isDebug('d_chat')) logRequest(systemPrompt, providerMessages);
+
+    const response = await provider.sendMessage(providerMessages, systemPrompt);
+    if (isDebug('d_chat')) logResponse(response.rawContent ?? response.content);
+
+    return response.content.trim();
+  }
+
+  /**
    * Clear current conversation
    */
   async clearConversation(): Promise<void> {

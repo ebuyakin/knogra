@@ -14,6 +14,18 @@ export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'ma
 /** Effort for Claude models. Caps total token spend, thinking and tool calls included. */
 export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+/** Which provider draws generated note images; 'none' leaves the feature off. */
+export type ImageProviderChoice = 'none' | ProviderType;
+
+/** The shape of a generated note image; 'panel' follows the chat panel's visible area. */
+export type ImageShape = 'panel' | 'square' | 'portrait' | 'landscape' | 'wide';
+
+/** How dense a generated note image may be: read in the panel, or enlarged in the viewer. */
+export type ImageDetail = 'panel' | 'fine';
+
+/** What a generated note image is drawn on; 'none' says nothing about it to the model; 'transparent' needs a vendor that can omit the background. */
+export type ImageBackground = 'none' | 'light' | 'dark' | 'transparent';
+
 export interface AISettings {
   /** AI provider to use */
   provider: ProviderType;
@@ -69,7 +81,26 @@ export interface AISettings {
    * on every open. Affects retrieved images only; never purges existing bytes.
    */
   storeRetrievedImages: boolean;
-  
+
+  /** Provider that draws generated note images. Chosen explicitly; no fallback to the chat provider. */
+  imageProvider: ImageProviderChoice;
+  /** Gemini image model */
+  geminiImageModel: string;
+  /** OpenAI image model */
+  openaiImageModel: string;
+  /** Shape of a generated note image (docs/ai/chat-image-generation.md §3.2) */
+  imageShape: ImageShape;
+  /** Density of a generated note image; 'fine' costs and weighs two to four times 'panel' */
+  imageDetail: ImageDetail;
+  /** Background of a generated note image (docs/ai/chat-image-generation.md §3.2) */
+  imageBackground: ImageBackground;
+  /** Appended to every image prompt after the user's description, unless `imageOmitStyle` */
+  imageStyle: string;
+  /** Send the description without the style suffix: a "pure" request, which sometimes draws better */
+  imageOmitStyle: boolean;
+  /** Empty the note's text once an image was generated from it, so the note is the picture alone; the prompt stays on the attachment record */
+  imageClearPrompt: boolean;
+
   /** Language for AI responses and suggestions (empty = English) */
   responseLanguage: string;
 
@@ -139,6 +170,15 @@ export const AI_DEFAULTS: AISettings = {
   chatScrollPosition: 'bottom',
   imageResultCount: 3,
   storeRetrievedImages: true,
+  imageProvider: 'none',
+  geminiImageModel: 'gemini-3.1-flash-image',
+  openaiImageModel: 'gpt-image-2.5-flare',
+  imageShape: 'panel',
+  imageDetail: 'panel',
+  imageBackground: 'light',
+  imageStyle: 'Clear schematic diagram in textbook style. Flat colours, clean thin lines, no shading or gradients. Leave a generous empty margin around the drawing, at least one tenth of the image on every side, with nothing touching the edges. Label only the essential parts with short, correctly spelled words. No decorative elements, no people, no frame, no title, no caption.',
+  imageOmitStyle: false,
+  imageClearPrompt: false,
   responseLanguage: '',
   customInstructions: '',
   scenePromptInstructions: '',

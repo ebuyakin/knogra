@@ -8,7 +8,7 @@
 
 import type { SettingKey } from './index';
 import type { ProviderType } from '../core/main-types';
-import { PROVIDER_REGISTRY } from './ai-providers';
+import { PROVIDER_REGISTRY, imageCapableProviders, type ProviderDescriptor } from './ai-providers';
 import { DESIGN_MANIFEST } from './design-manifest';
 import { THEME_MANIFEST } from './theme-manifest';
 import { AUTOLAYOUT_ALGORITHMS } from './autolayout-settings';
@@ -124,6 +124,97 @@ const PROVIDER_PARAMETERS: Partial<Record<ProviderType, SettingDefinition[]>> = 
     }
   ]
 };
+
+/** The image-model row of a provider that can draw; nothing for one that cannot. */
+function imageModelRows(provider: ProviderDescriptor): SettingDefinition[] {
+  const capability = provider.imageGeneration;
+  if (!capability) return [];
+  return [{
+    key: capability.modelSettingKey,
+    label: capability.modelLabel,
+    description: `Image model name (e.g. ${capability.defaultModel}). Used by Generate in notes, not by the chat`,
+    type: 'string'
+  }];
+}
+
+/**
+ * Generated note images (docs/ai/chat-image-generation.md §4.4). Shown under
+ * Notes in the Settings modal and, through `generatedImageSettings()`, in the
+ * note editor's Configure dialog, so both views read one list.
+ */
+const GENERATED_IMAGE_SETTINGS: SettingDefinition[] = [
+  {
+    key: 'ai.imageShape',
+    label: 'Shape',
+    description: 'Panel follows the chat panel\'s visible area at the moment you generate, so the picture fills one screen of it. The others are fixed proportions',
+    type: 'select',
+    options: [
+      { value: 'panel', label: 'Panel' },
+      { value: 'square', label: 'Square (1:1)' },
+      { value: 'portrait', label: 'Portrait (3:4)' },
+      { value: 'landscape', label: 'Landscape (4:3)' },
+      { value: 'wide', label: 'Wide (16:9)' }
+    ]
+  },
+  {
+    key: 'ai.imageDetail',
+    label: 'Detail',
+    description: 'Panel: composed to be read in the chat panel without zooming, few parts and large labels. Fine: may be dense, meant for the image viewer; requested at a higher resolution and stored at two to four times the size and cost',
+    type: 'select',
+    options: [
+      { value: 'panel', label: 'Panel — read in place' },
+      { value: 'fine', label: 'Fine — read in the viewer' }
+    ]
+  },
+  {
+    key: 'ai.imageBackground',
+    label: 'Background',
+    description: 'Light: a plain pale card, the textbook look. Dark: close to the chat panel\'s colour, light lines and labels. Transparent: the panel shows through; OpenAI only, Gemini falls back to dark. No instruction: nothing is said about it and the model decides',
+    type: 'select',
+    options: [
+      { value: 'light', label: 'Light' },
+      { value: 'dark', label: 'Dark' },
+      { value: 'transparent', label: 'Transparent (OpenAI)' },
+      { value: 'none', label: 'No instruction' }
+    ]
+  },
+  {
+    key: 'ai.imageStyle',
+    label: 'Style',
+    description: 'Appended to every image prompt after your description. Say how pictures should look; what they show is the note\'s text',
+    type: 'textarea'
+  },
+  {
+    key: 'ai.imageOmitStyle',
+    label: 'No style instruction',
+    description: 'Send the description without the Style text above, so the model decides how the picture looks. Sometimes draws better',
+    type: 'boolean'
+  },
+  {
+    key: 'ai.imageClearPrompt',
+    label: 'Clear prompt after generation',
+    description: 'Empty the note\'s text once the picture is generated, so the note shows the picture alone. The prompt is kept on the image for reference either way',
+    type: 'boolean'
+  },
+  {
+    key: 'ai.imageProvider',
+    label: 'Image Model Provider',
+    description: 'Which service draws the image. Chosen separately from the chat provider and uses that service\'s API key; None turns Generate off',
+    type: 'select',
+    options: [
+      { value: 'none', label: 'None' },
+      ...imageCapableProviders().map(provider => ({ value: provider.type, label: provider.label }))
+    ]
+  }
+];
+
+/** Everything the Configure dialog edits: the Generated Images rows, then each capable provider's image model. */
+export function generatedImageSettings(): SettingDefinition[] {
+  return [
+    ...GENERATED_IMAGE_SETTINGS,
+    ...imageCapableProviders().flatMap(imageModelRows)
+  ];
+}
 
 // ============================================================================
 // DEFINITIONS
@@ -1095,6 +1186,7 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
           description: `Model name (e.g. ${provider.defaultModel})`,
           type: 'string'
         },
+        ...imageModelRows(provider),
         ...(PROVIDER_PARAMETERS[provider.type] ?? [])
       ]
     }))
@@ -1176,6 +1268,14 @@ export const SETTING_CATEGORIES: SettingCategory[] = [
         label: 'Store Found Images Offline',
         description: 'Keep a local copy of images found online so they work offline. Off: only the link is kept and the image is fetched each time its note is opened. Affects found images only.',
         type: 'boolean'
+      }
+    ],
+    children: [
+      {
+        id: 'generated-images',
+        label: 'Generated Images',
+        description: 'Images drawn by an image model from a note\'s text (Generate in the note editor). One image costs roughly 0.03 to 0.15 USD depending on provider and detail, ten to a hundred times a chat turn.',
+        settings: GENERATED_IMAGE_SETTINGS
       }
     ]
   },

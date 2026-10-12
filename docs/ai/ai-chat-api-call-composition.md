@@ -72,6 +72,8 @@ TypeScript is prose, with two exceptions noted below.
     suggest.md         the Suggest button's message: opening, {{> edge-type}}, closing, shortcut additions
     connect.md         the Connect button's message, same shape
     edge-type.md       what is said about the relationship wanted; one of four forms, shared by Suggest and Connect
+    image-prompt.md    the note editor's Draft: asks for a one-paragraph picture description, composed for the image
+                       settings; sent through draftAside, never stored
 
 The exceptions: the four `displayText` strings in `prompts.ts` are timeline labels the model never
 sees, and the letter `X` standing for the proposed node appears both in the arrows code builds and in
@@ -212,7 +214,14 @@ before the actions reach the shelf.
 
 What the timeline stores is the prose, as the model wrote it, for every kind of request. A reply
 that carried a block and no prose would store an empty turn, which providers reject when it is
-replayed as history, so it stores a fixed line instead ("Suggestions added to the node shelf."). Between
+replayed as history, so it stores a fixed line instead ("Suggestions added to the node shelf.").
+
+One call stores nothing: `ChatSession.draftAside(instruction)` sends the same system prompt and
+history a turn would carry, plus the instruction as the last user message, and returns the prose
+without writing either side to the conversation or firing an event. The note editor uses it to
+draft a picture description with the chat's context (`prompts/image-prompt.md`;
+[chat-image-generation.md](chat-image-generation.md) §3.3). The next real turn's history does not
+contain the draft. Between
 2026-09-10 and 2026-09-12 a reply with accepted actions stored the shelf's one-line-per-item summary
 in place of the prose; turns stored then remain as they were. What the shelf accepts, and what
 happens when the user acts on an item, are in [shelf-architecture.md](shelf-architecture.md); where
@@ -314,7 +323,7 @@ shows the text filled in.
 
 ## Files And Responsibilities
 
-    src/ai/prompts/*.md                     the text. Seven files, listed above.
+    src/ai/prompts/*.md                     the text. Eight files, listed above.
     src/ai/prompts.ts                       the renderer; the SystemPromptData and quick-action record types; the
                                             quick-action table; resolveQuickActionMessage()
     src/ai/context-builder.ts               fills SystemPromptData from graph, scene, shelf and settings; buildSystemPrompt()

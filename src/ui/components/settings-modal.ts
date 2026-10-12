@@ -474,7 +474,7 @@ export class SettingsModal {
       case 'stageTiming': {
         // Special handling for [duration, delay] tuple
         const tuple = currentValue as [number, number];
-        
+
         const durationInput = document.createElement('input');
         durationInput.type = 'number';
         durationInput.className = 'settings-input-number settings-input-small';

@@ -103,10 +103,9 @@ Streaming: `response.image_generation_call.partial_image` events with `partial_i
 Moderation failures come back as `error.code: "moderation_blocked"` with `moderation_details.moderation_stage` and `categories`.
 The docs warn that complex prompts can take up to two minutes.
 
-Not verified: whether `/v1/images/*` sends CORS headers for a browser caller.
-`/v1/responses` demonstrably does (Knogra calls it), and its `401` does not (ai-provider-architecture §7).
-Community reports of CORS failures on the Images API exist and are mostly about downloading DALL-E result URLs, which `b64_json` avoids.
-The list of mainline models that may call the tool was not retrieved; the docs point to a "supported models" page.
+Verified 2026-10-04 in Knogra: `/v1/images/generations` answers a browser caller with a readable response (CORS headers present), so the Images API can be called directly with the user's key; `b64_json` avoids fetching any result URL.
+Its `401` is presumably as opaque as `/v1/responses`' (ai-provider-architecture §7); the image adapter translates an unreadable failure to the same "check the key" sentence.
+The list of mainline models that may call the Responses image tool was not retrieved; the docs point to a "supported models" page.
 
 ### 2.2 Google Gemini
 
@@ -145,7 +144,7 @@ This is what `@google/genai` `ai.models.generateContent` calls and what Knogra's
     });
     response.candidates[0].content.parts[]  →  { text }  and  { inlineData: { mimeType: 'image/png', data: '<base64>' } }
 
-Older SDK versions spelled the size block `imageConfig`; the current docs say `responseFormat.image`.
+The SDK installed in Knogra (@google/genai 1.48.0, checked 2026-10-04 in node_modules) types the block as `config.imageConfig: { aspectRatio, imageSize }` with aspect ratios "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"; the web docs' `responseFormat.image` and the wider ratio list belong to a newer SDK. Code against the installed types.
 Multi-turn editing goes through the SDK's chat object, replaying parts.
 
 The Interactions API, GA since June 2026, "recommended for all new projects", stateful by default (`store: true`, `previous_interaction_id`), `store: false` for stateless.

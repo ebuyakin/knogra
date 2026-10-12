@@ -28,7 +28,9 @@ interface AIProvider {
 ```
 
 Non-streaming, single-shot, no tool loop. Three call sites use it: chat, equation generation, and
-node-image (SVG) generation.
+node-image (SVG) generation. Raster image generation for notes does **not** go through it: an
+image call is a different contract, `ImageProvider.generateImage(request)`, with its own adapters
+([chat-image-generation.md](chat-image-generation.md) §4.1).
 
 ## 3. Registry, split across the layer boundary
 
@@ -61,6 +63,14 @@ interface ProviderDescriptor {
 `defaultModel: AI_DEFAULTS.geminiModel` — so model names are still written exactly once, in
 `ai-settings.ts`. Carrying the field here is what lets `modelFor()` recover from a blanked-out
 model input without every adapter keeping a private fallback constant.
+
+Since 2026-10-04 a descriptor may also carry `imageGeneration?: { modelSettingKey, modelLabel,
+defaultModel }`: the vendor can draw pictures, and this is its image model setting. Gemini and
+OpenAI have it, Anthropic does not, and that absence is how "cannot generate images" is stated —
+`imageCapableProviders()` filters on it for the image provider select and the per-provider Image
+Model rows. The image contract, adapters and resolution are a separate layer under
+`src/ai/image-generation/` ([chat-image-generation.md](chat-image-generation.md) §4); `AIProvider`
+and `resolveProviderConfig()` are untouched by it.
 
 The eight `AISettings` fields (`<provider>ApiKey`, `<provider>Model`) stay explicitly declared.
 Deriving them with mapped types would obscure `SettingKey` inference for no real gain.

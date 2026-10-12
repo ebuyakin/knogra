@@ -78,6 +78,27 @@ export function renderSystemPrompt(data: SystemPromptData): string {
   return renderPrompt('system-prompt', data);
 }
 
+/**
+ * Everything image-prompt.md can name: the instruction that asks the chat model
+ * to draft a picture description for a note (docs/ai/chat-image-generation.md
+ * §3.1a). The words for shape and background are short values the file places
+ * in its own sentences.
+ */
+export type ImagePromptData = {
+  userText: string;
+  shapeWords: string;
+  shapePanel: boolean;
+  frameWidth: number;
+  frameHeight: number;
+  backgroundWords: string;
+  detailFine: boolean;
+  detailPanel: boolean;
+};
+
+export function renderImagePrompt(data: ImagePromptData): string {
+  return renderPrompt('image-prompt', data);
+}
+
 // ============================================================================
 // QUICK ACTIONS
 // ============================================================================

@@ -103,10 +103,17 @@
   margin-top: 12px;
 }
 
+/*
+ * A note image is read in the panel first and in the viewer second, so it takes
+ * the panel's width and only shrinks when taller than most of the visible
+ * timeline (about 77vh on a laptop window). max-width never enlarges, so an
+ * image smaller than the panel keeps its own size. Generated images are
+ * composed for this box (docs/ai/chat-image-generation.md §2.3).
+ */
 .note-image {
   display: block;
   max-width: 100%;
-  max-height: 240px;
+  max-height: 70vh;
   border-radius: 6px;
   margin-left: auto;
   margin-right: auto;
@@ -242,6 +249,154 @@
   display: inline-block;
 }
 
+/* Generate menu: Run / Draft / Configure above the Generate button
+   (generate-menu.ts). Stacked upward, so the first item given, the most used,
+   sits nearest the button. */
+.generate-menu {
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column-reverse;
+  min-width: 140px;
+  padding: 3px;
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+}
+
+.generate-menu-row {
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.generate-menu-row:hover {
+  background-color: rgba(88, 166, 255, 0.18);
+}
+
+.generate-menu-row--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.generate-menu-row--disabled:hover {
+  background-color: transparent;
+}
+
+/* Image settings dialog (image-settings-dialog.ts). The frame, title bar,
+   footer and colours follow the node editor (node-editor.css), whose input and
+   button classes the rows reuse. Compact: label beside input, the description
+   as a tooltip. */
+.image-settings-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+}
+
+.image-settings-dialog {
+  position: fixed;
+  width: 480px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-primary, #30363d);
+  border-radius: 8px;
+  color: var(--text-primary, #e6edf3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+.image-settings-titlebar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-height: var(--modal-header-height);
+  padding: 0 var(--modal-header-padding-x);
+  border-bottom: 1px solid var(--border-primary, #30363d);
+  font-size: var(--modal-header-font-size);
+  font-weight: 500;
+  cursor: move;
+  user-select: none;
+}
+
+.image-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 20px;
+}
+
+.image-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.image-settings-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.image-settings-row--checkbox {
+  padding: 6px 0;
+}
+
+/* Wide enough for the longest label, so every control starts on one line. */
+.image-settings-label {
+  flex: 0 0 190px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #7d8590);
+  white-space: nowrap;
+}
+
+/* In a stacked row the main axis is vertical, so the 190px basis would become
+   the label's height and push the textarea down; the label takes its own. */
+.image-settings-row--stacked .image-settings-label {
+  flex: 0 0 auto;
+}
+
+/* The node editor's inputs are width 100%; beside a label they share the row instead. */
+.image-settings-row .node-editor-select,
+.image-settings-row .node-editor-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.image-settings-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent-blue, #58a6ff);
+}
+
+/* Prose, not code: the style suffix reads better in the UI font than in the editor's monospace. */
+.image-settings-textarea {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px;
+}
+
+.image-settings-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-primary, #30363d);
+}
+
 .note-attach-remove {
   position: absolute;
   top: 4px;
@@ -272,11 +427,21 @@
 }
 
 .note-attach-panel-title {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 11px;
   color: #8b949e;
   margin-bottom: 6px;
+}
+
+/* Under a saved note while its image is being generated, or when that failed (note-image-generation.ts) */
+.note-image-status {
+  color: #8b949e;
+  font-size: 12px;
+  padding: 4px 2px 8px;
+}
+
+.note-image-status--error {
+  color: #f85149;
+  cursor: pointer;
 }
 
 .note-attach-toolbar {
@@ -308,13 +473,10 @@
   margin-top: 6px;
 }
 
-/* Find-image result strip (pick-one) */
+/* Find-image result strip (pick-one), and the status of a search or a draft.
+   Sits inside the Image group, so it carries no frame of its own. */
 .note-attach-strip {
-  margin-bottom: 6px;
-  padding: 8px;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  background: #0d1117;
+  margin-top: 2px;
 }
 
 .note-attach-strip-status {

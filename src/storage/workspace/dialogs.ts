@@ -373,8 +373,8 @@ export function showImageTransferDialog(
     const confirmLabel = isExport ? 'Save' : 'Open';
 
     const uploadedDesc = isExport
-      ? 'If checked, the images you added from disk are written to the file. If unchecked, they are omitted — they have no link, so they cannot be restored later.'
-      : 'If checked, the images added from disk are brought in. If unchecked, they are dropped — they have no link, so they cannot be restored later.';
+      ? 'If checked, the images you added from disk or generated are written to the file. If unchecked, they are omitted — they have no link, so they cannot be restored later.'
+      : 'If checked, the images added from disk or generated are brought in. If unchecked, they are dropped — they have no link, so they cannot be restored later.';
     const retrievedDesc = isExport
       ? 'If unchecked, only the links are written and re-downloaded later (smaller file). If checked, the stored image files are embedded — usable offline from the start, but a larger file.'
       : 'If unchecked, only the links are brought in and re-downloaded later per your offline setting. If checked, the stored image files are brought in — usable offline from the start, but a heavier workspace.';
@@ -389,7 +389,7 @@ export function showImageTransferDialog(
       </label>`;
 
     const uploadedRow = counts.uploaded > 0
-      ? row('it-uploaded', 'Images uploaded locally', counts.uploaded, uploadedDesc, true)
+      ? row('it-uploaded', 'Images uploaded or generated', counts.uploaded, uploadedDesc, true)
       : '';
     const retrievedRow = counts.retrieved > 0
       ? row('it-retrieved', 'Images retrieved online', counts.retrieved, retrievedDesc, !isExport)

@@ -179,14 +179,21 @@ Single global workspace in v1. Multi-workspace support (isolated DBs, multi-tab,
 
 ## Attachments (Note images)
 
-Notes can carry a single inline image attachment (`attachments` on ChatMessage):
+Notes can carry a single inline image attachment (`attachments` on ChatMessage), from one of three sources:
 
-- **Scope:** notes only. AI and tutorial messages are not given attachments, and note attachments are never included in AI requests.
-- **Types:** PNG, JPEG, WebP (no SVG). Max 1 MB, max 4096px per side. One image per note (add more via separate notes).
-- **Storage:** base64 data URL stored inline in the conversation object — no schema/version bump, rides the existing export/import path automatically.
-- **UI:** "Add image" button in the note editor; inline `<img>` render in the timeline (fit-to-width, capped at 240px tall); `×` to remove while editing.
+- **Upload** from disk (`origin: 'note'`). PNG, JPEG, WebP (no SVG); max 1 MB, max 4096px per side.
+- **Search online** (`origin: 'retrieved'`), Wikimedia; the record carries a `sourceUrl` and optionally stored bytes. Canonical: [chat-image-retrieval.md](chat-image-retrieval.md).
+- **Generate** (`origin: 'generated'`), an image model drawing from the note's text, with the chat model able to draft that text; the record carries the `prompt` and `model`. Canonical: [ai/chat-image-generation.md](ai/chat-image-generation.md).
+
+Common to all three:
+
+- **Scope:** notes only. AI and tutorial messages are not given attachments, and note attachments are never included in chat requests. The one way an image leaves the browser is Generate run on a note that has one: the image goes to the image model to be changed as the text says, and the result replaces it.
+- **Storage:** base64 data URL stored inline in the conversation object — no schema/version bump, rides the existing export/import path. On export and import, images without a link (uploaded, generated) are kept or dropped together; retrieved images can travel as links.
+- **UI:** the Image group in the note editor (`note-attachment-zone.ts`), with the three sources as buttons; one image per note, adding replaces. In the timeline the image is as wide as the panel, its height following its shape, capped at 70vh (since 2026-10-04; before that 240px, which suited only wide images). A caption under the image carries a retrieved image's credit or a generated image's model.
 - **Diagnostics:** `knogra.snapshot()` redacts attachment data URLs to a compact placeholder to keep snapshots small.
 - **Future:** Blob storage for large files, drag/drop + paste, multi-image, attachments in AI requests.
+
+The note editor's textarea sizes itself to its text (since 2026-10-04); `rows` counted newlines, so a long wrapped note opened two rows tall.
 
 ## Implementation Plan
 

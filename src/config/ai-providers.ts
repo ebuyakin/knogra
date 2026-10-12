@@ -27,6 +27,19 @@ export interface ProviderDescriptor {
   readonly modelLabel: string;
   /** Referenced, never retyped: `AI_DEFAULTS` is the only place a model name is written. */
   readonly defaultModel: string;
+  /**
+   * Present when the vendor has an image generation endpoint the app calls
+   * (docs/ai/chat-image-generation.md §4.2). Absent means the provider cannot
+   * draw: it is left out of the image provider select and never resolved for it.
+   */
+  readonly imageGeneration?: ImageGenerationCapability;
+}
+
+export interface ImageGenerationCapability {
+  readonly modelSettingKey: SettingKey;
+  readonly modelLabel: string;
+  /** Referenced from `AI_DEFAULTS`, like `defaultModel`. */
+  readonly defaultModel: string;
 }
 
 /** Order is the fallback preference when the selected provider has no key. */
@@ -39,7 +52,12 @@ export const PROVIDER_REGISTRY: readonly ProviderDescriptor[] = [
     apiKeyLabel: 'Gemini API Key',
     apiKeyDescription: 'Your Google Gemini API key',
     modelLabel: 'Gemini Model',
-    defaultModel: AI_DEFAULTS.geminiModel
+    defaultModel: AI_DEFAULTS.geminiModel,
+    imageGeneration: {
+      modelSettingKey: 'ai.geminiImageModel',
+      modelLabel: 'Gemini Image Model',
+      defaultModel: AI_DEFAULTS.geminiImageModel
+    }
   },
   {
     type: 'openai',
@@ -49,7 +67,12 @@ export const PROVIDER_REGISTRY: readonly ProviderDescriptor[] = [
     apiKeyLabel: 'OpenAI API Key',
     apiKeyDescription: 'Your OpenAI API key',
     modelLabel: 'OpenAI Model',
-    defaultModel: AI_DEFAULTS.openaiModel
+    defaultModel: AI_DEFAULTS.openaiModel,
+    imageGeneration: {
+      modelSettingKey: 'ai.openaiImageModel',
+      modelLabel: 'OpenAI Image Model',
+      defaultModel: AI_DEFAULTS.openaiImageModel
+    }
   },
   {
     type: 'anthropic',
@@ -75,6 +98,11 @@ export const PROVIDER_REGISTRY: readonly ProviderDescriptor[] = [
 
 export function findProviderDescriptor(type: ProviderType): ProviderDescriptor | undefined {
   return PROVIDER_REGISTRY.find(provider => provider.type === type);
+}
+
+/** The providers that can draw, in registry order. */
+export function imageCapableProviders(): ProviderDescriptor[] {
+  return PROVIDER_REGISTRY.filter(provider => provider.imageGeneration !== undefined);
 }
 
 /**

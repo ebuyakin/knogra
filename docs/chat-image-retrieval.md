@@ -1,6 +1,6 @@
 # Chat Image Retrieval & Node Learning Space
 
-> **Status:** Implemented — 2026-07-09. Retrieval ships in `src/ai/image-search/`; note attachments in `src/ui/panels/chat-panel/chat-note-editor.ts`.
+> **Status:** Implemented — 2026-07-09. Retrieval ships in `src/ai/image-search/`; note attachments in `src/ui/panels/chat-panel/note-attachment-zone.ts` (extracted from `chat-note-editor.ts` on 2026-10-04).
 > **Last reviewed:** 2026-08-20
 > **Authority:** Design intent and architectural direction for retrieving real (non-generated) images into the per-node chat. Supersedes the `todo.md` line "Image search by LLM." The retrieval path and note attachments are built; the wider "learning space" material below remains proposal.
 > **Related:** [Documentation map](README.md), [Chat panel architecture](chat-panel-architecture.md), [AI assistant vision](ai-assistant-vision.md), [Workspace architecture](workspace-architecture.md)
@@ -51,7 +51,7 @@ The naïve approach — **AI image generation** — is rejected (see §5). Curre
 
 | Option | Verdict | Reason |
 |---|---|---|
-| **AI image generation** | Rejected | Inaccurate diagrams, hallucinated portraits. Unacceptable for a learning tool. |
+| **AI image generation** | Rejected in 2026-07; revisited 2026-10-04 | Inaccurate diagrams, hallucinated portraits. Unacceptable for a learning tool. Reversed for one use with the models of late 2026: a Generate source beside Search online in the note editor, with the chat model drafting the description. See [ai/chat-image-generation.md](ai/chat-image-generation.md); retrieval is unchanged. |
 | **General web search (Google/Bing/SerpAPI)** | Rejected as primary | CORS-blocked → forces a proxy; key cost lands on Knogra (breaks free/BYOK model); arbitrary licensing + link rot. |
 | **Curated open sources (Wikimedia et al.)** | **Chosen** | CORS-open, no key, open-licensed, human-curated (accurate), attribution built in. |
 | **MCP server as the retrieval mechanism** | Deferred | Over-engineered for v1; a browser app is not an MCP host, and an HTTP MCP server reintroduces hosting + CORS. Legitimate *later* as a user-pluggable source ecosystem. |
@@ -252,7 +252,7 @@ interface ChatImageAttachment {
 
 **No migration.** The image-in-notes feature is unreleased/experimental — there is no persisted user data to upgrade. Generalising `NoteImageAttachment` is a plain code refactor.
 
-**Images are not sent to the LLM (v1).** Retrieved images are *materials in the learning space*, not request context — exactly like notes today (local-only, stripped from provider messages). Sending images *back* to the model would require multimodal (vision) request support in the adapters, a vision-capable model, and higher cost; that is a separate future feature, not part of this one.
+**Images are not sent to the chat model.** Retrieved images are *materials in the learning space*, not request context — exactly like notes today (local-only, stripped from provider messages). Sending images *back* to the chat model would require multimodal (vision) request support in the adapters, a vision-capable model, and higher cost; that is a separate future feature, not part of this one. Since 2026-10-05 a note's image, retrieved ones included, can be sent to the *image* model when the user runs Generate on it, to be changed as the note's text says; the result keeps the retrieved image's credit ([ai/chat-image-generation.md](ai/chat-image-generation.md) §3.4).
 
 ### 10.4 Retrieval pipeline
 

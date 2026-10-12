@@ -422,10 +422,16 @@ AI-assisted learning companion. Provides contextual help, suggestions, and graph
 | `shelf/node-shelf.ts` | Shelf orchestration for the current scene; placement via FeatureAPI |
 | `shelf/shelf-store.ts` | The shelf's persisted shape: entries, placements, reconciliation |
 | `shelf-design-selector.ts` | Selects designs for shelf items |
+| `equation-generator.ts` | One-shot LaTeX generation for the node editor; no chat context |
+| `node-image/` | SVG pictogram generation for nodes: prompt composer, generator, sanitizer ([node-image-generation.md](node-image-generation.md)) |
+| `image-search/` | Wikimedia retrieval into notes ([chat-image-retrieval.md](chat-image-retrieval.md)) |
+| `image-generation/` | Raster image generation into notes: `ImageProvider` contract and factory, resolution, Gemini and OpenAI adapters, the WebP re-encoder, the Draft instruction ([ai/chat-image-generation.md](ai/chat-image-generation.md)) |
 
 **Provider layer.** Four vendors behind one narrow interface — `sendMessage(messages, systemPrompt)`, non-streaming, no tool loop. Adapters own only the **request** shape; every adapter is handed the same prompt contract and so gets back the same reply shape, which is why parsing is shared rather than per-vendor.
 
-Three unrelated call sites resolve a provider, not just chat: `chat-session.ts`, `equation-generator.ts`, and `node-image/svg-generator.ts`. All three go through `resolveProviderConfig()`.
+Three unrelated call sites resolve a provider, not just chat: `chat-session.ts`, `equation-generator.ts`, and `node-image/svg-generator.ts`. All three go through `resolveProviderConfig()`. `chat-session.ts` also offers `draftAside()`: the chat's full context for one side call that stores no turn, used to draft a note's picture description.
+
+A second, separate contract draws pictures: `image-generation/image-provider.ts` (`generateImage(request)`), with its own adapters for the vendors that can and its own resolution, which has no fallback chain because the image provider is chosen explicitly and costs money per call. Which providers can draw is a field on the registry descriptor (`imageGeneration`). `AIProvider` was deliberately not widened: text and image are different contracts.
 
 **Why the registry lives in `config`, not `ai`.** `PROVIDER_REGISTRY` is in `config/ai-providers.ts` because `ai` already imports `config`; a registry under `ai` that `config` had to read to generate its settings UI would close an import cycle. Consumers include the generated Settings sections, the workspace export blocklist, and the factory-reset keep-list — the last two derive their API-key lists from it so a new provider cannot leak a key into an exported workspace. Canonical doc: [AI provider architecture](ai-provider-architecture.md).
 
@@ -506,11 +512,11 @@ A flow is a UI module that calls two or more features in a fixed order on behalf
 
 | Panel | Purpose |
 |-------|---------|
-| `chat-panel/` | Chat, notes, tutorial timeline, AI controls ⚠️ |
+| `chat-panel/` | Chat, notes, tutorial timeline, AI controls ⚠️. Notes: `chat-note-editor.ts` (editing, save), `note-attachment-zone.ts` (the Image group: upload, search, generate), `generate-menu.ts`, `image-settings-dialog.ts`, `note-image-generation.ts` (a picture drawn for a saved note); `image-lightbox.ts` (the viewer) |
 | `suggestion-panel.ts` | AI-suggested nodes shelf |
 | `path-panel.ts` | Navigation breadcrumbs (window arithmetic in `breadcrumb-window.ts`) |
 
-⚠️ **Technical debt:** `chat-panel/chat-note-editor.ts` writes notes directly to ChatStore. This should eventually move behind a feature/service facade.
+⚠️ **Technical debt:** `chat-panel/chat-note-editor.ts` and `note-image-generation.ts` write notes directly to ChatStore. This should eventually move behind a feature/service facade.
 
 #### Keyboard Handler
 

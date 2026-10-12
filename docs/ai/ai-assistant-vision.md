@@ -172,7 +172,7 @@ src/ai/
 ├── chat-session.ts           # One conversation per node; builds context, sends calls
 ├── context-builder.ts        # Fills the system prompt's data record from graph and scene state
 ├── prompts.ts                # Renders the prompt files; quick-action table
-├── prompts/                  # The prompt text: seven Markdown files, the only copy
+├── prompts/                  # The prompt text: eight Markdown files, the only copy
 ├── relationship-slot.ts      # Edge types → menu choices, constraint records, stamping
 ├── edge-type-resolution.ts   # The model's words → edge type id and direction
 ├── shelf/                    # Workspace-wide shelf: store, orchestration, placement
@@ -181,7 +181,8 @@ src/ai/
 ├── latex-sanitizer.ts        # Repairs LaTeX damaged by JSON escaping
 ├── providers/                # Vendor adapters, resolution, timeouts, reply parsing
 ├── node-image/               # SVG pictogram generation (own document set)
-└── image-search/             # Wikimedia image retrieval into chat
+├── image-search/             # Wikimedia image retrieval into notes
+└── image-generation/         # Raster image generation into notes (chat-image-generation.md)
 
 src/storage/chat-store.ts     # IndexedDB conversations
 

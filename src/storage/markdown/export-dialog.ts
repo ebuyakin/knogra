@@ -64,7 +64,7 @@ export function showExportSectionsDialog(omittedImages: number): Promise<Documen
       <div id="ed-sections" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;"></div>
       ${omittedImages > 0 ? `
       <p style="margin:0 0 20px; color:#d29922; line-height:1.5;">
-        ${omittedImages} uploaded ${omittedImages === 1 ? 'image is' : 'images are'} left out — only images
+        ${omittedImages} uploaded or generated ${omittedImages === 1 ? 'image is' : 'images are'} left out — only images
         with a source URL can be written as links. They stay in the workspace file.
       </p>` : ''}
       <div style="display:flex; justify-content:flex-end; gap:8px;">
