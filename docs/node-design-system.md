@@ -1,7 +1,7 @@
 # Node Design System
 
 > **Status:** Current  
-> **Last reviewed:** 2026-08-16  
+> **Last reviewed:** 2026-10-15 (Layer 1: the face string's cost in Cytoscape's style hash)  
 > **Authority:** Canonical source for built-in node designs and node-level visual parameters.  
 > **Related:** [Documentation map](README.md), [Theme architecture](theme-architecture.md), [Node SVG images](nodes-svg-images.md), [Central node styling refactor](central-node-styling-refactor.md)
 
@@ -189,6 +189,30 @@ TypeScript functions that generate SVG markup and return Cytoscape style objects
 - Receives `(nodeData, params, theme)`
 - Builds SVG using theme colors + per-node overrides from params
 - Returns `CytoscapeNodeStyle` with `background-image`, dimensions, shape, border
+
+#### The face string and what it costs
+
+Every design returns its face as `background-image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)`, so the whole SVG, percent-encoded, is a property value in the element's style.
+A plain face is a few KB; an equation face, MathJax output included, is tens of KB.
+
+Cytoscape hashes an element's style whenever that style changes: `updateStyleHints` (cytoscape.cjs.js) walks every style property and hashes its string value character by character, the face string included.
+A rule change, a class change and any `ele.style()` bypass run it, including the bypasses Cytoscape's own `animate` makes.
+A position change does not.
+Opacity and position also leave the node's texture cache alone (its key excludes them), so a fade or a move re-rasterises nothing: the hash is the whole cost.
+
+The cost is per node per frame and proportional to the face's size: measured 2026-10-14 (`utils/diagnostics/frame-monitor.ts`), roughly 0.15 ms for a plain face and 0.7 ms for an equation face, so a tween that fades a few dozen equation faces at once cannot keep 60 Hz.
+Normal-mode transitions never animate that many equation faces together; the map's marker tween does (map-view.md §8), which is where the cost was found.
+
+The remedy, built 2026-10-15, is to give Cytoscape a short URL for the same image: a blob URL.
+
+    what      `URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))`: about 60 characters whatever the SVG's size, loaded by the renderer exactly as a data URL is
+    where     the map only (`features/map-view/face-url.ts`). The map copies each node's generated style into its own stylesheet (`features/map-view/render.ts`, `ensureBaseStyles`), and that copy is the one place the conversion happens: the data URL goes in, the blob URL comes out, and every box rule on the map carries the blob URL
+    when      once per node per map, at the moment its base style is generated, before layout
+    storage   a module-level cache in the map feature, keyed by the data URL text, holding the blob URL and an Image loading it, so that the browser has the image before Cytoscape asks (its first frame draws a box bare until the box's image is complete). The Image is loaded with `crossOrigin = 'anonymous'`, the mode Cytoscape uses for every non-data URL: the browser's memory cache keys on the request mode as well as the URL, and a preload in another mode is a miss, which showed as a one-frame flash of bare landmarks at the swap on a cold enter (2026-10-15). A face already seen gets its existing URL. The cache lives for the page session and is never revoked: a blob URL holds its Blob until revoked, and the map is rebuilt on every enter and re-focus, so without the cache each visit would mint a new Blob per box. The bound is the number of distinct faces the session has mapped, each the size of its SVG
+    untouched the designs still return data URLs, and every other consumer still reads them: the normal-mode stylesheet, the quiz mask (which regenerates a face from the design and bypasses it onto the box), the shelf preview, the theme preview, the screenshot and the snapshot
+
+If normal mode ever animates enough equation faces to pay the same cost, the conversion moves down into the designs and the map's cache goes; the consumers above would then receive blob URLs, and each has been checked to accept any URL.
+Declined on 2026-10-15: fading on fewer frames (a stepped fade, each step as slow as a frame is now) and not fading the markers at all (a design choice that remains available on top of the remedy, not a substitute for it).
 
 ### Layer 2: Design Registry
 

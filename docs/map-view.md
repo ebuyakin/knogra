@@ -499,6 +499,7 @@ Costs accepted: two stylesheets built from the same generator, so drift is possi
       map-core-scene.ts    pure: map tree + layout → the map core scene, the Scene object the transition feature transitions to and from (§8)
       geometry.ts          pure: map tree + bearings + lengths + scales → positions
       render.ts            builds map elements and their styles for the map instance; every element carries a kind, box, line or twin link, and geometry, drag and re-focus act on boxes and lines only
+      face-url.ts          a blob URL per distinct face, cached for the session, in place of the design's data URL in the map's stylesheet (node-design-system.md, Layer 1)
       interaction.ts       live drag → provisional bearing and length, re-derive; release → persist; click → re-focus; scale keys
       refocus-animator.ts  the re-focus animation (I7), map-local
       history.ts           back and forward over focuses
@@ -638,6 +639,8 @@ It worked, and left the twins' second boxes arriving on the map after the transi
 Taking the markers out of the transition feature's picture made the option unnecessary, so it was removed rather than kept.
 
 The cost that remains is the one the transition feature always pays: shared nodes whose scale changes tween their size and re-rasterise each frame, and on a map-to-scene transition that is most of them; to be measured on an equation-heavy map before any shortcut is taken.
+The markers' tween has a cost of its own, found 2026-10-14 on an equation-heavy map: each per-frame opacity bypass makes Cytoscape rehash the box's whole style, face string included, and a few dozen equation faces fading together cannot keep 60 Hz.
+The mechanism and the remedy, blob URLs for the faces in the map's stylesheet, are in node-design-system.md, Layer 1, "The face string and what it costs".
 
 This is what makes the map an intermediary between two arbitrary study scenes of different nodes: scene X to map of X, navigate to Y under the guarantee, map of Y to scene Y.
 

@@ -18,6 +18,7 @@ import type { Core, ElementDefinition } from 'cytoscape';
 import type { Edge, EdgeId, EdgeType, Node, NodeId } from '../../core/main-types';
 import { StyleGenerator } from '../../styles/style-generator';
 import { resolveDefaultDesign } from './default-design';
+import { blobUrlForFace } from './face-url';
 import type { MapLayout } from './geometry';
 import type { Address, LineKey, MapTree } from './map-tree';
 
@@ -258,7 +259,12 @@ function readStylesheet(cy: Core): StyleRule[] {
   return (cy.style() as unknown as { json(): StyleRule[] }).json();
 }
 
-/** One style per node, generated once; twins share it. Called before layout, which needs the sizes. */
+/**
+ * One style per node, generated once; twins share it. Called before layout,
+ * which needs the sizes. The face goes in as a blob URL, not the design's
+ * data URL (face-url.ts): this copy is the one place a face enters the map's
+ * stylesheet, so the conversion here reaches every box rule.
+ */
 export async function ensureBaseStyles(
   { tree, nodeById, themeId }: Pick<MapRenderInput, 'tree' | 'nodeById' | 'themeId'>,
   baseStyles: Map<NodeId, BoxBaseStyle>
@@ -267,8 +273,10 @@ export async function ensureBaseStyles(
     if (baseStyles.has(box.nodeId)) continue;
     const node = nodeById.get(box.nodeId);
     if (!node) continue;
-    const style = (await StyleGenerator.generateNodeStyle(node, resolveDefaultDesign(node), themeId)) as BoxBaseStyle;
-    baseStyles.set(box.nodeId, style);
+    const style = (await StyleGenerator.generateNodeStyle(node, resolveDefaultDesign(node), themeId)) as Record<string, unknown>;
+    const face = style['background-image'];
+    const withFaceUrl = typeof face === 'string' ? { ...style, 'background-image': blobUrlForFace(face) } : style;
+    baseStyles.set(box.nodeId, withFaceUrl as BoxBaseStyle);
   }
 }
 
