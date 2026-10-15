@@ -190,6 +190,9 @@ TypeScript functions that generate SVG markup and return Cytoscape style objects
 - Builds SVG using theme colors + per-node overrides from params
 - Returns `CytoscapeNodeStyle` with `background-image`, dimensions, shape, border
 
+The equation designs get their TeX compiled by `mathjax-equation.ts`, which caches MathJax's output per formula for the page session and colours a clone per face (since 2026-10-15; before, each design recompiled on every face generation, and a map of thirty equation nodes spent ~100 ms in MathJax on every enter).
+Compile failures are not cached, so a formula MathJax rejected is retried the next time it is asked for.
+
 #### The face string and what it costs
 
 Every design returns its face as `background-image: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)`, so the whole SVG, percent-encoded, is a property value in the element's style.
@@ -266,6 +269,7 @@ Each scene stores per-node: position, scale, designId, designParams.
 src/styles/designs/
   design-registry.ts          # Design catalog and dispatcher
   shadow-utils.ts             # Shadow config + SVG filter builder (shared)
+  mathjax-equation.ts         # TeX → SVG via MathJax, compiled output cached per session (shared by the equation designs)
   default-node.ts             # Default text card design
   circle-node.ts              # Circle design
   rectangle-node.ts           # Rectangle design

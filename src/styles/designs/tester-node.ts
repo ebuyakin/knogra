@@ -8,6 +8,7 @@ import type { Node } from '../../core/main-types';
 import type { ColorTheme, CytoscapeNodeStyle } from '../../core/style-types'
 import type { ColorOverrides, VisualEffects, GradientConfig, AreaColors } from '../../core/design-types'
 import { getShadowPadding, buildShadowFilter } from './shadow-utils'
+import { renderMathJaxEquation } from './mathjax-equation'
 
 export interface TesterNodeParams {
   topHeight?: number;           // Height of title section (default: 30)
@@ -126,98 +127,6 @@ function buildEffectsFilter(
     def: `<filter id="${id}">${filters.join('')}</filter>`,
     filter: `filter="url(#${id})"`
   };
-}
-
-/**
- * Render equation using MathJax
- * Returns equation SVG content and dimensions
- */
-async function renderMathJaxEquation(
-  equation: string,
-  textColor: string
-): Promise<{
-  svgContent: string;
-  width: number;
-  height: number;
-  scale: number;
-  vbMinX: number;
-  vbMinY: number;
-  vbWidth: number;
-  vbHeight: number;
-}> {
-  if (!window.MathJax?.tex2svgPromise || !equation) {
-    // Fallback for missing MathJax or no equation
-    const width = Math.max(equation.length * 8, 20);
-    const height = 16;
-    return {
-      svgContent: equation ? `<text text-anchor="middle" fill="${textColor}" font-size="14">${equation}</text>` : '',
-      width,
-      height,
-      scale: 1,
-      vbMinX: 0,
-      vbMinY: 0,
-      vbWidth: width,
-      vbHeight: height,
-    };
-  }
-
-  try {
-    const mathNode = await window.MathJax.tex2svgPromise(equation, { display: true });
-    const mathSvg = mathNode.querySelector('svg');
-    
-    if (!mathSvg) {
-      throw new Error('No SVG element in MathJax output');
-    }
-    
-    // Get dimensions from viewBox
-    const viewBox = mathSvg.getAttribute('viewBox');
-    if (!viewBox) {
-      throw new Error('No viewBox on MathJax SVG');
-    }
-    
-    const [vbMinX, vbMinY, vbWidth, vbHeight] = viewBox.split(' ').map(Number);
-    
-    // MathJax viewBox is in arbitrary units, convert to pixels
-    // The width/height attributes give us the actual size in ex units
-    const widthAttr = mathSvg.getAttribute('width');
-    const heightAttr = mathSvg.getAttribute('height');
-    
-    // Parse ex units (1ex ≈ 8px)
-    const exToPx = 8;
-    const width = parseFloat(widthAttr || '10') * exToPx;
-    const height = parseFloat(heightAttr || '2') * exToPx;
-    
-    // Calculate scale: viewBox size → actual pixel size
-    const scale = width / vbWidth;
-    
-    // Style equation text
-    mathSvg.querySelectorAll('g').forEach((g: SVGElement) => 
-      g.setAttribute('fill', textColor)
-    );
-    
-    return {
-      svgContent: mathSvg.innerHTML,
-      width,
-      height,
-      scale,
-      vbMinX,
-      vbMinY,
-      vbWidth,
-      vbHeight,
-    };
-  } catch (error) {
-    console.error('MathJax rendering error:', error);
-    return {
-      svgContent: `<text text-anchor="middle" fill="${textColor}" font-size="14">Error</text>`,
-      width: 100,
-      height: 20,
-      scale: 1,
-      vbMinX: 0,
-      vbMinY: 0,
-      vbWidth: 100,
-      vbHeight: 20,
-    };
-  }
 }
 
 /**
