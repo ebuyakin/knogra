@@ -17,7 +17,7 @@
 
 import type { Core } from 'cytoscape';
 import type { NodeId, EdgeId, Scene } from '../../../core/main-types';
-import type { TransitionElements, InstanceView } from '../element-classification-utils';
+import type { InstanceView } from '../element-classification-utils';
 import type { BackgroundRenderer } from '../../../background/background-renderer';
 import type { ArrivalAnimator, DepartureAnimator, MorphingAnimator, Position } from './animators';
 import type { TransitionRecipe } from './recipe';
@@ -142,7 +142,8 @@ export class SceneToSceneOrchestrator {
 
     // Phase 3
     await this.#arrival(recipe).run({
-      ...this.#arrivingAfterMorphing(elements, targetScene),
+      nodes: elements.arrivingNodes,
+      edges: elements.arrivingEdges,
       targetScene,
       targetPositions,
       viewportCenter,
@@ -196,29 +197,6 @@ export class SceneToSceneOrchestrator {
     return animator;
   }
 
-  /**
-   * The coupling between morphing and arrival (animators.ts): a new central
-   * that is arriving is brought in by the morphing phase, so arrival gets the
-   * other arriving nodes, and the arriving edges minus those between that
-   * central and shared nodes, which morphing faded in with it.
-   */
-  #arrivingAfterMorphing(elements: TransitionElements, targetScene: Scene): { nodes: NodeId[]; edges: EdgeId[] } {
-    const centralId = targetScene.centralNodeId;
-    if (!elements.arrivingNodes.includes(centralId)) {
-      return { nodes: elements.arrivingNodes, edges: elements.arrivingEdges };
-    }
-    const sharedSet = new Set(elements.sharedNodes);
-    const edges = elements.arrivingEdges.filter(edgeId => {
-      const edge = graphStore.edges.find(e => e.id === edgeId);
-      if (!edge) return true;
-      const centralToShared =
-        (edge.sourceId === centralId && sharedSet.has(edge.targetId)) ||
-        (edge.targetId === centralId && sharedSet.has(edge.sourceId));
-      return !centralToShared;
-    });
-    return { nodes: elements.arrivingNodes.filter(id => id !== centralId), edges };
-  }
-
   // ==========================================================================
   // CLASSIFICATION SUPPORT
   // ==========================================================================
@@ -263,7 +241,9 @@ export class SceneToSceneOrchestrator {
   /**
    * Update central node styling via data flag toggle. Cytoscape re-evaluates
    * selectors automatically when data changes; the node[?centralNode] rule in
-   * the stylesheet handles the visual update.
+   * the stylesheet handles the visual update. A new central not in the
+   * instance is arriving (an MTS transition, map-view.md §8) and is added
+   * with the flag by the arrival phase (arrival-elements.ts).
    */
   #swapCentralFlag(oldCentralId: NodeId, newCentralId: NodeId): void {
     const oldNode = this.#cy.getElementById(oldCentralId);
@@ -276,8 +256,8 @@ export class SceneToSceneOrchestrator {
     if (newNode.length > 0) {
       newNode.data('centralNode', 1);
       if (isDebug('d_transition')) console.log(`[d_transition] Set centralNode flag on ${newCentralId}`);
-    } else {
-      console.warn(`[swapCentralFlag] New central node ${newCentralId} not found in Cytoscape`);
+    } else if (isDebug('d_transition')) {
+      console.log(`[d_transition] New central ${newCentralId} is arriving; flagged on arrival`);
     }
   }
 

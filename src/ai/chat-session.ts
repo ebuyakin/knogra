@@ -362,18 +362,21 @@ export class ChatSession {
     // the focus; the scene id stays the scene underneath, because the context
     // is still built from it (docs/map-view.md §7.5). Leaving restores what was
     // loaded before entering, unless a scene change has since replaced it.
+    // A node already loaded is not reloaded: on entering, the focus is the
+    // entered scene's central, and rebuilding the panel for it (MathJax over
+    // a long history) was pure waste.
     eventBus.on('mapViewChanged', ({ active, focusNodeId }) => {
       const sceneId = this.#currentSceneId;
       if (!sceneId) return;
       if (active && focusNodeId) {
         if (!this.#beforeMap && this.#currentNodeId) this.#beforeMap = { nodeId: this.#currentNodeId, sceneId };
-        this.loadForNode(focusNodeId, sceneId);
+        if (focusNodeId !== this.#currentNodeId) this.loadForNode(focusNodeId, sceneId);
         return;
       }
       if (!active && this.#beforeMap) {
         const { nodeId, sceneId: previousSceneId } = this.#beforeMap;
         this.#beforeMap = null;
-        this.loadForNode(nodeId, previousSceneId);
+        if (nodeId !== this.#currentNodeId) this.loadForNode(nodeId, previousSceneId);
       }
     });
   }

@@ -4,7 +4,7 @@
  * Which scene a navigation lands on: the one whose central node is the
  * target, or a new one when the node has none. The policy is here (View mode
  * never creates a scene); the drafts are pure functions below, and the one
- * the engine uses builds the new scene from the scene one came from,
+ * the transition feature uses builds the new scene from the scene one came from,
  * preserving each neighbour's offset from the target (scene-transitions.md
  * §4.3). The map view supplies its own draft (map-view.md §8).
  */
@@ -25,8 +25,8 @@ export function findSceneByCentral(centralNodeId: NodeId): Scene | null {
 
 /**
  * The scene whose central node is `nodeId`, or in Edit mode the draft
- * persisted and returned. The id is the engine's to assign, so the draft
- * receives it: a caller outside the engine (the map view) never learns the
+ * persisted and returned. The id is the transition feature's to assign, so the draft
+ * receives it: a caller outside the feature (the map view) never learns the
  * format. View mode cannot create a scene; the caller decides whether that is
  * a refusal or an error.
  */
@@ -44,7 +44,7 @@ export function sceneIdFor(nodeId: NodeId): SceneId {
   return generateSceneId(nodeId, graphStore.nodes.find(n => n.id === nodeId)?.title ?? 'untitled');
 }
 
-/** The engine's draft: the target at the viewport centre, its direct neighbours at their offsets from it in the current scene. */
+/** The transition feature's own draft: the target at the viewport centre, its direct neighbours at their offsets from it in the current scene. */
 export function draftFromCurrent(targetNodeId: NodeId, sceneId: SceneId, currentScene: Scene, viewportCenter: Position): Scene {
   const connected = findDirectlyConnected(targetNodeId, graphStore.edges);
   const edgeEndpoints = new Map(graphStore.edges.map(edge => [edge.id, [edge.sourceId, edge.targetId] as [NodeId, NodeId]]));

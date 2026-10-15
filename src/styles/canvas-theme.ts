@@ -3,7 +3,7 @@
  *
  * The one thing it does is paint a theme's canvas background colour and
  * vignette onto a Cytoscape container, with or without a CSS transition. Used
- * by the scene engine for every open (instant) and transition (crossfaded over
+ * by the transition feature for every open (instant) and transition (crossfaded over
  * the morphing phase), and by the map view for its own surface, so the two
  * canvases carry the same paint. The background image is a different thing
  * and lives in the background layer; this is the colour under it.

@@ -1,18 +1,18 @@
 /**
- * Map scene
+ * Map core scene
  *
- * The map as a Scene object: the focus and the landmarks with their lines,
- * every node in its default design at its box's rendered scale, the map's
- * base frame as viewport with the focus at the focal point, no fold state
- * (docs/map-view.md §8). This skeleton is what the map and a study scene have
- * in common and what carries the visual continuity between them; markers
- * exist only on the map and are the map's to add and remove around it.
+ * The map core as a Scene object: the focus and the landmarks with their
+ * lines, every node in its default design at its box's rendered scale, the
+ * map's base frame as viewport with the focus at the focal point, no fold
+ * state (docs/map-view.md §2, §8). This skeleton is what the map and a study
+ * scene have in common and what carries the visual continuity between them;
+ * markers exist only on the map and are the map's to add and remove around it.
  *
- * Under its own id, `map:<focus>`, it is the map's scene, the transient
- * picture the engine transitions to and from in a handoff. Under an id the
- * engine assigns it is the study scene a focus without one gets when the map
- * is left for it, and what a study scene is reset to. Pure: plain data in, a
- * plain object out.
+ * Under its own id, `map:<focus>`, it is the map core scene, the transient
+ * picture the transition feature transitions to (STM) and from (MTS) in a
+ * handoff. Under an id the transition feature assigns it is the study scene a
+ * focus without one gets when the map is left for it, and what a study scene
+ * is reset to. Pure: plain data in, a plain object out.
  */
 
 import type { Edge, EdgeId, Node, NodeId, Scene, SceneId, ThemeId } from '../../core/main-types';
@@ -29,13 +29,13 @@ export interface MapPicture {
   themeId: ThemeId;
 }
 
-/** The id of the transient map's scene; `map:` keeps it apart from the engine's `scene-...` ids. */
-export function mapSceneId(focusNodeId: NodeId): SceneId {
+/** The id of the transient map core scene; `map:` keeps it apart from the transition feature's `scene-...` ids. */
+export function mapCoreSceneId(focusNodeId: NodeId): SceneId {
   return `map:${focusNodeId}`;
 }
 
-/** The focus and the landmarks as a scene: the map's scene under its own id, a study scene under the engine's. */
-export function mapSceneOf(picture: MapPicture, zoom: number, id: SceneId = mapSceneId(picture.tree.focusNodeId)): Scene {
+/** The map core as a scene: the map core scene under its own id, a study scene under one the transition feature assigns. */
+export function mapCoreSceneOf(picture: MapPicture, zoom: number, id: SceneId = mapCoreSceneId(picture.tree.focusNodeId)): Scene {
   const boxes = picture.tree.boxes.filter(box => box.depth <= 1);
   return buildScene(picture, boxes, id, zoom);
 }
@@ -53,7 +53,7 @@ function buildScene({ tree, layout, nodeById, edgeById, themeId }: MapPicture, b
     };
   }
 
-  // The lines of the chosen boxes and no other edge: the engine's picture must be the map's at the swap.
+  // The lines of the chosen boxes and no other edge: the scene canvas's picture must be the map's at the swap.
   const addresses = new Set(boxes.map(box => box.address));
   const edges: Scene['edges'] = {};
   for (const line of tree.lines) {

@@ -24,6 +24,8 @@
 
 import type { Core, NodeSingular } from 'cytoscape';
 import type { NodeId } from '../../core/main-types';
+import { isDebug } from '../../config/debug-flags';
+import { describeFrames, monitorFrames } from '../../utils/diagnostics/frame-monitor';
 import type { MapLayout, Position } from './geometry';
 import { linesOfBoxes, type Address, type LineKey, type MapTree } from './map-tree';
 import { lineWeightStyle, scaledSize, type BoxBaseStyle, type LineWeight, type MapElementIds } from './render';
@@ -240,7 +242,7 @@ export function settle(cy: Core, plan: RefocusPlan, newLayout: MapLayout, zoom: 
 // MARKERS IN THE HANDOFF
 // ============================================================================
 
-/** A box the engine's picture does not show, and the box it hangs from. In a handoff that is every marker (docs/map-view.md §8). */
+/** A box outside the map core, and the box it hangs from. In a handoff that is every marker (docs/map-view.md §8). */
 export interface StowedBox {
   address: Address;
   parentAddress: Address;
@@ -248,8 +250,8 @@ export interface StowedBox {
 
 /**
  * Stow boxes: on their parent box, invisible, beneath it, their lines
- * invisible. The map taken over from the engine then shows exactly the map's
- * scene (docs/map-view.md §8 step 4), until `slideStowed` brings them out.
+ * invisible. The map taken over at the swap then shows exactly the map core
+ * (docs/map-view.md §8 step 4), until `slideStowed` brings them out.
  */
 export function stowBoxes(cy: Core, newTree: MapTree, newLayout: MapLayout, ids: MapElementIds, boxes: StowedBox[]): void {
   cy.startBatch();
@@ -266,8 +268,8 @@ export function stowBoxes(cy: Core, newTree: MapTree, newLayout: MapLayout, ids:
 
 /**
  * Stowed boxes grow out of their parent box to their own places, fading in
- * (`out`, after the engine has transitioned to the map's scene), or shrink
- * back into it and fade (`in`, before the engine takes the picture back);
+ * (`out`, after the STM transition and the swap), or shrink back into it and
+ * fade (`in`, before the swap back and the MTS transition);
  * their lines with them. One tween for all of them: the re-focus's arriving
  * and departing moves, for the handoff.
  */
@@ -389,6 +391,8 @@ function runTween(
 
   return new Promise(resolve => {
     const start = performance.now();
+    // Smoothness diagnostic: the gaps between this tween's frames.
+    const stopFrames = isDebug('d_scene') ? monitorFrames() : null;
     const frame = (now: number): void => {
       // The first frame's timestamp can precede `start`: rAF stamps the frame's beginning, which may be before the request was made. Clamped, or a cubic easing overshoots and opacity leaves [0, 1].
       const raw = duration > 0 ? Math.max(0, Math.min(1, (now - start) / duration)) : 1;
@@ -427,6 +431,7 @@ function runTween(
       }
       for (const line of lines) line.element.style(lineStyleAt(line, 1));
       cy.endBatch();
+      if (stopFrames) console.log(`[MapView] tween ${movers.length} movers, ${lines.length} lines, ${duration}ms: ${describeFrames(stopFrames())}`);
       resolve();
     };
     requestAnimationFrame(frame);

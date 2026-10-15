@@ -26,13 +26,11 @@ export class FeatureAPI {
   transition: Transition;
   path: Path;
   quiz: Quiz;
-  /** The map's own quiz: a separate session over the map instance, every node eligible (map-view.md §7.5). */
   mapQuiz: Quiz;
   autolayout: AutoLayout;
   arrange: Arrange;
   mapView: MapView;
 
-  /** `mapCy` is the map view's own instance; every other feature shares the scene's `cy`. */
   constructor(cy: Core, backgroundRenderer: BackgroundRenderer, mapCy: Core) {
     this.scene = new Scene(cy);
     this.sceneBackground = new SceneBackground(cy, backgroundRenderer);

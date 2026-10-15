@@ -278,7 +278,7 @@ Application settings and user preferences.
 
 **Canvas theme** (`canvas-theme.ts`)
 - Paints a theme's canvas colour and vignette onto a Cytoscape container, optionally crossfaded
-- The one paint routine for both surfaces: the scene engine on open and transition, the map view on its own surface (moved here from the transition feature on 2026-10-03)
+- The one paint routine for both surfaces: the transition feature on open and transition, the map view on its own surface (moved here from the transition feature on 2026-10-03)
 
 **Designs** (`styles/designs/`)
 - Built-in node renderers and design registry that converts node data, scene design parameters, and theme into Cytoscape node styles
@@ -503,8 +503,8 @@ A flow is a UI module that calls two or more features in a fixed order on behalf
 | File | Purpose |
 |------|---------|
 | `components/editor-openers.ts` | Open an editor, then apply its result: node content through Node, then style through Scene |
-| `map-handoff.ts` | The handoff: enter (scene to map), leave (map to the focus's study scene), back (map to the entered scene); the map feature and the transition engine in turn ([map-view.md §8](map-view.md)) |
-| `scene-reset.ts` | Reset a study scene to its map's skeleton: the map feature drafts it, the store takes it, the engine transitions into it ([map-view.md §8](map-view.md)) |
+| `map-handoff.ts` | The handoff: enter (scene to map), leave (map to the focus's study scene), back (map to the entered scene); the map feature and the transition feature in turn ([map-view.md §8](map-view.md)) |
+| `scene-reset.ts` | Reset a study scene to its map's skeleton: the map feature drafts it, the store takes it, the transition feature transitions into it ([map-view.md §8](map-view.md)) |
 
 #### Panels (`ui/panels/`)
 
@@ -546,7 +546,7 @@ invent a fourth mechanism.
 | **Transition input guard** | Prevent input from corrupting state mid-animation | *All* input, for the duration of one animation | `ui/transition-input-guard.ts` | UI | ~1 second |
 | **Shelf interaction guard** | Prevent commands from disrupting an in-flight AI-shelf animation | *All* input during Add/Remove-from-shelf execution (full block); shelf commands only during post-transition / AI-addition re-arrangement (shelf-only block) | `ui/shelf-interaction-guard.ts` | UI | ~sub-second (one shelf animation) |
 | **Path mode** | Linear guided traversal of a fixed scene sequence | Graph-initiated scene navigation; node/edge/scene **deletion** | `features/path/path.ts` | Features | Session, persisted in `knogra.state` |
-| **Map view** | The canvas is showing a map, not a scene | All scene-instance commands (their subject is not on screen); GraphSaver while the map's transient scene is the scene instance's current scene | `features/map-view/map-view.ts` | Features | Session, while the map is shown |
+| **Map mode** | The canvas is showing a map, not a scene (map-view.md §7.4) | All scene-instance commands (their subject is not on screen); GraphSaver while the map core scene is the scene instance's current scene | `features/map-view/map-view.ts` | Features | Session, while the map is shown |
 
 **Why they compose without negotiation:** each regime restricts for a *different reason*, and
 where two regimes touch the same capability the narrower one is a strict subset of the wider one.

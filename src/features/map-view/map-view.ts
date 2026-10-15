@@ -6,8 +6,8 @@
  * Cytoscape instance on its own surface (`#map`, created by main.ts like the
  * scene's), shown over the scene while active, so nothing wired to the scene
  * instance ever sees a map element (docs/map-view.md §7). This class owns
- * the map's side of the handoff (prepare, the map's scene, take over, the
- * twins' moves; §7.6, §8), hide, re-focusing, the adjustments, and the
+ * the map's side of the handoff (prepare, the map core scene, take over, the
+ * markers' moves; §7.6, §8), hide, re-focusing, the adjustments, and the
  * lookups other features need to be hosted on the map (§7.5); the map's
  * content comes from the feature-local modules. The sequence that enters and
  * leaves the map is the UI flow's, `ui/map-handoff.ts`, never this class's.
@@ -52,7 +52,7 @@ import { wireDragging, type DragRelease, type MapState } from './interaction';
 import { MarkerPreview } from './preview';
 import { MapHistory } from './history';
 import { arrive, depart, move, planRefocus, settle, slideStowed, staleLineIds, stowBoxes, type LineTween, type RefocusPlan, type StowedBox } from './refocus-animator';
-import { mapSceneOf, type MapPicture } from './map-scene';
+import { mapCoreSceneOf, type MapPicture } from './map-core-scene';
 
 /** `F` returns to the base frame with a short glide rather than a jump. */
 const REFRAME_DURATION_MS = 200;
@@ -264,19 +264,19 @@ export class MapView {
     return ownScene?.themeId ?? this.#enteredThemeId ?? getSetting('map.themeId');
   }
 
-  /** The prepared map, or else the shown one, as the map's scene: the focus and the landmarks, what the engine transitions to and from. */
-  mapScene(): Scene {
-    return mapSceneOf(this.#picture(), getSetting('map.baseZoom'));
+  /** The prepared map, or else the shown one, as the map core scene: what the transition feature transitions to and from. */
+  mapCoreScene(): Scene {
+    return mapCoreSceneOf(this.#picture(), getSetting('map.baseZoom'));
   }
 
-  /** The same skeleton as a study scene under the id the engine hands in: what a focus without a scene gets, and what a scene is reset to. */
+  /** The same skeleton as a study scene under the id the transition feature hands in: what a focus without a scene gets, and what a scene is reset to. */
   sceneDraft(id: SceneId): Scene {
-    return mapSceneOf(this.#picture(), getSetting('map.baseZoom'), id);
+    return mapCoreSceneOf(this.#picture(), getSetting('map.baseZoom'), id);
   }
 
   /**
    * Draw the prepared map and show the surface, every marker stowed invisible
-   * on its landmark, so the two canvases hold one picture: the map's scene.
+   * on its landmark, so the two canvases hold one picture: the map core scene.
    */
   takeOver(): void {
     const prepared = this.#prepared;
@@ -299,9 +299,9 @@ export class MapView {
   }
 
   /**
-   * The reverse, before leaving: back to the base frame the map's scene
+   * The reverse, before leaving: back to the base frame the map core scene
    * declares, any balloon collapsed, then every marker shrinks into its
-   * landmark. Afterwards the map shows exactly `mapScene()`.
+   * landmark. Afterwards the map shows exactly `mapCoreScene()`.
    */
   async convergeMarkers(): Promise<void> {
     const state = this.#state;
@@ -312,14 +312,14 @@ export class MapView {
     await slideStowed(this.#cy, state.tree, state.layout, state.ids, this.#markers(state), 'in', this.#duration('map.departDuration'));
   }
 
-  /** Every marker with the landmark it hangs from: the boxes that exist only on the map, around the skeleton the engine draws. */
+  /** Every marker with the landmark it hangs from: the boxes that exist only on the map, around the map core. */
   #markers(state: MapState): StowedBox[] {
     return state.tree.boxes
       .filter(box => box.depth === 2 && box.parentAddress !== null)
       .map(box => ({ address: box.address, parentAddress: box.parentAddress! }));
   }
 
-  /** What the map's scene is made from: the prepared map first, else the shown one at its live layout. */
+  /** What the map core scene is made from: the prepared map first, else the shown one at its live layout. */
   #picture(): MapPicture {
     if (this.#prepared) return this.#prepared.render;
     const state = this.#state;

@@ -3,7 +3,7 @@
  *
  * A flow, like the handoff's (architecture.md §3.8): the map feature gives the
  * skeleton the scene would be born with, the focus and its landmarks at their
- * map places in their default designs, and the engine transitions the scene
+ * map places in their default designs, and the transition feature transitions the scene
  * into it, so the reset is animated by the same machinery as any navigation:
  * what the skeleton lacks shrinks into the central, landmarks glide to the
  * ring. The scene keeps its identity and what is not layout: title,
@@ -37,7 +37,7 @@ export async function resetSceneToMap({ features, container }: SceneResetDeps): 
   if (!confirmed) return;
 
   // The last edit's save must land first: `suspend` discards a pending debounce, and a node the record never learnt of
-  // is invisible to the engine's classification, so it would survive the transition as a styleless stowaway.
+  // is invisible to the transition's classification, so it would survive the transition as a styleless stowaway.
   await graphSaver.forceSave();
   // And no save may land between writing the skeleton and showing it, or it would overwrite the record with the old arrangement.
   const suspension = graphSaver.suspend('scene-reset');
@@ -56,10 +56,10 @@ export async function resetSceneToMap({ features, container }: SceneResetDeps): 
       createdAt: scene.createdAt,
       updatedAt: new Date(),
     };
-    // Transition first, write after. The engine reads the current scene from the store by id, and the reset
+    // Transition first, write after. The transition feature reads the current scene from the store by id, and the reset
     // carries the same id: written first, it would be both ends of the transition, nothing would depart, and the
     // nodes the skeleton drops would stay on the canvas as stowaways. The path's history ignores a repeat of the
-    // same scene; the engine moves what differs between the stored record and the object it is given.
+    // same scene; the transition moves what differs between the stored record and the object it is given.
     await transition.transitionTo(reset, { recipe: { departure: 'shrink' } });
     await graphStore.updateScene(reset);
     if (isDebug('d_scene')) console.log(`[SceneReset] ${scene.id} reset to its map shape: ${Object.keys(reset.nodes).length} nodes`);

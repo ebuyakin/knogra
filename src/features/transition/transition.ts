@@ -28,6 +28,7 @@ import { draftFromCurrent, ensureScene, findSceneByCentral, sceneIdFor } from '.
 import { OpenCloseOrchestrator, type CloseMode, type OpenMode } from './opening-closing/open-close-orchestrator';
 import { SceneToSceneOrchestrator, type TransitionRequest } from './scene-to-scene/scene-to-scene-orchestrator';
 import { startTransition, type TransitionRecordHandle } from '../../utils/diagnostics/transition-buffer';
+import { describeFrames, monitorFrames } from '../../utils/diagnostics/frame-monitor';
 
 // ============================================================================
 // TYPES
@@ -117,6 +118,7 @@ export class Transition {
     }
 
     // Animated mode: the three-phase transition
+    await this.#flushPendingSave();
     const graphSaveSuspension = graphSaver.suspend('transition:goToSceneByNode');
     
     try {
@@ -242,14 +244,30 @@ export class Transition {
   }
 
   /**
-   * The three-phase transition from the current scene, stored or transient,
-   * to a given Scene object. A stored target is announced as any navigation
-   * is, sceneChanged and the path's scene:changed; a transient target is not,
-   * and becomes the transient current scene.
+   * The transition from the current scene, stored or transient, to a given
+   * Scene object, routed as `goToSceneFromPath` routes: the three phases when
+   * the target's central node is visible on the canvas, close and open
+   * otherwise (an MTS transition back to a scene the map was re-focused away
+   * from; an STM target always has its central shared). Always animated: the
+   * Fade setting is a normal-mode preference and the handoff does not honour
+   * it (map-view.md §8). A stored target is announced as any navigation is,
+   * sceneChanged and the path's scene:changed; a transient target is not, and
+   * becomes the transient current scene.
    */
   async transitionTo(scene: Scene, request?: TransitionRequest): Promise<void> {
     const stored = graphStore.scenes.some(s => s.id === scene.id);
-    if (isDebug('d_transition')) console.log(`[d_transition] transitionTo: ${scene.id}${stored ? '' : ' (transient)'}`);
+    const central = this.#cy.getElementById(scene.centralNodeId);
+    const centralVisible = central.length > 0 && central.visible();
+    if (isDebug('d_transition')) console.log(`[d_transition] transitionTo: ${scene.id}${stored ? '' : ' (transient)'}${centralVisible ? '' : ' (central absent: close and open)'}`);
+
+    if (!centralVisible) {
+      // Only a stored target can get here, so openScene's lookup holds; it announces sceneChanged itself.
+      await this.closeScene({ fade: false });
+      await this.openScene(scene.id, { fade: false });
+      this.#cy.emit('scene:changed', [scene.id]);
+      return;
+    }
+
     const record = { kind: 'toNode' as const, from: this.#current.id() ?? null, note: stored ? 'map handoff: to scene' : 'map handoff: to the map\'s scene' };
     await this.#run(record, { guard: true, suspend: 'transition:transitionTo' }, async rec => {
       const currentScene = this.#current.get();
@@ -314,8 +332,11 @@ export class Transition {
     body: (rec: TransitionRecordHandle) => Promise<T>
   ): Promise<T> {
     if (options.guard) eventBus.emit('transitionStart', undefined as void);
+    if (options.suspend) await this.#flushPendingSave();
     const suspension = options.suspend ? graphSaver.suspend(options.suspend) : null;
     const rec = startTransition(record);
+    // Smoothness diagnostic: the frame gaps over the whole guarded window.
+    const stopFrames = options.guard && isDebug('d_transition') ? monitorFrames() : null;
     try {
       return await body(rec);
     } catch (err) {
@@ -324,7 +345,22 @@ export class Transition {
     } finally {
       if (suspension) graphSaver.resume(suspension);
       if (options.guard) eventBus.emit('transitionEnd', undefined as void);
+      if (stopFrames) console.log(`[d_transition] frames during ${record.kind} (${record.note ?? ''}): ${describeFrames(stopFrames())}`);
     }
+  }
+
+  /**
+   * Land the save GraphSaver may still be holding before it is suspended:
+   * `suspend` discards a pending debounce, so an edit made within the debounce
+   * before a navigation would never reach the source scene's record, and the
+   * node would travel into the target scene's record as a stowaway (seen
+   * 2026-10-03). Not while the saver is suspended already, which in View mode
+   * it is by the regime: a flush there would write exploratory state.
+   */
+  async #flushPendingSave(): Promise<void> {
+    // No current scene (the first open) means nothing can be pending; the saver would only warn.
+    if (graphSaver.isSuspended() || this.#current.id() === undefined) return;
+    await graphSaver.forceSave();
   }
 
   // ==========================================================================

@@ -38,8 +38,11 @@ export function presentEdges(cy: Core, edgeIds: EdgeId[], arriving: Set<NodeId>,
 
 /**
  * Add every arriving node at the start position chosen for it, invisible, in
- * its scene design and scale, and give it its stylesheet rule. A node already
- * in the instance is a classification bug and is skipped with a warning.
+ * its scene design and scale, and give it its stylesheet rule. An arriving
+ * central (an MTS transition, map-view.md §8) carries the central flag from
+ * the start: the orchestrator's flag swap ran before morphing and found
+ * nothing to flag. A node already in the instance is a classification bug
+ * and is skipped with a warning.
  */
 export async function addArrivingNodes(
   cy: Core,
@@ -67,9 +70,10 @@ export async function addArrivingNodes(
     // position and mutates it as the node moves. A start position that is
     // another node's target (grow) would otherwise drag that target along.
     const start = startPositionOf(nodeId, target);
+    const central = nodeId === scene.centralNodeId ? { centralNode: 1 } : {};
     const element = cy.add({
       group: 'nodes',
-      data: { ...nodeData, id: nodeId, design: sceneNode.design, scale: sceneNode.scale },
+      data: { ...nodeData, id: nodeId, design: sceneNode.design, scale: sceneNode.scale, ...central },
       position: { x: start.x, y: start.y },
     });
     element.style('opacity', 0);

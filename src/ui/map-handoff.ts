@@ -2,14 +2,14 @@
  * Map handoff — the flow between a scene and the map view (UI: Helicopter
  * view), docs/map-view.md §7.6 and §8.
  *
- * The map feature and the transition engine never call each other; each
+ * The map feature and the transition feature never call each other; each
  * exposes primitives, and this module calls them in order on behalf of one
  * user action, written once for the menus and the keys (architecture.md §3.8,
- * Flows). The engine transitions the scene canvas to the map's scene, a
- * transient Scene object the map builds; the map then takes over on its own
- * surface at the same geometry. Leaving is the mirror.
+ * Flows). The transition feature transitions the scene canvas to the map core
+ * scene, a transient Scene object the map builds; the map then takes over on
+ * its own surface at the same geometry. Leaving is the mirror.
  *
- * While the map's scene is the engine's current scene, GraphSaver is
+ * While the map core scene is the transition feature's current scene, GraphSaver is
  * suspended: its first viewport event would insert a scene the store does not
  * have. The suspension is taken here before the transition in and released
  * after the transition out, once a stored scene is current again.
@@ -69,23 +69,25 @@ export class MapHandoff {
     if (!scene) return;
 
     this.#busy = true;
+    // The last edit's save must land before the suspension discards its debounce (the transition feature does the same in its bracket, but this suspension comes first).
+    if (!graphSaver.isSuspended()) await graphSaver.forceSave();
     const suspension = graphSaver.suspend('map-handoff');
     try {
-      // Steps 1 to 3: only reads until the transition; a failure here leaves the user on scene X, the engine's own handling.
+      // Steps 1 to 3: only reads until the transition; a failure here leaves the user on scene X, the transition feature's own handling.
       try {
         // The entered scene's theme is the map's fallback under `map.themeMode` 'scene' (map-view.md §5.6).
         await mapView.prepare(scene.centralNodeId, this.#surface(), { fallbackThemeId: scene.themeId });
         await waitForStep('[handoff] map prepared, nothing drawn');
-        // The engine moves the focus and the landmarks, new landmarks growing out of the focus; the markers are the map's, after the swap (map-view.md §8).
-        await transition.transitionTo(mapView.mapScene(), { recipe: { arrival: 'grow' } });
-        await waitForStep('[handoff] engine shows the map\'s scene; swap next');
+        // The STM transition moves the focus and the landmarks, new landmarks growing out of the focus; the markers are the map's, after the swap (map-view.md §8).
+        await transition.transitionTo(mapView.mapCoreScene(), { recipe: { arrival: 'grow' } });
+        await waitForStep('[handoff] scene canvas shows the map core scene; swap next');
       } catch (err) {
         console.error('[MapHandoff] Entering the map failed before the map was shown', err);
         mapView.hide();
         graphSaver.resume(suspension);
         return;
       }
-      // Steps 4 to 6: the map's scene is current from here, so the suspension is kept until a stored scene is current again.
+      // Steps 4 to 6: the map core scene is current from here, so the suspension is kept until a stored scene is current again.
       this.#enteredSceneId = scene.id;
       this.#suspension = suspension;
       mapView.takeOver();
@@ -137,24 +139,25 @@ export class MapHandoff {
 
   /**
    * Steps 1 to 4 of leaving (map-view.md §8): every marker shrinks into its
-   * landmark, the engine takes the skeleton the map leaves behind, and
-   * transitions from it to the target.
+   * landmark, the transition feature takes the map core the map leaves
+   * behind, and transitions from it to the target (MTS).
    */
   async #leaveTo(target: Scene, targetNodeId: NodeId): Promise<void> {
     const { mapView, transition } = this.#deps.features;
     this.#busy = true;
     try {
-      const behind = mapView.mapScene();
+      const behind = mapView.mapCoreScene();
       await mapView.convergeMarkers();
-      await waitForStep('[handoff] markers converged; map shows the map\'s scene');
+      await waitForStep('[handoff] markers converged; map shows the map core');
       await transition.openBehind(behind);
-      // Cytoscape paints on its own animation frame: hidden the same tick it was opened, the engine's canvas would show
+      // Cytoscape paints on its own animation frame: hidden the same tick it was opened, the scene canvas would show
       // one unpainted frame at the swap (seen as a flicker on leaving, 2026-10-04; gone with any pause here).
       await paintedFrame();
-      await waitForStep('[handoff] engine opened the map\'s scene behind the map');
+      await waitForStep('[handoff] map core scene opened behind the map');
       mapView.hide();
-      await waitForStep('[handoff] map hidden; engine canvas showing');
-      // Landmarks the target lacks fold into the focus, the mirror of growing out of it on the way in.
+      await waitForStep('[handoff] map hidden; scene canvas showing');
+      // Landmarks the target lacks fold into the focus, the mirror of growing out of it on the way in. A back to a
+      // scene whose central is not in the map core is routed to a close and open by the transition feature itself.
       await transition.transitionTo(target, { recipe: { departure: 'shrink' } });
       if (isDebug('d_scene')) console.log(`[MapHandoff] Left the map for ${target.id} (${targetNodeId})`);
     } finally {
@@ -166,8 +169,8 @@ export class MapHandoff {
 
   /**
    * Resume GraphSaver once a stored scene is current. If the transition out failed
-   * with the map's scene still current, the saver stays suspended until the
-   * engine next announces a scene, which any navigation from that canvas does.
+   * with the map core scene still current, the saver stays suspended until the
+   * transition feature next announces a scene, which any navigation from that canvas does.
    */
   #releaseSuspension(): void {
     const suspension = this.#suspension;

@@ -8,7 +8,7 @@
  * when the previous has landed, so a parent is in place when its children set
  * out; the arrival layer duration times each layer, and the stagger setting
  * is fly-in's, since a fixed stagger would launch children from a parent
- * still in flight. Edges fade in with their layer. On the map's scene this is
+ * still in flight. Edges fade in with their layer. In an STM transition this is
  * the re-focus's arriving move: landmarks out of the focus, markers out of
  * their landmarks (map-view.md §5.2, §8). The edge timing setting is fly-in's
  * too; here edges always ride with their layer.

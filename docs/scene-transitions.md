@@ -47,18 +47,20 @@
 
 | Term | Definition |
 |------|------------|
-| **Navigation** | The umbrella in prose for any move from one picture to another; never a code name. The kinds are the four rows below. |
-| **Transition** | Scene to scene when the target's central node is visible in the current scene: departure, morphing, arrival (§4.2). Never "morph" for the whole. |
-| **Close and open** | Scene to scene otherwise, and the fade variant (§4.1). |
-| **Re-focus** | Map to map, on the map's own instance (map-view.md §5.2). Close to a transition in shape, different code, so a different name. |
-| **Handoff** | Scene to map and back (map-view.md §8): enter, leave, back. A transition to or from the map's scene plus the map's own moves. |
+| **Navigation** | The umbrella in prose for any move from one picture to another; never a code name. The kinds are transition, re-focus and handoff. |
+| **Transition** | Any move between scenes on the scene canvas by the transition feature. Two kinds, the next two rows. Never "morph" for the whole. |
+| **Open-close (OC)** | Close the current scene, open the target (§4.1): when the target's central node is not visible in the current scene, and the fade variant. |
+| **Scene-to-scene (STS)** | Departure, morphing, arrival (§4.2): when the target's central node is visible in the current scene. STS proper between study scenes; STM when the target is the map core scene, MTS when the source is (map-view.md §8). |
+| **Map core scene** | The focus, the landmarks and their lines of a map as a Scene object, transient (map-view.md §2); what an STM or MTS transitions to or from. |
+| **Re-focus** | Map to map, on the map's own instance (map-view.md §5.2). Like an STS in shape, different code, so a different name. |
+| **Handoff** | Scene to map and back (map-view.md §8): enter, leave, back. An STM or MTS transition, the swap and the map's own moves. |
 | **Morphing** | Phase 2 of a transition: the shared nodes move, rescale and crossfade design. "Morph" is what a shared node does. |
 | **Shared node** | Visible in BOTH old and new scene. Morphs (moves, may crossfade design). |
 | **Departing node** | Visible in old scene, NOT included in new scene. Flies out. |
 | **Arriving node** | Included in new scene, NOT visible in old scene. Flies in. |
 | **Ghost element** | Temporary clone for crossfade. Carries old design fading out while real element assumes new design fading in. Named `ghost_{node|edge}_{originalId}_{timestamp}`. |
-| **Related scenes** | Target scene's central node is **visible** in current scene. Enables a transition. |
-| **Unrelated scenes** | Target scene's central node is absent or folded in current scene. Uses close→open. |
+| **Related scenes** | Target scene's central node is **visible** in current scene. Enables an STS. |
+| **Unrelated scenes** | Target scene's central node is absent or folded in current scene. Uses OC. |
 
 ### 1.4 Central Node Invariant
 
@@ -254,7 +256,7 @@ All viewport changes emit `viewport` event → **GraphSaver** persists `scene.vi
 
 ### 4.1 Entry Points
 
-Every entry point runs inside `Transition`'s bracket: `transitionStart` (the UI input guard listens), the GraphSaver suspension, the dev transition record (`utils/diagnostics/transition-buffer`), then `transitionEnd` and the record's failure in `finally`, so an exception never leaves input blocked. `openBehind` runs it without the input guard, since nothing visible happens; `goToSceneFromPath` records the path step and lets the calls inside guard themselves.
+Every entry point runs inside `Transition`'s bracket: `transitionStart` (the UI input guard listens), a flush of any save GraphSaver is still holding, the GraphSaver suspension, the dev transition record (`utils/diagnostics/transition-buffer`), then `transitionEnd` and the record's failure in `finally`, so an exception never leaves input blocked. The flush (2026-10-12) exists because `suspend` discards a pending debounce: without it an edit made within 500 ms before a navigation never reached the source scene's record, and the node, on the canvas but in no record, survived the transition as a stowaway and was saved into the target scene. The flush is skipped while the saver is already suspended, which in View mode it is by the regime. `openBehind` runs it without the input guard, since nothing visible happens; `goToSceneFromPath` records the path step and lets the calls inside guard themselves.
 
 Two regime guards refuse scene-initiated navigation: path mode (`pathModeChanged`) and the map view (`mapViewChanged`); both are subscriptions, never imports (architecture.md §3.10).
 
@@ -294,16 +296,14 @@ Closes current scene: `Transition` picks the mode, calls `OpenCloseOrchestrator.
 **The map handoff** (map-view.md §8), called by `ui/map-handoff.ts`:
 
 - **`Transition.openBehind(scene)`** — `open(scene, 'instant')` for a given Scene object, nothing announced; the object becomes current, transient when the store does not hold it
-- **`Transition.transitionTo(scene)`** — the transition from the current scene, stored or transient, to a given Scene object; a stored target is announced (`sceneChanged`, `scene:changed`), a transient one is not and becomes the transient current scene
-- **`Transition.ensureScene(nodeId, draft)`** — the scene whose central node is `nodeId`, or in Edit mode the draft persisted (§4.3); `draft` receives the id the engine assigns (`sceneIdFor`), so the caller never learns the id format
+- **`Transition.transitionTo(scene, request?)`** — the transition from the current scene, stored or transient, to a given Scene object, routed as `goToSceneFromPath` is: STS when the target's central is visible on the canvas, close and open otherwise (a back to a scene the map was re-focused away from; an STM target always has its central shared). Always animated: the Fade setting is a normal-mode preference and no handoff honours it. A stored target is announced (`sceneChanged`, `scene:changed`), a transient one is not and becomes the transient current scene
+- **`Transition.ensureScene(nodeId, draft)`** — the scene whose central node is `nodeId`, or in Edit mode the draft persisted (§4.3); `draft` receives the id the transition feature assigns (`sceneIdFor`), so the caller never learns the id format
 
 ### 4.2 The three-phase transition
 
-`SceneToSceneOrchestrator.transition(currentScene, targetScene, { isNewScene, recipe? })`, called by `Transition` when the target scene's central node is **visible** in the current scene (and by `transitionTo` for the map handoff). `Transition` resolves the target first (§4.3); the orchestrator takes both scenes as objects and returns a `TransitionReport` (what it classified, the zoom change) for the dev record. It never writes the current-scene scratch, never saves and never announces: `Transition` does those after `transition` returns, in that order (save the auto-created scene, make the target current, `sceneChanged`).
+`SceneToSceneOrchestrator.transition(currentScene, targetScene, { isNewScene, recipe? })`, called by `Transition` when the target scene's central node is **visible** in the current scene, from the handoff's `transitionTo` under the same rule. `Transition` resolves the target first (§4.3); the orchestrator takes both scenes as objects and returns a `TransitionReport` (what it classified, the zoom change) for the dev record. It never writes the current-scene scratch, never saves and never announces: `Transition` does those after `transition` returns, in that order (save the auto-created scene, make the target current, `sceneChanged`).
 
 **The recipe.** Which animator does each phase: `{ departure, morphing, arrival }`, three ids, plain data (`recipe.ts`). A caller may name any phase in its `TransitionRequest` (`transitionTo(scene, { recipe })`; the map handoff asks for `grow` on the way in and `shrink` on the way out); what it leaves out comes from the settings `transition.departureAnimator`, `transition.morphingAnimator`, `transition.arrivalAnimator`, the user's default recipe, shown as three select rows under Transitions; an id the registry does not know, a setting left by a removed animator, falls back to the built-in. The ids are persisted in settings and never renamed. The glue between the phases is the orchestrator's and belongs to no animator: classification, the central flag swap and the canvas theme crossfade before morphing, fold state, the invariant and the stylesheet reconciliation after arrival.
-
-**A coupling between phases, kept as glue:** the morphing animator brings in a new central that is arriving (stage 2.3.C), so the orchestrator removes it, and its edges to shared nodes, from the arrival context (`#arrivingAfterMorphing`). A second morphing animator would have to honour this or the glue would change.
 
 #### Phase 0: Preparation
 
@@ -366,11 +366,13 @@ Transforms shared elements from old state to new state. **All sub-stages run in 
 
 Introduces elements new to the scene. Contract: when `run` resolves, every arriving node and edge is in the instance, visible, at its target. Both animators add the nodes first, invisible at their start positions with their stylesheet rules (`arrival-elements.ts`), and leave edges whose endpoint is neither arriving nor in the instance to the fold handler.
 
+`Transition` routes every call so that the target's central is visible, so an arriving central does not occur; the orchestrator nevertheless handles one as an arriving node like any other: at distance 0 it is the first cascade layer, `addArrivingNodes` gives it the central flag (the flag swap before morphing finds nothing to flag), and under both animators it fades in at its place, having no parent and no ray. Until 2026-10-14 the orchestrator excluded an arriving central from arrival on the assumption that morphing brought it in, a stage the animators refactor had dropped, and `transitionTo` did not route; a back to a scene the map had been re-focused away from lost the central and its edges, which the invariant reported. Fixed on both sides: the exclusion removed, and `transitionTo` routed like `goToSceneFromPath` (§4.1).
+
 `'fly-in'` (`ArrivalFlyIn`, the default):
 1. **Node fly in**: arriving nodes fly from past the viewport edge, along the ray from the new central, to their targets, cascaded by BFS distance (closest first) with `arrivalLayerDuration` and `arrivalLayerStagger`
 2. **Edge fade in**: with the layer of the outermost arriving endpoint (`'parallel'` edge timing), or all after the nodes (`'after'`)
 
-`'grow'` (`ArrivalGrow`): each arriving node starts at the target position of its parent, the neighbour on its path back to the central, and slides to its own place fading in, edges fading with their layer; a node with no path grows out of the central; layers closest first, one after another, so a parent has landed when its children set out (a fixed stagger launched children from a parent still in flight). The stagger and edge-timing settings are fly-in's. On the map's scene: landmarks grow out of the focus (map-view.md §8).
+`'grow'` (`ArrivalGrow`): each arriving node starts at the target position of its parent, the neighbour on its path back to the central, and slides to its own place fading in, edges fading with their layer; a node with no path grows out of the central; layers closest first, one after another, so a parent has landed when its children set out (a fixed stagger launched children from a parent still in flight). The stagger and edge-timing settings are fly-in's. In an STM transition: landmarks grow out of the focus (map-view.md §8).
 
 #### Post-Phase: Fold State Application (`FoldStateHandler`)
 

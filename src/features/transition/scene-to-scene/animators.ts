@@ -42,9 +42,8 @@ export interface DepartureContext {
 
 /**
  * Phase 2. Contract: when `run` resolves, every shared node is at its target
- * position, scale and design, the viewport is the target's, and a new central
- * that was arriving has been brought in (the coupling with arrival the
- * orchestrator honours by excluding it from the arrival context).
+ * position, scale and design, and the viewport is the target's. Adds nothing:
+ * a new central not in the instance is an arriving node, arrival's.
  */
 export interface MorphingAnimator {
   readonly id: MorphingAnimatorId;
@@ -64,7 +63,9 @@ export interface MorphingContext {
 
 /**
  * Phase 3. Contract: when `run` resolves, every arriving node and edge is in
- * the instance, visible, at its target.
+ * the instance, visible, at its target. The new central may be among the
+ * arriving nodes (an MTS transition, map-view.md §8): at distance 0 it forms
+ * the first cascade layer, and `addArrivingNodes` gives it its central flag.
  */
 export interface ArrivalAnimator {
   readonly id: ArrivalAnimatorId;
@@ -72,9 +73,7 @@ export interface ArrivalAnimator {
 }
 
 export interface ArrivalContext {
-  /** Arriving nodes; a new central that morphing brought in is already excluded. */
   nodes: NodeId[];
-  /** Arriving edges; those between that central and shared nodes are already excluded. */
   edges: EdgeId[];
   targetScene: Scene;
   targetPositions: TargetPositions;

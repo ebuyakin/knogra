@@ -92,8 +92,9 @@ export class ArrivalFlyIn implements ArrivalAnimator {
     }
 
     const extent = this.#cy.extent();
-    await addArrivingNodes(this.#cy, nodeIds, scene, targetPositions, (_nodeId, target) =>
-      viewportEdgePoint(target, directionBetween(centralPosition, target), extent, OFFSCREEN_MARGIN)
+    // An arriving central has no ray to fly along; it fades in at its place and the others fly in toward it.
+    await addArrivingNodes(this.#cy, nodeIds, scene, targetPositions, (nodeId, target) =>
+      nodeId === scene.centralNodeId ? target : viewportEdgePoint(target, directionBetween(centralPosition, target), extent, OFFSCREEN_MARGIN)
     );
 
     const layerPromises: Promise<void>[] = [];
