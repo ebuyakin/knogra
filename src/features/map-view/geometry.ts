@@ -89,14 +89,17 @@ export interface MapGeometryParams {
   landmarkFloor: number;
   /** How far a landmark may be drawn from its stored direction, in degrees, to keep the ring readable; 0 draws stored directions exactly. */
   landmarkDeviation: number;
+  /** Clear space kept between a box and the surface's edge when a box is held inside, in drawn units (§3 Inside the surface). */
+  edgeMargin: number;
 }
 
 /**
  * What crowding decided, per landmark: how far it is drawn from its stored
  * direction, its scale, its fan's marker scale and its leaf's side
  * clearances, before the author's multipliers. Computed when a map is
- * presented and frozen for a drag, so that dragging one box never moves,
- * resizes or reshapes the others.
+ * presented or settled and kept through the author's scale and move keys,
+ * which change multipliers on top of it, so that a key never resizes or
+ * reshapes the boxes it was not pressed on.
  */
 export interface Derived {
   /** Degrees added to the stored direction when drawing, true frame (§3 Drawn directions). */
@@ -119,7 +122,7 @@ export interface SideClearances {
 export interface MapLayout {
   /** Drawn positions, the focus at the origin. */
   positions: Map<Address, Position>;
-  /** True lengths, what a record stores. */
+  /** True lengths as drawn: the record's or the leaf's, less what holding the box inside the surface took off. */
   lengths: Map<Address, number>;
   /** Rendered scales: derived times the author's multipliers. */
   scales: Map<Address, number>;
@@ -276,6 +279,8 @@ interface Placed {
   base: Size;
   /** True length of its line. */
   length: number;
+  /** Markers: the length the leaf gives, whether or not the author dragged one; the least a held-inside dragged length may shrink to. */
+  restLength: number;
   /** Derived scale before the author's multipliers. */
   derivedScale: number;
   /** Rendered scale. */
@@ -300,7 +305,8 @@ const NO_CLEARANCE: SideClearances = { before: 0, after: 0 };
  * its fan's scale and its leaf's side clearance; the fan's scale is lowered
  * further if its markers would not clear each other. Neither scale goes below
  * the floor. With `frozen`, the derived values are taken as given, which is
- * how a drag re-derives the map without resizing or reshaping anything.
+ * how the author's keys re-lay the map out without resizing or reshaping
+ * anything they were not pressed on.
  */
 export function layoutMapTree(
   tree: MapTree,
@@ -324,7 +330,7 @@ export function layoutMapTree(
     const base = baseSizes.get(box.nodeId) ?? { width: 0, height: 0 };
     if (box.parentAddress === null) {
       const scale = focusOverride?.scale ?? 1;
-      placed.set(box.address, { box, angle: 0, base, length: 0, derivedScale: 1, scale, sideClearances: NO_CLEARANCE });
+      placed.set(box.address, { box, angle: 0, base, length: 0, restLength: 0, derivedScale: 1, scale, sideClearances: NO_CLEARANCE });
       continue;
     }
     const line = lineByAddress.get(box.address)!;
@@ -332,7 +338,7 @@ export function layoutMapTree(
     if (!ends) throw new Error(`Map geometry: edge ${line.edgeId} has no bearing`);
     const angle = lineAngle(ends, line.reversed);
     const length = box.depth === 1 ? (overrides[box.address]?.length ?? ringRadius) : 0;
-    placed.set(box.address, { box, angle, base, length, derivedScale: 1, scale: 1, sideClearances: NO_CLEARANCE });
+    placed.set(box.address, { box, angle, base, length, restLength: 0, derivedScale: 1, scale: 1, sideClearances: NO_CLEARANCE });
   }
 
   const landmarks = [...placed.values()].filter(entry => entry.box.depth === 1).sort((left, right) => left.angle - right.angle);
@@ -378,6 +384,9 @@ export function layoutMapTree(
     }
   }
 
+  // Positions, parents before children. A marker whose length the author dragged is drawn no farther than keeps
+  // it inside the surface, and no nearer than the leaf (§3 Inside the surface); a marker the leaf placed goes
+  // where the leaf put it.
   const positions = new Map<Address, Position>();
   const lengths = new Map<Address, number>();
   const scales = new Map<Address, number>();
@@ -388,8 +397,27 @@ export function layoutMapTree(
       positions.set(box.address, { x: 0, y: 0 });
       continue;
     }
-    lengths.set(box.address, entry.length);
-    positions.set(box.address, offsetAlong(positions.get(box.parentAddress)!, entry.angle, entry.length, params.horizontalStretch));
+    const parent = positions.get(box.parentAddress)!;
+    const dragged = box.depth === 2 && overrides[box.address]?.length !== undefined;
+    // Holding inside may shorten a dragged length, but never below the leaf, and never lengthen it.
+    const held = dragged ? insideSurface(parent, entry.angle, entry.length, scaled(entry.base, entry.scale), params) : entry.length;
+    const length = dragged ? Math.min(entry.length, Math.max(entry.restLength, held)) : entry.length;
+    lengths.set(box.address, length);
+    positions.set(box.address, offsetAlong(parent, entry.angle, length, params.horizontalStretch));
+  }
+
+  // Every landmark is drawn no farther out than keeps it and its fan inside the surface (§3 Inside the surface):
+  // the overshoot past an edge, measured on the laid-out subtree, comes off its line, the fan keeping its shape.
+  for (const landmark of landmarks) {
+    const subtree = [landmark, ...(fans.get(landmark.box.address) ?? [])];
+    const { direction, drawnPerTrue } = drawnDirection(landmark.angle, params.horizontalStretch);
+    const pull = Math.min(overshootAlong(subtree, positions, direction, params), landmark.length * drawnPerTrue);
+    if (pull <= 0) continue;
+    lengths.set(landmark.box.address, landmark.length - pull / drawnPerTrue);
+    for (const entry of subtree) {
+      const position = positions.get(entry.box.address)!;
+      positions.set(entry.box.address, { x: position.x - direction.x * pull, y: position.y - direction.y * pull });
+    }
   }
 
   return { positions, lengths, scales, derived };
@@ -399,6 +427,47 @@ export function layoutMapTree(
 function offsetAlong(origin: Position, angleDegrees: number, length: number, horizontalStretch: number): Position {
   const radians = toRadians(angleDegrees);
   return { x: origin.x + Math.cos(radians) * length * horizontalStretch, y: origin.y + Math.sin(radians) * length };
+}
+
+/** The four directions a surface has edges in. */
+const EDGEWARD: Position[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+
+/**
+ * How far, in drawn units, boxes at their drawn positions and rendered sizes
+ * would have to move back along a unit `direction` for all of them to be
+ * inside the surface with the edge margin kept: for each edge the direction
+ * heads for, the farthest overshoot past it over the direction's component
+ * toward it. An edge the direction does not head for cannot be helped by
+ * moving back and is ignored; a box past it stays past it.
+ */
+function overshootAlong(boxes: Placed[], positions: Map<Address, Position>, direction: Position, params: MapGeometryParams): number {
+  let pull = 0;
+  for (const edgeward of EDGEWARD) {
+    const toward = direction.x * edgeward.x + direction.y * edgeward.y;
+    if (toward <= 0) continue;
+    const half = (edgeward.x !== 0 ? params.viewport.width / 2 : params.viewport.height / 2) - params.edgeMargin;
+    for (const entry of boxes) {
+      const position = positions.get(entry.box.address)!;
+      const reach = position.x * edgeward.x + position.y * edgeward.y + edgeDistance(scaled(entry.base, entry.scale), edgeward);
+      pull = Math.max(pull, (reach - half) / toward);
+    }
+  }
+  return pull;
+}
+
+/**
+ * A dragged marker's true length, at most what keeps its box inside the
+ * surface along its ray with the edge margin kept: per axis, the room from
+ * its parent to the edge the ray heads for less the box's half-extent, over
+ * the direction's component. The record keeps what the author dragged
+ * (§6.2); this screen draws what it can hold.
+ */
+function insideSurface(parent: Position, angleDegrees: number, length: number, size: Size, params: MapGeometryParams): number {
+  const { direction, drawnPerTrue } = drawnDirection(angleDegrees, params.horizontalStretch);
+  const margin = params.edgeMargin;
+  const roomX = direction.x !== 0 ? (Math.sign(direction.x) * ((params.viewport.width - size.width) / 2 - margin) - parent.x) / direction.x : Infinity;
+  const roomY = direction.y !== 0 ? (Math.sign(direction.y) * ((params.viewport.height - size.height) / 2 - margin) - parent.y) / direction.y : Infinity;
+  return Math.min(length, Math.max(0, Math.min(roomX, roomY)) / drawnPerTrue);
 }
 
 /**
@@ -535,7 +604,8 @@ function placeFan(landmark: Placed, fan: Placed[], fanScale: number, adjustments
   const markerSizes = fan.map(marker => scaled(marker.base, renderedScales.get(marker)!));
   const leaf = leafEllipse(landmark, markerSizes, overrides[landmark.box.address]?.leaf ?? 1, params);
   for (const marker of fan) {
-    marker.length = overrides[marker.box.address]?.length ?? leafLength(leaf, marker, renderedScales.get(marker)!, params.horizontalStretch);
+    marker.restLength = leafLength(leaf, marker, renderedScales.get(marker)!, params.horizontalStretch);
+    marker.length = overrides[marker.box.address]?.length ?? marker.restLength;
   }
 }
 

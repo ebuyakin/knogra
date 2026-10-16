@@ -15,6 +15,7 @@ export interface PathListActions {
   onWalk: (path: Path) => void;
   onEdit: (path: Path) => void;
   onSaveCurrent: () => void;
+  onClearHistory: () => void;
   onGenerateFullPath: () => void;
   onExitPathMode: () => void;
   onClose: () => void;
@@ -25,8 +26,9 @@ export interface PathListContext {
   /** Live workspace scene count, for detecting stale generated snapshots. */
   workspaceSceneCount: number;
   /**
-   * True in path mode. Suppresses "save current trail" (the sequence already is
-   * a saved path) and surfaces the exit control.
+   * True in path mode. Suppresses "save history as path" (the sequence already
+   * is a saved path) and "clear history" (the sequence is not the history), and
+   * surfaces the exit control.
    */
   pathMode: boolean;
   /** Path being walked, marked in place rather than listed separately. */
@@ -42,7 +44,7 @@ export function renderPathList(
   body.innerHTML = '';
 
   if (context.paths.length === 0) {
-    renderEmpty(body, 'No saved paths yet — walk the graph and save the trail, or generate a full path.');
+    renderEmpty(body, 'No saved paths yet — walk the graph and save the history as a path, or generate a full path.');
   } else {
     for (const path of context.paths) {
       const isWalking = path.id === context.activePathId;
@@ -139,7 +141,10 @@ function renderFooter(
   footer.innerHTML = `
     <div class="path-list-footer-left">
       <button class="path-editor-btn" data-action="save-current" ${context.pathMode ? 'disabled' : ''}>
-        Save current trail…
+        Save history as path…
+      </button>
+      <button class="path-editor-btn" data-action="clear-history" ${context.pathMode ? 'disabled' : ''}>
+        Clear history…
       </button>
       <button class="path-editor-btn" data-action="generate">Generate ▾</button>
       ${exitButton}
@@ -148,6 +153,7 @@ function renderFooter(
   `;
 
   footer.querySelector('[data-action="save-current"]')?.addEventListener('click', () => actions.onSaveCurrent());
+  footer.querySelector('[data-action="clear-history"]')?.addEventListener('click', () => actions.onClearHistory());
   footer.querySelector('[data-action="exit-path"]')?.addEventListener('click', () => actions.onExitPathMode());
   footer.querySelector('[data-action="close"]')?.addEventListener('click', () => actions.onClose());
 

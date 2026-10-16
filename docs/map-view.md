@@ -1,7 +1,7 @@
 # Map View (user-facing name: Helicopter view)
 
-> Status: Draft, normative. Agreed in design on 2026-09-23; becomes Current when the v1 scope in §11 ships.
-> Last reviewed: 2026-10-15 (§2 vocabulary: modes, the map core, transition kinds; "engine" retired for "the transition feature")
+> Status: Current, normative. Agreed in design on 2026-09-23; the v1 scope in §11 shipped in 1.8 on 2026-10-16.
+> Last reviewed: 2026-10-16 (§3 inside the surface, §5.3 settle and one-piece drag, R / Shift+R, §6.4 defaults)
 > Authority: Canonical for the map view: its vocabulary, concepts, invariants, behaviour, data model, architecture, and the decisions behind them. During implementation, where code and this document disagree, this document wins until it is amended in the same session.
 > Related: [Product vision](knogra-vision.md), [Architecture](architecture.md), [Layout architecture](layout-architecture.md), [Scene transitions](scene-transitions.md), [Workspace architecture](workspace-architecture.md), [Node placement](node-placement.md)
 
@@ -144,10 +144,11 @@ The ring is cut at its widest gap and read as a line; landmarks that would sit c
 The drawn order around the focus is the stored order, always (guaranteed 2026-10-03): a block whose members would move farther than the cap is compressed as a whole toward the stored directions until its largest displacement is the cap, so its members keep their order and their proportions, and the run is compressed the same way if it would close the gap it was cut at; capping each landmark on its own, the first rule, could swap two neighbours in a crowded block, which is what made the order look random.
 A ring that is genuinely full therefore saturates its cap and the budget shrinks what is left; crowding changes spacing and sizes, never order.
 A pairwise relaxation was tried first (2026-10-02) and left the third of three coincident landmarks behind: pushing a pair apart by half the shortfall each sent one of them past the next neighbour, which the pair never looked at.
+Seen 2026-10-16 on a ring of thirteen: the run compression scales every displacement by the one factor, so a crowded pair nowhere near the cut loses the separation the blocks gave it and overlaps at the floor; scaling the needs and regrouping, rather than scaling the result, is the open option.
 A landmark's fan moves with it as a whole; the fan's own angles are untouched, and when the landmark becomes the focus its fan becomes the ring at the stored directions.
 Markers are not deviated: a crowded fan is the scale's problem, a crowded ring is readability's.
 A dragged landmark's drawn direction becomes its stored one, so the drag accepts what it sees and that box's deviation is spent; its neighbours re-relax on the next presentation.
-Deviation is derived with crowding, frozen during a drag, and depends on the screen through the arc per degree, so the same map on two screens can differ slightly while the stored directions do not.
+Deviation is derived with crowding, kept through the author's keys, and depends on the screen through the arc per degree, so the same map on two screens can differ slightly while the stored directions do not.
 A drawn-time deviation was set aside on 2026-09-28 as a substitute for fixing the stored directions; it is accepted here as a complement to them, bounded, and for landmarks only.
 
 Default positions (decided 2026-09-26, replacing derived lengths and a derived zoom).
@@ -158,11 +159,19 @@ Its semi-axis along the line is the larger of the two across times `map.leafAspe
 Each half is then enlarged, keeping its shape, until the box's corners on its side keep that side's clearance, since an ellipse through the half-extents passes close to a wide box's corners, and the same rule keeps a wide sideways box inside a leaf whose aspect would otherwise cut through its ends; the shared axis takes the larger enlargement.
 The leaf is symmetric front and back (decided 2026-09-27): an egg shortened toward the focus, inherited from the circular leaf where it kept markers off the trunk, put the box's back corners against a short axis, and the corner rule then inflated the whole leaf, sending the markers ahead far out while those behind hugged the box.
 Last, each leaf's semi-axis along the line is capped so that the leaf and its farthest marker stay inside the surface at the base zoom, never shorter than the box's own half-extent plus the clearance: a landmark near the top or bottom of the ring has a long arc and a leaf to match, and the room ahead of it is the one thing the arc does not know.
+Seen 2026-10-16: a cap on the length alone no longer contains the box's corners, so markers on diagonal lines land on them near the surface's edge; the inside-the-surface rule below covers the same case by moving the landmark in, and removing the cap in its favour is the open option.
 The clearance is a fraction of the landmark, not of the marker, because markers are often dots and twice a dot is no visible air.
 Two shapes were tried and rejected (2026-09-26/27): a circle around the centre, whose radius either cut a wide box's ends or floated its sides, and the box's outline pushed out by the clearance, which is exact but reads as a rectangle around a wide box.
 Distances are measured in the drawn frame, where the boxes are, and converted to a true length for storage.
 The leaf's size follows the landmark's rendered size, so a crowded map's leaves shrink with its landmarks and an enlarged landmark's leaf grows with it (Manual scales below).
 A length the author dragged is the centre-to-centre distance and replaces the ring or leaf position for that box.
+
+Inside the surface (decided 2026-10-16).
+Every landmark is drawn no farther out than keeps it and its fan inside the surface at the base zoom, with a margin of 20 px to the edge: once the map is laid out, a subtree that reaches past the margin is moved back along its landmark's ray by the overshoot, the line shortened and nothing rescaled or reshaped, so a landmark near the edge leaves the ring rather than its markers leaving the screen, and a ring too large for the screen pulls itself in.
+Moving back along the ray only answers an edge the ray heads for; a fan that sticks out sideways from a landmark at the top stays out, the truthful outcome, as two markers on one bearing are.
+A marker whose length the author dragged is held inside by its own line first, so that a marker dragged far out does not drag its landmark to the focus, but never nearer its landmark than the leaf would put it: a marker whose ray meets the edge within the leaf stays on the leaf, and its landmark is pulled in for it (seen 2026-10-16: held by its line alone, a marker dragged out through a near edge came back on top of its landmark). A marker the leaf placed goes where the leaf put it.
+The record keeps what the author dragged and the screen draws what it can hold, as a stored direction is drawn within the deviation (Drawn directions): one rule in one place serves records written on wider screens and by older builds alike, and the keys work from the drawn length, so `,` brings a box held at the edge back in at once while `.` changes its record and not the picture.
+Until then only the leaf's reach ahead was capped, against the edge the landmark faces, and nothing bounded a landmark's size or a fan's sideways reach; a drag that widened a neighbour's sector sent its fan off the surface, unseen until the map was re-entered. Two rule sets that shrank the landmark or the leaf to fit were tried the same day and rejected: the first folded fans onto their landmarks, the second kept every landmark with an outward marker a whole fan's depth from the edge and emptied the margins of the surface.
 
 Derived scales: the sector budget (decided 2026-09-27, replacing pairwise clearance checks).
 Distances are fixed by the frame; what adapts to crowding is size, and the measure of crowding is a landmark's sector: half the angular gap to each ring neighbour, so evenly seeded bearings give equal sectors and a drag that crowds a pair narrows both.
@@ -177,7 +186,7 @@ The fan's scale is lowered further if every pair of markers that are neighbours 
 Two markers clear when either their horizontal distance exceeds their half-widths plus the gap, or their vertical distance exceeds their half-heights plus the gap; the gap is a fraction of the two boxes' half-diagonals at their scale, averaged, so it shrinks with them.
 Neither scale goes below `map.scaleFloor` of its default: past that, overlap is accepted rather than boxes vanishing, and two neighbours that share a bearing will overlap at the floor, which is the truthful outcome and a drag's to fix.
 Landmarks never shrink to make room for markers beyond their own share: they are the readable tier and markers are miniatures (decided 2026-09-26, after a hub of twenty landmarks was driven to the floor by four fans under the earlier leaf-to-leaf check).
-Derived values are computed when a map is presented, re-focused, reset or resized, and frozen for the duration of a drag, so dragging one box moves its own subtree and the other lines of its edge and nothing else.
+Derived values are computed when a map is presented, re-focused, reset, resized or settled after a drag, and kept through the author's keys, which change multipliers on top of them, so a key never resizes or reshapes the boxes it was not pressed on; a drag moves its own piece and derives nothing until it is released (§5.3).
 
 Manual scales.
 The author's scales are multipliers on the derived ones, per map for all landmarks or all markers (`W`, `M`) and per box (`<`, `>`), so they survive a change in crowding: "bigger than the map would make it" stays true when the map's own answer changes.
@@ -302,12 +311,13 @@ In Edit mode the author may drag a landmark or a marker and change a box's scale
 The focus box is not draggable: it has no parent line, so a drag would have nothing to write.
 In View mode the map is navigable and nothing writes.
 
-Dragging is live.
-On every pointer move the map takes the dragged box's current angle from its parent as the provisional bearing of the end its line leaves from and its current distance as the provisional length, then re-derives positions (I1) for everything affected: the dragged box's subtree moves rigidly with it, and a line of the other end of the same edge on this map pivots about its own parent box only once the allowance is reached, keeping its own length, with its subtree following.
-A dragged landmark's drawn direction is its stored direction from the first pixel: whatever deviation it was drawn with is spent (§3 Drawn directions), and the other landmarks keep the deviations they were presented with until the next presentation.
-In the triangle, dragging C' turns B' about C only after C' has turned by the allowance; at allowance 0, B' orbits C from the first pixel.
-A landmark's markers move with it but keep their bearings, which are the edges' and global: a fan seeded pointing north-east still points north-east after its landmark is dragged south.
+Dragging moves one piece.
+The dragged box and its subtree move as one under the pointer, each marker at the offset it had from its landmark, and nothing else moves; on every pointer move the box's current angle from its parent is taken as the provisional bearing of the end its line leaves from and its current distance as the provisional length.
 Nothing is persisted until release; on release the bearing is written to the edge and the length to the line's record.
+Then the map settles: it is derived afresh from what the drag wrote, crowding included, and every box glides to its new place and size, the move phase of a re-focus (§5.2); that is when a line of the other end of the same edge on this map pivots about its own parent box, if the allowance was reached, keeping its own length, with its subtree following.
+In the triangle, dragging C' turns B' about C only after C' has turned by the allowance; at allowance 0, B' orbits C from the first pixel of the settle.
+A landmark's markers keep their bearings, which are the edges' and global: a fan seeded pointing north-east still points north-east after its landmark is dragged south, so a drag in or out leaves the fan as it was and a turn re-measures the leaf on its new axis.
+Until 2026-10-16 the whole map was re-derived on every pointer move with crowding frozen, the subtree rigid and the twin line pivoting live; with the settle doing the layout on release, the live re-derive bought nothing and was dropped. What the author sees after letting go is what re-entering the map would show (decided 2026-10-16: with the frozen picture kept until leaving, a neighbour whose sector a drag had widened came back larger on re-entry, its fan outside the surface, and the author had never seen it).
 Other maps are not on screen and simply re-derive from the stored bearing when next opened.
 
 Scale uses the selection-scoped Enlarge / Shrink vocabulary and, in the map container, its keys; a selected box, landmark or marker, gets its own scale.
@@ -320,9 +330,9 @@ Drag, scale and distance are the only layout gestures the map has; there is no a
 The order of the landmarks around the focus, and of a fan's markers around their landmark, is not stored anywhere: it is read off the bearings by sorting them, so a drag is the one thing that changes it, and the drawing never does (§3 Drawn directions).
 Two sources of truth for one ring were considered and declined (2026-10-03): a stored order and the bearings would disagree the moment one changed without the other, and whichever won would make the other redundant; autolayout reads its angular order off the screen for the same reason.
 
-Resetting, from the map menu, Edit mode only; animated (2026-10-03) as a re-focus with only the move phase, since every box keeps its address: boxes glide to their new places and sizes, lines re-weight, over `map.moveDuration`.
-Distances and sizes: the map's record is deleted and the map is shown from defaults; nothing outside this map changes.
-Directions too: in addition, the bearing of every edge drawn on this map is cleared and seeded afresh by §6.5.
+Resetting, from the map menu or the keyboard, Edit mode only; animated (2026-10-03) as a re-focus with only the move phase, since every box keeps its address: boxes glide to their new places and sizes, lines re-weight, over `map.moveDuration`.
+Distances and sizes, `R`: the map's record is deleted and the map is shown from defaults; nothing outside this map changes.
+Directions too, `Shift+R`: in addition, the bearing of every edge drawn on this map is cleared and seeded afresh by §6.5.
 With `map.resetKeepsOrder` (default on) the seeding is handed the ends as they were, and at each box re-spaces the free ends evenly in the order they had, turned to move least, so a sequence the author dragged into being survives the tidying, as autolayout's angular order does; off, the seeding chooses freely, as for a map that never had directions.
 Bearings are global, so this reaches every other map those edges appear on, and the menu says so.
 Every map and every direction: all map records and all bearings in the workspace, behind a confirmation; the clean slate for judging the defaults.
@@ -406,7 +416,7 @@ The cost is one more database to carry in the workspace file and to clear on res
 No viewport is stored: the focus is always at the centre and the zoom is the base zoom, a setting (§5.2).
 Records written during development carry an ignored `zoom` key.
 
-`length` is the length of the box's line (the line is identified by its child box's address); `scale` is the box's own.
+`length` is the length of the box's line (the line is identified by its child box's address), as dragged, drawn shorter where holding the box inside the surface requires (§3 Inside the surface); `scale` is the box's own.
 A record exists only once the author has adjusted something; a map with no record renders entirely from defaults.
 A key whose address is no longer walkable (an edge or node was deleted) is ignored on load and dropped on the next save.
 Deleting a node deletes its record.
@@ -426,24 +436,24 @@ Under a new `map` settings domain, data only, in `config/`:
 
     map.baseZoom              the zoom of the map surface (default 1): a node at the pixel size its design specifies; the one knob for screen size
     map.ringRadius            the landmark ring's vertical semi-axis as a fraction of half the surface's height (default 0.6)
-    map.horizontalStretch     the factor every horizontal offset is multiplied by (default 1.5); the ring's horizontal semi-axis is the vertical one times this
+    map.horizontalStretch     the factor every horizontal offset is multiplied by (default 1.7); the ring's horizontal semi-axis is the vertical one times this
     map.arcLandmarkShare      weight of the landmark's box in its sector's arc (default 0.4)
     map.arcMarkerShare        weight of a marker to the side of the box, counted on both sides (default 0.1)
     map.arcClearanceShare     weight of the clearance between the box's side and its markers, both sides (default 0.1); the leaf's minor semi-axis
     map.arcBreathingShare     weight of the air toward the neighbouring branch, both sides (default 0.1)
-    map.leafClearance         clear space between a landmark's side and its markers when the sector is roomy, as a fraction of the landmark's height (default 0.5); the sector budget can only lower it
+    map.leafClearance         clear space between a landmark's side and its markers when the sector is roomy, as a fraction of the landmark's height (default 0.1); the sector budget can only lower it
     map.leafAspect            the leaf's semi-axis along the focus-to-landmark line as a multiple of its semi-axis across it (default 1.6); 1 is round
     map.markerScale           a marker's scale as a fraction of its landmark's, before crowding lowers it (default 0.3)
     map.markerGap             minimum clear space between neighbouring markers of one landmark, as a fraction of their half-diagonal (default 0.5); the fan's marker scale is lowered until it holds
     map.scaleFloor            the least fraction of its default a crowded fan's scale may reach (default 0.3)
     map.landmarkFloor         the least scale a crowded landmark may reach, the readable floor (default 0.6)
-    map.landmarkDeviation     how far a landmark may be drawn from its stored direction, in degrees, to keep the ring readable (default 45); 0 draws stored directions exactly
+    map.landmarkDeviation     how far a landmark may be drawn from its stored direction, in degrees, to keep the ring readable (default 30); 0 draws stored directions exactly
     map.twinAllowance         how far the two ends of an edge may diverge from exact opposition, in degrees (default 30); 0 makes them rigid, as before 2026-09-28
     map.resetKeepsOrder       a reset of directions keeps the angular order of the boxes at each parent and re-spaces them evenly (default on); off seeds afresh (§5.3)
     map.previewScale          rendered scale of a ballooned box (default 1); a box drawn below it can be ballooned, whichever its role
     map.lineScalePower        a line's width and arrow scale are its type's times its box's scale to this power (default 0.5); 1 fully proportional, 0 never
     map.twinLinks             draw dotted links between twins (v2; default off)
-    map.themeMode             'fixed' | 'scene' (§5.6)
+    map.themeMode             'fixed' | 'scene' (default 'scene', §5.6)
     map.themeId               the theme under 'fixed'
     map.animate               animate re-focusing
     map.departDuration        phase durations (ms), as transition-settings.ts has for scenes
@@ -704,7 +714,7 @@ The budget, the floor and the balloon on a shrunk landmark (§5.3) make such a m
 
 Shortcuts.
 The slash is the entry key for now (§5.1); a proper one waits for the leader-key redesign of the keyboard handler.
-The F1 overlay lists the keys that are the map's own, slash, H J K L, Space, Enter, Escape (2026-10-04); the keys that mean on the map what they mean in a scene are not repeated there.
+The F1 overlay lists the keys that are the map's own, slash, H J K L, Space, R and Shift+R, Enter, Escape (2026-10-04, R 2026-10-16); the keys that mean on the map what they mean in a scene are not repeated there. The reset of every map stays a menu item behind its confirmation, too much to lose to a key.
 
 ## 11. Staging
 

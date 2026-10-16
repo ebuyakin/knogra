@@ -13,6 +13,8 @@ import type { Direction } from '../../../features/scene/scene';
 import type { KeyboardContext } from '../keyboard-context';
 import { getSetting } from '../../../config';
 import { isEditMode } from '../../../storage/app-mode';
+import { goHome } from '../../go-home';
+import { resetSceneToMap } from '../../scene-reset';
 import {
   deleteSelectedNodeOrEdge,
   editSelectedNode,
@@ -211,6 +213,14 @@ export async function handleViewKeys(
     return true;
   }
 
+  // Shift+N - Home: go to the anchor's scene, as N resets the view on the selected
+  // node. The path panel's Home button, the same flow (ui/go-home.ts).
+  if (key === 'n' && event.shiftKey && !ctrl) {
+    event.preventDefault();
+    await goHome({ features });
+    return true;
+  }
+
   // Delete/Backspace - Delete selected node or edge
   if (key === 'delete' || key === 'backspace') {
     event.preventDefault();
@@ -231,6 +241,16 @@ export async function handleViewKeys(
   if (key === '/' && !event.shiftKey && !ctrl) {
     event.preventDefault();
     await context.mapHandoff.enter();
+    return true;
+  }
+
+  // ? (Shift+/) - Reset the scene to its map shape (map-view.md §8): the slash
+  // shows the map, the shifted slash reshapes the scene to it. Edit mode only and
+  // confirmed, both checked by the flow. Same stopgap status as the slash.
+  if (key === '?' && !ctrl) {
+    event.preventDefault();
+    if (!context.container) return true;
+    await resetSceneToMap({ features, container: context.container });
     return true;
   }
 

@@ -160,14 +160,6 @@ export function resetSetting(key: SettingKey): void {
 }
 
 /**
- * Reset all settings to defaults
- * Clears all user preferences
- */
-export function resetAllSettings(): void {
-  localStorage.removeItem(SETTINGS_KEY);
-}
-
-/**
  * Export all settings (for workspace export)
  */
 export function exportSettings(): SettingsObject {

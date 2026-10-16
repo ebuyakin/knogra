@@ -505,6 +505,7 @@ A flow is a UI module that calls two or more features in a fixed order on behalf
 | `components/editor-openers.ts` | Open an editor, then apply its result: node content through Node, then style through Scene |
 | `map-handoff.ts` | The handoff: enter (scene to map), leave (map to the focus's study scene), back (map to the entered scene); the map feature and the transition feature in turn ([map-view.md §8](map-view.md)) |
 | `scene-reset.ts` | Reset a study scene to its map's skeleton: the map feature drafts it, the store takes it, the transition feature transitions into it ([map-view.md §8](map-view.md)) |
+| `go-home.ts` | Home: leave path mode if confirmed, then navigate to the anchor's scene through the funnel; the path feature and the transition feature in turn ([paths-architecture.md §15.4](paths-architecture.md)). Called by the path panel's button and Shift+N |
 
 #### Panels (`ui/panels/`)
 

@@ -198,7 +198,7 @@ export function resolveEdgeStyleSlot(theme: ColorTheme, slotId: EdgeStyleSlotId)
       line: { ...base.lineSecondary, opacity: base.lineSecondary.opacity ?? 0.75 },
       arrow: { ...base.arrow, color: base.lineSecondary.color, opacity: base.lineSecondary.opacity ?? 0.75 },
       width: 2,
-      arrowShape: 'circle',
+      arrowShape: 'vee',
       arrowScale: 1,
       curveStyle: 'bezier'
     };

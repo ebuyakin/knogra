@@ -536,9 +536,10 @@ guarded — that is the path's own movement.
   mode's owner, so entering path mode by any other route would silently skip it.
 
 **Known bypass:** Node Manager opens scenes via `closeScene()` + `openScene()` rather than the
-funnel. `openScene` cannot be locked — the panel's own Home button uses it. Node Manager is
-therefore handled as an affordance (greyed action), which is acceptable because it is an
-explicit UI offer rather than a gesture.
+funnel. `openScene` cannot be locked — it is the funnel's own building block (fade mode, path
+navigation, startup). Node Manager is therefore handled as an affordance (greyed action), which
+is acceptable because it is an explicit UI offer rather than a gesture. (Until 1.8 the Home
+button was a second user of `closeScene` + `openScene`; it now goes through the funnel, §15.4.)
 
 ### 14.5 Affordance Table
 
@@ -553,7 +554,7 @@ explicit UI offer rather than a gesture.
 | Node Manager → delete / clear scenes | Greyed out (§14.6) |
 | `[` `]`, `«` `»`, breadcrumb clicks | Work normally |
 | All other editing (create, edit, fold, layout, design) | Works normally |
-| Home | Works, after "Exit path mode?" confirmation |
+| Home button, `Shift+N` | Work, after "Exit path mode?" confirmation |
 
 The F1 shortcut overlay (`config/shortcut-definitions.ts`, the single source of truth) gains a
 note on the `G` and `[ / ]` entries that navigation is path-constrained while a path is loaded.
@@ -647,7 +648,9 @@ cannot bootstrap the first path.
 
 Manager contents:
 - List of saved paths (name, scene count, staleness label per §15.3) → **Load** / **Edit** / **Delete**
-- **Save current history as path…** (history mode only)
+- **Save history as path…** (history mode only)
+- **Clear history…** (history mode only; confirmed) — restart the history at the current scene, so
+  the path saved next begins there (§15.4, since 1.8)
 - **Generate ▸** — currently one entry, `Full path` (§16); the extension point for future
   generators and generator parameters
 
@@ -765,8 +768,22 @@ path would lose the traversal order that makes it readable.
 ### 15.4 Home Button
 
 Remains enabled in path mode. Pressing it prompts `Exit path mode?` (native `confirm()`, matching
-the established pattern across the codebase). On confirmation: exit path mode, then reset history
-to the anchor scene and navigate there. On cancellation: nothing happens.
+the established pattern across the codebase). On confirmation: exit path mode, then navigate to
+the anchor scene. On cancellation: nothing happens.
+
+Since 1.8 Home is an ordinary navigation through the funnel (`goToSceneByNode`): the anchor scene
+is appended to the history and `[` leads back. Until then it reset the history to the anchor
+scene and opened it by `closeScene` + `openScene`, a one-way door. Clearing the history is a
+recording operation, not a navigation one, and moved to the Path manager's footer as "Clear
+history…" (confirmed; `path.reset(currentSceneId)`), which also generalises it: the history can
+restart from any scene, not only the anchor. "Record from the anchor" is Home, then Clear history.
+The footer's save control is "Save history as path…", the same two words: the history is the live
+sequence, a path is a saved one (§14).
+
+The behaviour is the `goHome` flow in `ui/go-home.ts` (architecture.md §3.8), shared by the
+button and the `Shift+N` key, so the confirmation is written once. Home does nothing when the
+anchor scene is already current, since the funnel has no same-scene guard of its own, and does
+not create a missing anchor scene although the funnel would: the button greys on that condition.
 
 ## 16. Full Path Generator
 

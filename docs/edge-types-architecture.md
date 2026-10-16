@@ -2,7 +2,7 @@
 
 > **Status:** Current
 >
-> **Last reviewed:** 2026-09-11
+> **Last reviewed:** 2026-10-16
 >
 > **Authority:** Current architecture and implementation guide for edge types, typed edge styling, and scene-local edge visibility. How edge types reach the AI assistant is summarized in §11; the wording is in `src/ai/prompts/` and the resolution rules in [ai-chat-api-call-composition.md](ai/ai-chat-api-call-composition.md).
 >
@@ -12,7 +12,7 @@
 
 Knogra supports edges as graph relationships. Edge types make those relationships semantically and visually distinct without requiring every individual edge to be styled by hand.
 
-The edge types feature provides workspace-specific relationship types such as Generalization, Composition, Association, `causes`, or `precedes`. Each type has centrally managed visual styling, and scenes can visually hide or dim edge types without removing those edges from the scene or graph.
+The edge types feature provides workspace-specific relationship types such as Generalization, Composition, Sequence, or a workspace's own `contrasts with`. Each type has centrally managed visual styling, and scenes can visually hide or dim edge types without removing those edges from the scene or graph.
 
 The goal is to make relationship semantics first-class in the graph while preserving Knogra's scene model: scenes decide which relationships are contextually included, and visibility controls decide how visually prominent those included relationships are.
 
@@ -48,10 +48,10 @@ These decisions define the current feature:
 
 - Edge types are workspace-specific.
 - Edge types are persisted in a dedicated `edgeTypes` object store inside `knogra-graph`, alongside the existing graph object stores for nodes, edges, scenes, and background images.
-- New workspaces start with three starter edge types — Generalization, Composition, Association — seeded from `src/config/edge-type-settings.ts` and never consulted again: once a workspace exists, its registry in IndexedDB is the only source of type names, labels, descriptions and styles.
+- New workspaces start with three starter edge types — Generalization, Composition, Sequence — seeded from `src/config/edge-type-settings.ts` and never consulted again: once a workspace exists, its registry in IndexedDB is the only source of type names, labels, descriptions and styles.
 - Edge type ids are opaque. No code reads a type by id or name; the seed uses `edge-type-1..3` and the Edge Type Manager continues the sequence. Workspaces created before 2026-09-11 keep their original ids (`example-of`, `part-of`, `related`) forever, since ids are persisted on every edge, and nothing cares.
 - The registry is ordered by `EdgeType.order`, and the first type is the workspace's default: what a new edge gets when nothing names a type, and what an edge is repaired onto when its `typeId` is unknown. The seed decides the initial order; the order is data and can change per workspace. Generalization leads because the default should draw in the theme's neutral first style slot, whose triangle is the UML generalization arrowhead.
-- Starter edges run from the broader end to the narrower one — whole to part, general to specific — so the source of an edge is the containing or more general thing. This matches the outward gesture of the radial layout and makes the app's own parent/child wording agree with the arrow. Existing workspaces were not migrated: reversing a user's edges would silently rewrite their meaning.
+- Starter edges run from the origin to what comes of it — general to specific, whole to part, earlier to later — so the source of an edge is the containing, more general or prior thing. This matches the outward gesture of the radial layout and makes the app's own parent/child wording agree with the arrow. Existing workspaces were not migrated: reversing a user's edges would silently rewrite their meaning.
 - The UI remembers the last selected edge type and uses it as the default for newly created edges.
 - Users can create custom edge types.
 - Edge type deletion is not currently implemented. Existing types can be renamed and restyled.
@@ -229,9 +229,11 @@ New workspace creation seeds the edge type registry from the starter set in `src
     id            name             forward label   inverse label   style slot
     edge-type-1   Generalization   has kind        is a kind of    1  (triangle)
     edge-type-2   Composition      has part        is part of      2  (diamond)
-    edge-type-3   Association      relates to      is related to   3  (circle)
+    edge-type-3   Sequence         leads to        follows from    3  (vee)
 
-Arrowheads follow UML: triangle for generalization, diamond for composition; the circle carries no UML meaning and marks the type that is symmetric in meaning. Association still has two labels because the edge under it is directed and operations such as include-children act on that direction; the labels differ in voice only.
+Arrowheads: triangle and diamond follow UML generalization and composition; the open vee is the arrow of a flow or dependency diagram. The three types are the three axes of a knowledge structure — kind, part, order — and none can be expressed as another.
+
+The third type was Association, `relates to` / `is related to`, on a circle arrowhead, until 2026-10-16: a symmetric bucket for whatever was neither kind nor part. It named no relation of its own, and the ordered relations it absorbed — steps, causes, derivations, prerequisites — are the ones a learner most often needs drawn. The set therefore has no catch-all now; a workspace that wants a symmetric type adds one. Slot 3's arrowhead changed with it, in every theme, so workspaces seeded before that date draw their Association edges with a vee from then on; their type's meaning is untouched. Hollow arrowheads (UML's hollow generalization triangle) are deferred: `EdgeStyle` has no fill field yet.
 
 ---
 
@@ -509,7 +511,7 @@ Settled decisions:
 
 | Question | Decision |
 |---|---|
-| Initial starter set | Generalization, Composition, Association (`edge-type-1..3`), in that order; see §7.3. |
+| Initial starter set | Generalization, Composition, Sequence (`edge-type-1..3`), in that order; see §7.3. |
 | View mode visibility changes | Allowed, but transient and not persisted. |
 | Hidden edge selectability | Hidden/invisible edges are not intended to be selectable from the canvas. |
 | Edge title rendering | Keep titles as metadata, but do not render them by default. |

@@ -58,14 +58,14 @@ export function buildMapMenu(deps: MenuDependencies): MenuItem[] {
       label: 'Reset',
       children: [
         {
-          label: 'Distances and sizes of this map',
+          label: 'Distances and sizes of this map (R)',
           enabled: editMode,
           action: () => {
             mapView.reset({ directions: false });
           }
         },
         {
-          label: 'Directions too (shared by all maps)',
+          label: 'Directions too (shared by all maps) (Shift+R)',
           enabled: editMode,
           action: () => {
             mapView.reset({ directions: true });

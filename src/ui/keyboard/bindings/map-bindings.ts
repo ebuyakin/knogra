@@ -93,6 +93,15 @@ export async function handleMapKeys(context: KeyboardContext, event: KeyboardEve
     return true;
   }
 
+  // R: reset this map's distances and sizes; Shift+R the directions too, which every map shares (§5.3). Edit mode only, which
+  // `reset` checks itself. The scene's R includes children; the map has no such operation and takes the letter for Reset.
+  // "Every map and every direction" stays a menu item behind its confirmation: too much to lose to a key.
+  if (key === 'r') {
+    event.preventDefault();
+    await mapView.reset({ directions: event.shiftKey });
+    return true;
+  }
+
   // F: back to the base frame, where the scene's F fits to view. The map never reframes after an edit on its own.
   if (key === 'f' && !event.shiftKey) {
     event.preventDefault();

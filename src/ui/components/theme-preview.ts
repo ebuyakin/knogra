@@ -31,7 +31,8 @@ const PREVIEW_PADDING = 12;
 
 const ARROW_PATHS: Record<string, string> = {
   triangle: 'M0,0 L6,3 L0,6 z',
-  diamond: 'M0,3 L3,0 L6,3 L3,6 z'
+  diamond: 'M0,3 L3,0 L6,3 L3,6 z',
+  vee: 'M0,0 L6,3 L0,6 L2,3 z'
 };
 
 /** Marker ids must be unique per document, so instances take a serial number. */

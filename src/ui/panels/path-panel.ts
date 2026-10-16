@@ -18,6 +18,7 @@ import type { SceneId } from '../../core/main-types';
 import type { FeatureAPI } from '../../features/feature-api';
 import { eventBus } from '../../events/event-bus';
 import { graphStore } from '../../storage/graph-store';
+import { getAnchorSceneId, goHome } from '../go-home';
 import { PathManager } from '../components/path-manager';
 import { PathJumpList } from '../components/path-manager/path-jump-list';
 import { ShortcutOverlay } from '../components/shortcut-overlay';
@@ -136,7 +137,7 @@ export class PathPanel {
     const content = onMap ? '' : breadcrumbs;
 
     // Check for anchor scene
-    const anchorSceneId = this.#getAnchorSceneId();
+    const anchorSceneId = getAnchorSceneId();
     const hasAnchor = anchorSceneId !== null && !onMap;
 
     // Build icons (all 16x16 with consistent sizing)
@@ -161,7 +162,7 @@ export class PathPanel {
 
     const leftControls = `
       <div class="path-controls path-controls-left">
-        <button class="path-btn" data-action="home" title="Go to anchor node" ${!hasAnchor ? 'disabled' : ''}>${homeIcon}</button>
+        <button class="path-btn" data-action="home" title="Go to anchor node (Shift+N)" ${!hasAnchor ? 'disabled' : ''}>${homeIcon}</button>
         <button class="path-btn ${pathMode ? 'active' : ''}" data-action="paths" title="${pathTitle}" ${onMap ? 'disabled' : ''}>${pathIcon}</button>
       </div>
     `;
@@ -221,9 +222,9 @@ export class PathPanel {
     const currentItem = this.#container.querySelector('.path-item.current');
     currentItem?.addEventListener('click', () => this.#openJumpList());
 
-    // Home button
+    // Home button — the shared flow, also behind Shift+N (ui/go-home.ts)
     const homeBtn = this.#container.querySelector('[data-action="home"]');
-    homeBtn?.addEventListener('click', () => this.#goHome());
+    homeBtn?.addEventListener('click', () => goHome({ features: this.#features }));
 
     // Path manager — save, load, edit, generate, exit path mode
     const pathsBtn = this.#container.querySelector('[data-action="paths"]');
@@ -303,40 +304,6 @@ export class PathPanel {
       this.#features.path.getCurrentIndex(),
       (index) => void this.#navigateToIndex(index)
     );
-  }
-
-  /**
-   * Get the scene ID for the anchor node (if exists and has a scene)
-   */
-  #getAnchorSceneId(): SceneId | null {
-    const anchorNode = graphStore.nodes.find(n => n.isAnchor);
-    if (!anchorNode) return null;
-
-    const anchorScene = graphStore.scenes.find(s => s.centralNodeId === anchorNode.id);
-    return anchorScene?.id || null;
-  }
-
-  /**
-   * Navigate to anchor node's scene via close → open
-   */
-  async #goHome(): Promise<void> {
-    const anchorSceneId = this.#getAnchorSceneId();
-    if (!anchorSceneId) return;
-
-    // Home restarts navigation from the anchor, which is incompatible with
-    // walking a fixed sequence — so it doubles as the deliberate way out of path
-    // mode, and asks first (paths-architecture §15.4).
-    if (this.#features.path.isPathMode()) {
-      if (!confirm('Exit path mode and return to the anchor scene?')) return;
-      this.#features.path.exitPathMode();
-    }
-
-    // Reset path history to anchor scene
-    this.#features.path.reset(anchorSceneId);
-    
-    // Close current scene, then open anchor scene fresh
-    await this.#features.transition.closeScene();
-    await this.#features.transition.openScene(anchorSceneId);
   }
 
   /**

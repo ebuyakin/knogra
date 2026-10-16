@@ -157,6 +157,7 @@
 
 .path-list-footer-left {
   display: flex;
+  flex-wrap: wrap; /* on a narrow screen whole buttons move to a second row; the labels themselves never break */
   gap: 6px;
   align-items: center;
 }
@@ -279,7 +280,8 @@
 /* ---------------------------------------------------------------------- */
 
 .path-editor-modal {
-  width: 520px;
+  /* Sized for the manager's footer in path mode: Save history as path, Clear history, Generate, Exit path mode, Close in one row. */
+  width: 600px;
 }
 
 .path-editor-name-row {
@@ -412,6 +414,7 @@
   padding: 5px 12px;
   border-radius: 4px;
   cursor: pointer;
+  white-space: nowrap;
   transition: background-color 0.15s, border-color 0.15s;
 }
 

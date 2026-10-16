@@ -148,6 +148,9 @@
   width: 12px;
   text-align: center;
   opacity: 0.85;
+  /* Its own click target: padded out to the row's height and pulled back by the same margins so the row's layout is unchanged. */
+  padding: 6px 4px;
+  margin: -6px -4px;
 }
 
 .settings-tree-toggle::before {

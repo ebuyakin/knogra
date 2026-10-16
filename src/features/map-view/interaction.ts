@@ -4,17 +4,17 @@
  * Dragging a box writes two things (docs/map-view.md I6): the new angle from
  * its parent box becomes the bearing of the end its line leaves from,
  * globally, the other end following only once the allowance is reached, and
- * the new distance becomes the line's length, locally. Dragging is live
- * (§5.3): on every pointer move the whole map is re-derived from the
- * provisional values, so the box's subtree follows rigidly and the other
- * end's line, if any, pivots about its own parent. Nothing is persisted
- * until release.
+ * the new distance becomes the line's length, locally. During the drag the
+ * box and its subtree move as one piece under the pointer and nothing else
+ * moves (§5.3); the map is laid out afresh when the drag is released, which
+ * is when the other end's line pivots if the allowance was reached. Nothing
+ * is persisted until release.
  */
 
 import type { Core, EventObject, NodeSingular } from 'cytoscape';
 import type { Edge, EdgeId, NodeId, ThemeId } from '../../core/main-types';
 import { isEditMode } from '../../storage/app-mode';
-import { bearingBetween, endsAfterMove, layoutMapTree, unstretch, type EdgeEnds, type MapAdjustments, type MapGeometryParams, type MapLayout, type Size } from './geometry';
+import { bearingBetween, endsAfterMove, unstretch, type EdgeEnds, type MapAdjustments, type MapGeometryParams, type MapLayout, type Size } from './geometry';
 import type { Address, MapLine, MapTree } from './map-tree';
 import type { BoxBaseStyle, LineBases, MapElementIds } from './render';
 
@@ -74,7 +74,7 @@ export function wireDragging(cy: Core, readState: () => MapState | null, onRelea
   });
 }
 
-/** Re-derive the map from the dragged box's current position; returns what a release would persist. */
+/** Move the dragged box's subtree with it and work out what a release would persist. */
 function applyDrag(cy: Core, state: MapState, dragged: NodeSingular): DragRelease | null {
   const address = state.addressByElementId.get(dragged.id());
   const line = address ? state.lineByAddress.get(address) : undefined;
@@ -94,20 +94,21 @@ function applyDrag(cy: Core, state: MapState, dragged: NodeSingular): DragReleas
   if (!before) return null;
   const ends = endsAfterMove(before, !line.reversed, bearingBetween({ x: 0, y: 0 }, offset), state.twinAllowance);
   state.endsByEdge.set(line.edgeId, ends);
-  // The drag accepts what it sees: the drawn direction becomes the stored one, so this box's deviation is spent (§3 Drawn directions).
-  state.layout.derived.deviations.set(address, 0);
   state.adjustments.boxes[address] = { ...state.adjustments.boxes[address], length: Math.round(length) };
-  // Crowding stays as it was when the map was presented: a drag moves its own subtree and the other end's line, if the allowance is reached, nothing else.
-  state.layout = layoutMapTree(state.tree, state.endsByEdge, state.adjustments, state.params, state.baseSizes, state.layout.derived);
 
-  // The dragged box is where the pointer put it; everything else follows.
-  cy.batch(() => {
-    for (const [boxAddress, boxPosition] of state.layout.positions) {
-      if (boxAddress === address) continue;
-      const elementId = state.ids.boxes.get(boxAddress);
-      if (elementId) cy.getElementById(elementId).position({ x: boxPosition.x, y: boxPosition.y });
-    }
-  });
+  // The subtree keeps its shape under the pointer: each box at its laid-out offset from the dragged one. The settle lays it out afresh on release.
+  const laidOut = state.layout.positions.get(address);
+  if (laidOut) {
+    const delta = { x: position.x - laidOut.x, y: position.y - laidOut.y };
+    cy.batch(() => {
+      for (const box of state.tree.boxes) {
+        if (box.parentAddress !== address) continue;
+        const elementId = state.ids.boxes.get(box.address);
+        const boxPosition = state.layout.positions.get(box.address);
+        if (elementId && boxPosition) cy.getElementById(elementId).position({ x: boxPosition.x + delta.x, y: boxPosition.y + delta.y });
+      }
+    });
+  }
 
   return { edgeId: line.edgeId, ends, address, length: Math.round(length) };
 }

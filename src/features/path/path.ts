@@ -155,8 +155,9 @@ export class Path {
 
   /**
    * Reset history and start fresh from a scene
-   * Used by Home button to restart navigation.
-   * Only meaningful in history mode; path mode must be exited first.
+   * Used by the Path manager's "Clear history", so the path saved next begins
+   * where the author wants. Only meaningful in history mode; path mode must be
+   * exited first.
    */
   reset(sceneId: SceneId): void {
     if (this.#cursor) return;

@@ -146,7 +146,7 @@ function buildSceneDesignMenu(deps: MenuDependencies, editMode: boolean): MenuIt
           },
           { label: '', separator: true },
           {
-            label: 'Reset to map shape…',
+            label: 'Reset to map shape… (Shift+/)',
             enabled: editMode,
             action: () => {
               resetSceneToMap(deps);

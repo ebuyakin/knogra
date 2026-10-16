@@ -46,7 +46,7 @@ const TAB_LABELS: { id: TabId; label: string }[] = [
 
 const MAX_VISIBLE_TYPE_ROWS = 12;
 
-const ARROW_SHAPES = ['triangle', 'diamond', 'circle', 'tee', 'none'];
+const ARROW_SHAPES = ['triangle', 'vee', 'diamond', 'circle', 'tee', 'none'];
 const CURVE_STYLES = ['bezier', 'straight', 'unbundled-bezier', 'segments', 'round-segments', 'taxi', 'round-taxi', 'haystack'];
 
 /**

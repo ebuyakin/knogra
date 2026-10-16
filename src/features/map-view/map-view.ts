@@ -60,6 +60,9 @@ const REFRAME_DURATION_MS = 200;
 /** A line whose weight changes by less than this on re-focus is left alone rather than tweened. */
 const WEIGHT_TOLERANCE = 0.01;
 
+/** Clear space kept between a box held inside the surface and the surface's edge, in pixels (map-view.md §3 Inside the surface). */
+const EDGE_MARGIN_PX = 20;
+
 const HALF_TURN_DEGREES = 180;
 
 function wait(ms: number): Promise<void> {
@@ -92,7 +95,8 @@ export class MapView {
   constructor(cy: Core) {
     this.#cy = cy;
     this.#preview = new MarkerPreview(cy);
-    wireDragging(cy, () => this.#state, release => this.#persistDrag(release));
+    // No drag while a re-focus or a settle is gliding boxes about: the layout it would re-derive is being replaced.
+    wireDragging(cy, () => (this.#refocusing ? null : this.#state), release => this.#persistDrag(release));
     eventBus.on('appModeChanged', () => this.#applyGrabbability());
   }
 
@@ -793,6 +797,7 @@ export class MapView {
       scaleFloor: getSetting('map.scaleFloor'),
       landmarkFloor: getSetting('map.landmarkFloor'),
       landmarkDeviation: getSetting('map.landmarkDeviation'),
+      edgeMargin: EDGE_MARGIN_PX / baseZoom,
     };
     const baseSizes = new Map<NodeId, Size>([...baseStyles].map(([nodeId, style]) => [nodeId, { width: style.width, height: style.height }]));
     const layout = layoutMapTree(tree, endsByEdge, adjustments, params, baseSizes);
@@ -834,7 +839,7 @@ export class MapView {
     return changers;
   }
 
-  /** A drag settled: the ends to the edge and its parallel siblings, globally; the length to this map's record. No re-fit; that is the author's `F`. */
+  /** A drag released: the ends to the edge and its parallel siblings, globally; the length to this map's record; then the map settles. */
   async #persistDrag(release: DragRelease): Promise<void> {
     const state = this.#state;
     if (!state) return;
@@ -851,10 +856,31 @@ export class MapView {
         await graphStore.updateEdge(updated);
       }
     }
-    // The dragged box's lines take the spread their new length allows; during the drag they kept the old one.
-    restyleLines(this.#cy, lineWeights({ ...state, lineScalePower: getSetting('map.lineScalePower') }, state.ids, linesOfBoxes(state.tree, [release.address]).map(line => line.key)));
     await this.#persistRecord();
     if (isDebug('d_scene')) console.log(`[MapView] Drag: edge ${release.edgeId} ends ${release.ends.source.toFixed(1)}° / ${release.ends.target.toFixed(1)}°, ${release.address} length ${release.length}`);
+    await this.#settle(state);
+  }
+
+  /**
+   * After a drag the map settles: derived afresh from what the drag wrote and
+   * glided to, the same move phase as a reset of the same focus. The drag kept
+   * crowding frozen so that only the dragged subtree moved under the pointer;
+   * the new bearings and length give the ring neighbours new sectors, and the
+   * map the author is looking at should be the one re-entering would show,
+   * not a picture that exists only until they leave (seen 2026-10-16: boxes
+   * inside the surface on leaving, outside on re-entering). The dragged box's
+   * lines take the spread their new length allows in the same glide.
+   */
+  async #settle(old: MapState): Promise<void> {
+    if (this.#refocusing) return;
+    this.#refocusing = true;
+    try {
+      this.collapsePreview();
+      const derived = await this.#derive(old.tree.focusNodeId, new Map(old.baseStyles), this.#surface());
+      await this.#animateTo(old, derived);
+    } finally {
+      this.#refocusing = false;
+    }
   }
 
   async #persistRecord(): Promise<void> {

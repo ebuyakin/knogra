@@ -261,14 +261,22 @@ export class SettingsModal {
         <span class="settings-tree-label">${category.label}</span>
       `;
 
+      // A click on the row navigates; the +/- or a double click folds, so
+      // reaching a section does not fold its children away on the way.
+      const toggleCollapse = (): void => {
+        const collapsed = wrapper.classList.toggle('collapsed');
+        this.#collapseState[category.id] = collapsed;
+        writeCollapsed(category.id, collapsed);
+      };
+      if (hasChildren) {
+        item.querySelector('.settings-tree-toggle')?.addEventListener('click', event => {
+          event.stopPropagation();
+          toggleCollapse();
+        });
+        item.addEventListener('dblclick', toggleCollapse);
+      }
+
       item.addEventListener('click', () => {
-        // Toggle collapse if has children
-        if (hasChildren) {
-          const collapsed = wrapper.classList.toggle('collapsed');
-          this.#collapseState[category.id] = collapsed;
-          writeCollapsed(category.id, collapsed);
-        }
-        
         // Scroll to section
         this.#scrollToCategory(category.id);
         

@@ -8,8 +8,9 @@
  * configured default design for the rest.
  *
  * `grow-arrange.ts` and `scene-factory-utils.ts` still answer the same question
- * with their own rules; folding them onto this one is a separate step
- * (docs/map-view-plan.md, after v1).
+ * with their own rules; folding them onto this one is a separate step, left
+ * open at v1 because it changes existing behaviour and needs its own
+ * verification.
  */
 
 import type { DesignId, Node } from '../../core/main-types';

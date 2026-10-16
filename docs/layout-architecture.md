@@ -91,7 +91,7 @@ Layout-domain bindings:
 | Circle | `Shift+Q` |
 | Tighten / Spread selection | `,` / `.` |
 
-Remaining free: `Shift+N` and the digits `5`–`9`.
+Remaining free: the digits `5`–`7`.
 
 When the free keys run out, the agreed escape hatch is an **Arrange leader key** — one key entering a transient sub-mode with an on-screen hint bar, where single letters select the tool. Deliberately not built yet: it introduces modality and touches the already-oversized keyboard handler.
 

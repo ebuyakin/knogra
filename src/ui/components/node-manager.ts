@@ -655,8 +655,8 @@ export class NodeManager {
 
     // This path uses closeScene+openScene rather than the transition funnel, so
     // the Path feature's navigation guard does not cover it (paths-architecture
-    // §14.4). Enforced here instead of widening the lock to openScene, which the
-    // path panel's own Home button needs.
+    // §14.4). Enforced here instead of widening the lock to openScene, which is
+    // the funnel's own building block (fade mode, path navigation, startup).
     if (this.#features.path.isPathMode()) return;
 
     const nodeId = Array.from(this.#selectedNodes)[0];

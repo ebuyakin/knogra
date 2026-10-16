@@ -15,7 +15,7 @@ export const MAP_DEFAULTS = {
   ringRadius: 0.6,
 
   /** Factor every horizontal offset is multiplied by; the ring's horizontal semi-axis is the vertical one times this. */
-  horizontalStretch: 1.5,
+  horizontalStretch: 1.7,
 
   /**
    * How a landmark's sector arc is shared, tangentially: the box once, then on each side a marker, the clearance and breathing space.
@@ -27,7 +27,7 @@ export const MAP_DEFAULTS = {
   arcBreathingShare: 0.1,
 
   /** Clear space between a landmark's side and its markers when the sector is roomy, as a fraction of the landmark's height; the sector budget can only lower it. */
-  leafClearance: 0.5,
+  leafClearance: 0.1,
 
   /** The leaf's semi-axis along the focus-to-landmark line as a multiple of its semi-axis across it; 1 is round. */
   leafAspect: 1.6,
@@ -45,7 +45,7 @@ export const MAP_DEFAULTS = {
   landmarkFloor: 0.6,
 
   /** How far a landmark may be drawn from its stored direction, in degrees, so that neighbours stay apart at the readable floor; 0 draws stored directions exactly (docs/map-view.md §3). */
-  landmarkDeviation: 45,
+  landmarkDeviation: 30,
 
   /** How far the two ends of an edge may diverge from exact opposition, in degrees; 0 makes them rigid (docs/map-view.md I2). */
   twinAllowance: 30,
@@ -60,7 +60,7 @@ export const MAP_DEFAULTS = {
   lineScalePower: 0.5,
 
   /** 'fixed': every map uses themeId. 'scene': the theme of the focus's own scene. */
-  themeMode: 'fixed' as 'fixed' | 'scene',
+  themeMode: 'scene' as 'fixed' | 'scene',
   themeId: 'dark' as ThemeId,
 
   animate: true,

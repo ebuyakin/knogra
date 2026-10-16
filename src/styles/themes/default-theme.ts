@@ -80,7 +80,7 @@ export function makeSecondaryEdgeStyle(
   width: number,
   opacity = 1
 ): EdgeStyle {
-  return makeEdgeStyle(lineColor, lineSecondaryColor, labelColor, width, opacity, 'circle');
+  return makeEdgeStyle(lineColor, lineSecondaryColor, labelColor, width, opacity, 'vee');
 }
 
 // =============================================================================

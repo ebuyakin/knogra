@@ -86,6 +86,7 @@ export class PathManager {
         onWalk: (path) => void this.#walk(path),
         onEdit: (path) => this.#edit(path),
         onSaveCurrent: () => void this.#saveCurrent(),
+        onClearHistory: () => this.#clearHistory(),
         onGenerateFullPath: () => void this.#generateFullPath(),
         onExitPathMode: () => this.#exitPathMode(),
         onClose: () => this.close(),
@@ -141,6 +142,21 @@ export class PathManager {
 
     await this.#features.path.saveHistoryAs(name.trim());
     this.#renderList();
+    this.#notifyChanged();
+  }
+
+  /**
+   * Clear the history so that the path saved next begins at the current scene.
+   * A recording operation, which is why it lives here and not on the Home
+   * button: going to the anchor is navigation and appends like any other. The
+   * manager stays open, as after Exit: the next step is usually in here too.
+   */
+  #clearHistory(): void {
+    const sceneId = this.#features.scene.getCurrentSceneId();
+    if (!sceneId) return;
+    if (!confirm('Clear the history and start again from this scene? Save it as a path first if you want to keep it.')) return;
+
+    this.#features.path.reset(sceneId);
     this.#notifyChanged();
   }
 

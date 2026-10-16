@@ -50,7 +50,9 @@ The site's legal pages name the AI providers the app sends data to. Adding or re
 ## Working norms
 
 - Root-cause over patch. Preserve dependency direction. Use the existing local abstraction rather than a parallel one. No compatibility shims, no cross-layer shortcuts.
-- Before editing, say what will change. Always flag: signature changes, new dependencies, new storage keys or record shapes, migrations, broad refactors. Small verifiable steps.
+- Before editing, say what will change and wait for a yes. The only edit that may follow a discussion without its own confirmation is the one the discussion was about, in the file it was about. Anything wider waits for an explicit go: more than one file, a file the discussion did not name, or a step from an agreed plan that has not been reached yet. "Next on the path is X" is not permission to do X.
+- Project-level files always need a confirmation of their own, however small the edit: package.json, src/config/storage-config.ts, CLAUDE.md, README.md, docs/README.md, and anything that touches a persisted format.
+- Eugene reviews and stages changes file by file. A batch of unannounced edits across files is not a time saving; it is a review he cannot do. Always flag: signature changes, new dependencies, new storage keys or record shapes, migrations, broad refactors. Small verifiable steps.
 - A new category of file: agree where it belongs before creating it.
 - Match the standard already in the code — architecture.md §7, plus: meaningful searchable names, explicit return types, no `any`, shallow logic, early returns, one responsibility per unit. Comments explain why; names and types explain what. A comment that justifies a value must change when the value does.
 - Persisted formats are the irreversible thing here. Workspace files, IndexedDB records and localStorage keys already in users' browsers must stay readable forever (the legacy `.knogra` ZIP still is). Nothing else in the repo carries that weight.
@@ -79,4 +81,5 @@ Dev-only surfaces, documented nowhere but here and the code. Choose the lightest
     window.transitionDebug          stepMode = true, then .next() to step a transition.
     knogra.clearBuffers()           Reset the action/transition/saver/error buffers before a focused repro.
     knogra.snapshot()  Ctrl+Shift+D Portable state capture. Read a snapshot file from the top, whole.
+    monitorFrames()                 Frame gaps over a window (src/utils/diagnostics/frame-monitor.ts); already hooked under d_transition for transitions and d_scene for map tweens. For stutter: measure before guessing.
     npm run deps                    dependency-cruiser reports into .ws/deps/outputs/. For dependency direction, cycles and subsystem boundaries — not for local bug fixes.

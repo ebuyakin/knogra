@@ -234,6 +234,6 @@ Deliberately the opposite of the scene-wide **Enlarge / Shrink** ([layout-archit
 ## 7. Future directions
 
 - **More tools:** arc, mirror/flip across the selection's axis.
-- **Keyboard namespace.** The global keymap has only `Shift+N` and digits `5`–`9` free; Rotate was absorbed by making `O` / `Shift+O` selection-sensitive (§6.4) rather than by spending one. The agreed escape hatch for the next tool is an **Arrange leader key** — one key entering a transient sub-mode with an on-screen hint bar. Deliberately unbuilt: it introduces modality and touches the already-oversized keyboard handler.
+- **Keyboard namespace.** The global keymap has only the digits `5`–`7` free; Rotate was absorbed by making `O` / `Shift+O` selection-sensitive (§6.4) rather than by spending one. The agreed escape hatch for the next tool is an **Arrange leader key** — one key entering a transient sub-mode with an on-screen hint bar. Deliberately unbuilt: it introduces modality and touches the already-oversized keyboard handler.
 - **Menu nesting.** The submenu is flat with group headings at thirteen tools. If the family grows much further, switch to one submenu per group — the registry already carries `group`, so this is a change to `buildArrangeMenu` alone. Weigh it against depth: the submenu sits at the root of both the node and the canvas menu, so nesting would put the tools three levels down.
 - **Composable params.** The merge rule in §4.1 now folds `repeats` into two knobs. A third should move onto the tool (an optional `mergeParams`) rather than growing inside `Arrange`.

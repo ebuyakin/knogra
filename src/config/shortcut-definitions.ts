@@ -51,6 +51,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { key: 'HJKL', description: 'Navigate between nodes (or Arrows)' },
       { key: 'Shift+HJKL', description: 'Navigate and centre on the node' },
       { key: 'N', description: 'Reset zoom, centre on selected node' },
+      { key: 'Shift+N', description: 'Home: go to the anchor\'s scene' },
       { key: 'Escape', description: 'Deselect all' },
       { key: 'F / Shift+F', description: 'Fit scene to view / to image' },
       { key: '+ / − / 0', description: 'Zoom in / out / reset (current scene)' },
@@ -64,8 +65,11 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     column: 2,
     shortcuts: [
       { key: '/', description: 'Open the map of this scene' },
+      { key: 'Shift+/', description: 'Reset this scene to its map shape' },
       { key: 'H J K L', description: 'Walk the map: siblings, in, out (or Arrows)' },
       { key: 'Space', description: 'Balloon the selected small node' },
+      { key: 'R', description: 'Reset this map\'s distances and sizes' },
+      { key: 'Shift+R', description: 'Reset directions too (shared by all maps)' },
       { key: 'Enter', description: 'Open the focus\'s scene' },
       { key: 'Escape', description: 'Back to the scene you came from' },
     ]
@@ -93,7 +97,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
   },
   {
     title: 'Workspace',
-    column: 3,
+    column: 2,
     shortcuts: [
       { key: 'Ctrl+S', description: 'Save workspace to file' },
       { key: 'Ctrl+O', description: 'Open workspace from file' },
@@ -110,7 +114,7 @@ export const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
   },
   {
     title: 'Edges — with an edge selected',
-    column: 2,
+    column: 3,
     shortcuts: [
       { key: 'J / K', description: 'Bend edge clockwise / anticlockwise' },
       { key: 'Shift+J / K', description: 'Bend with large steps' },
