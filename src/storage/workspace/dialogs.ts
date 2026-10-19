@@ -470,7 +470,7 @@ export function showNewWorkspaceDialog(): Promise<NewWorkspaceOptions | null> {
       </label>
       <label style="display:flex; align-items:center; gap:8px; margin-bottom:20px; cursor:pointer;">
         <input type="checkbox" id="nw-settings" checked style="accent-color:#58a6ff;">
-        Preserve settings and custom themes
+        Preserve settings and custom themes (API keys are kept either way)
       </label>
       <div style="display:flex; justify-content:flex-end; gap:8px;">
         <button id="nw-cancel" style="padding:6px 16px; border-radius:6px; border:1px solid #30363d;

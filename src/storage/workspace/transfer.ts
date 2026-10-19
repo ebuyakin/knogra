@@ -384,7 +384,12 @@ export async function clearAllData(keepSettings = false): Promise<void> {
     themeDb.version(THEME_DB_VERSION).stores(THEME_DB_SCHEMA);
     await themeDb.table('themes').clear();
 
+    // API keys survive every reset. They are user-private: exports strip them, so a file can never bring them back,
+    // and losing them here would be losing them for good. The rule lives here, at the one place the settings blob is
+    // wiped, rather than in each caller — the new-workspace path once lacked it and dropped the keys (fixed 2026-10-18).
+    const apiKeys = readLocalApiKeys();
     localStorage.removeItem(SETTINGS_KEY);
+    if (Object.keys(apiKeys).length > 0) localStorage.setItem(SETTINGS_KEY, JSON.stringify(apiKeys));
     localStorage.removeItem(STATE_KEY);
     // Presets are a kind of setting and follow the same rule. Removing the key
     // rather than emptying the collection matters: the registry seeds starters
@@ -479,8 +484,8 @@ function parseDateLike(value: unknown, fallback: Date): Date {
   return fallback;
 }
 
-/** Read current API key values from localStorage before they are cleared. */
-export function readLocalApiKeys(): Record<string, Record<string, string>> {
+/** The API key values currently in localStorage, by domain, for the two writers of the settings blob to carry over. */
+function readLocalApiKeys(): Record<string, Record<string, string>> {
   const stored = localStorage.getItem(SETTINGS_KEY);
   if (!stored) return {};
 
@@ -499,16 +504,16 @@ export function readLocalApiKeys(): Record<string, Record<string, string>> {
   }
 }
 
-export function importSettings(
-  settings: Record<string, unknown>,
-  savedKeys: Record<string, Record<string, string>> = {}
-): void {
-  // Saved keys must be written even when the file carries no settings of its own:
-  // clearAllData() has already wiped them, so returning early would lose them.
-  if (Object.keys(settings).length === 0 && Object.keys(savedKeys).length === 0) return;
+/**
+ * Write a file's settings as the local settings. The API keys already in localStorage are laid over
+ * them: the file never carries keys (exports strip them), and the local ones are the user's.
+ */
+export function importSettings(settings: Record<string, unknown>): void {
+  const localApiKeys = readLocalApiKeys();
+  // Keys must be written even when the file carries no settings of its own; returning early would lose them.
+  if (Object.keys(settings).length === 0 && Object.keys(localApiKeys).length === 0) return;
 
-  // Restore API keys that were saved before clearAllData() wiped localStorage.
-  for (const [domain, keys] of Object.entries(savedKeys)) {
+  for (const [domain, keys] of Object.entries(localApiKeys)) {
     if (!settings[domain]) settings[domain] = {};
     for (const [key, value] of Object.entries(keys)) {
       (settings[domain] as Record<string, unknown>)[key] = value;

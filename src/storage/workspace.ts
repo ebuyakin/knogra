@@ -33,7 +33,6 @@ import {
   importSettings,
   importShelf,
   importThemes,
-  readLocalApiKeys,
   resetFileNaming,
   stripConversationImages,
 } from './workspace/transfer';
@@ -335,46 +334,43 @@ export async function importWorkspace(file: File): Promise<boolean> {
       conversations = stripConversationImages(conversations, inclusion);
     }
 
-    // 3. Capture local API keys BEFORE clearing — clearAllData() wipes localStorage
-    //    so they must be read first and restored after settings import.
-    const localApiKeys = readLocalApiKeys();
-
-    // 4. Clear existing data
+    // 3. Clear existing data. The local API keys survive: clearAllData() carries
+    //    them over, and importSettings() lays them over the file's settings.
     await clearAllData();
-    
-    // 5. Import graph data to IndexedDB
-    await importGraphData(graph, backgroundImages);
-    
-    // 6. Import settings to localStorage (restores preserved API keys)
-    importSettings(settings, localApiKeys);
 
-    // 6b. Adopt the file identity the workspace carries, so saving it again
+    // 4. Import graph data to IndexedDB
+    await importGraphData(graph, backgroundImages);
+
+    // 5. Import settings to localStorage
+    importSettings(settings);
+
+    // 5b. Adopt the file identity the workspace carries, so saving it again
     //     continues its version sequence instead of starting a new one.
     adoptImportedFileNaming(settings);
 
-    // 6c. Image presets, alongside settings because they are a kind of setting.
+    // 5c. Image presets, alongside settings because they are a kind of setting.
     //     A file that carried none leaves the local collection untouched.
     importNodeImagePresets(members.nodeImagePresets);
 
-    // 7. Import conversations to IndexedDB
+    // 6. Import conversations to IndexedDB
     await importConversations(conversations);
-    
-    // 8. Import shelf to localStorage
+
+    // 7. Import shelf to localStorage
     importShelf(shelf);
-    
-    // 9. Import paths to IndexedDB
+
+    // 8. Import paths to IndexedDB
     await importPaths(paths);
-    
-    // 10. Import app state to localStorage
+
+    // 9. Import app state to localStorage
     importAppState(appState);
-    
-    // 11. Import custom themes to IndexedDB
+
+    // 10. Import custom themes to IndexedDB
     await importThemes(themes);
 
-    // 11b. Map views to IndexedDB. A legacy ZIP carries none.
+    // 10b. Map views to IndexedDB. A legacy ZIP carries none.
     await importMapViews(members.mapViews ?? []);
 
-    // 12. Reload to apply changes
+    // 11. Reload to apply changes
     // ping before reload — keepalive:true in telemetry.ts ensures the request
     // completes even as the page unloads.
     ping('workspace_imported');

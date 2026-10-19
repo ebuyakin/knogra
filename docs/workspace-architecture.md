@@ -102,7 +102,12 @@ The file is a copy taken at a moment.
 | IndexedDB `knogra-map` | map view records (added 2026-09-23, [map-view.md](map-view.md) §6.2) |
 | localStorage `knogra.*` | settings, shelf, app state |
 
-**Two privacy carve-outs, load-bearing:** `exportSettings()` strips API keys, and
+**Two privacy carve-outs, load-bearing:** `exportSettings()` strips API keys (and, the other
+half of the same rule, the API keys in localStorage survive every reset: `clearAllData()` carries
+them over when it wipes the settings blob and `importSettings()` lays them over a file's settings,
+so a key never leaves the browser and is never lost by the app — the rule sits with the two
+writers of the blob in `transfer.ts`, not in their callers, since the new-workspace caller once
+lacked it and dropped the keys, fixed 2026-10-18), and
 `getExportableAppState()` omits the path-mode session — shipping it would drop whoever opens the
 file into someone else's tour at someone else's cursor position, and since paths keep their
 original ids the reference often resolves, so `Path.restoreSession()` would not catch it. Every
@@ -119,9 +124,8 @@ construction.
    Applied to the in-memory scenes **before** they are written, so the first frame after reload is
    already correct.
 5. If the file carries in-note images, ask which categories to keep.
-6. Capture local API keys — `clearAllData()` wipes localStorage, so they must be read first.
-7. Clear all data, write every member, restore the captured API keys.
-8. Reload the page to reinitialize the app.
+6. Clear all data, write every member. The local API keys survive on their own (§4.1).
+7. Reload the page to reinitialize the app.
 
 **Why reload rather than reconcile:** all stores reinitialize from storage, and no live Cytoscape
 state can survive to contradict what was just written. See §6.2.
@@ -159,6 +163,10 @@ User presses Ctrl+N
 │  Reload page        │
 └─────────────────────┘
 ```
+
+The dialog also offers **Preserve settings and custom themes**, checked by default. Unchecked,
+`clearAllData(false)` wipes settings, custom themes, app state and image presets; the API keys stay
+either way (§4.1).
 
 ---
 
