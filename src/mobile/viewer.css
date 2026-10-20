@@ -1,0 +1,304 @@
+/* Mobile viewer (docs/mobile-viewer.md): the page, the three panes, the bars, the notes, the quiz.
+   Colours come from the map's theme through the variables viewer.ts sets on the root (§5.1);
+   the values here are the dark theme's, for the moment before the first map is drawn. */
+
+:root {
+  --theme-canvas-raw: #0d1117;
+  /* The map's canvas carries a dark vignette and reads darker than its colour; the page around it goes a shade darker to match. */
+  --theme-canvas: color-mix(in srgb, var(--theme-canvas-raw) 85%, #000);
+  --theme-text: #e6edf3;
+  --theme-text-secondary: #8b949e;
+  --theme-accent: #58a6ff;
+  --theme-line: #30363d;
+  --theme-hairline: color-mix(in srgb, var(--theme-text) 18%, transparent);
+  --theme-muted: color-mix(in srgb, var(--theme-text) 40%, transparent);
+  --theme-dim: color-mix(in srgb, var(--theme-text) 25%, transparent);
+  /* The bars: a translucent darkening over whatever is behind, so they sit back from the map and the text. */
+  --bar-shade: color-mix(in srgb, #000 40%, transparent);
+  /* Sideways, the width of every bar column: wide enough for the longest label, "Correct", with its padding. */
+  --bar-column-width: 104px;
+  /* Between buttons in a bar; the upright button width is computed from it. */
+  --bar-gap: 8px;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--theme-canvas);
+  color: var(--theme-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* No double-tap zoom: the map's double tap is travel (§6). Pinch stays off by the same rule (§8). */
+  touch-action: manipulation;
+}
+
+#viewer {
+  height: 100%;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* The strip of three panes (§8): three times the width, slid by a third per pane. The browser gets no gesture on the strip itself; the notes body alone hands it vertical pans, and the swipe code judges the direction (gestures.ts). */
+#panes {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  transform: translateX(-33.3333%);
+  transition: transform 250ms ease-out;
+  touch-action: none;
+}
+
+#panes.dragging {
+  transition: none;
+}
+
+.pane {
+  flex: 0 0 33.3333%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+#map-pane {
+  position: relative;
+}
+
+#map {
+  flex: 1;
+  /* The canvas inside is sized to the container and will not shrink unless the container may: both axes, since the bar stands beside it sideways. */
+  min-height: 0;
+  min-width: 0;
+}
+
+#status {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--theme-text-secondary);
+  text-align: center;
+}
+
+/* Bars (§8): along the bottom of every pane, a translucent shade darker than the page, dimmed text and buttons, so the map and the notes hold the eye. The map's bar gives way to the quiz bar while a quiz runs (§10.2). */
+#bar,
+#quiz-bar,
+.pane-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--bar-gap);
+  padding: 8px 12px;
+  border-top: 1px solid var(--theme-hairline);
+  background: var(--bar-shade);
+  /* The map gives way, never the bar. */
+  flex-shrink: 0;
+}
+
+.pane-bar h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--theme-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The notes title follows its Map button; set to the far edge it balances the bar instead of crowding the button. */
+#notes-pane .pane-bar h2 {
+  text-align: right;
+  padding-right: 8px;
+}
+
+/* Upright, every button in every bar is a quarter of the bar's width less the gaps: the map's bar holds four, and the side panes' buttons match them. */
+#bar button,
+#quiz-bar button,
+.pane-bar button {
+  flex: 0 0 calc((100% - 3 * var(--bar-gap)) / 4);
+  padding: 10px 0;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--theme-text-secondary);
+  background: transparent;
+  border: 1px solid var(--theme-hairline);
+  border-radius: 8px;
+}
+
+#bar button:disabled,
+#quiz-bar button:disabled,
+.pane-bar button:disabled {
+  color: var(--theme-dim);
+  border-color: var(--theme-dim);
+}
+
+#bar[hidden],
+#quiz-bar[hidden],
+.pane-bar button[hidden] {
+  display: none;
+}
+
+/* The running quiz's counts, four parts; upright in one line in the top left corner of the map, where boxes seldom reach; nothing to tap, nothing opaque. */
+#quiz-counter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--theme-text-secondary);
+  pointer-events: none;
+  z-index: 1;
+}
+
+#quiz-counter span + span::before {
+  content: '  ·  ';
+  white-space: pre;
+}
+
+/* Sideways (§8): height is the scarce axis, so every pane's bar stands along the right edge, where the thumb is, as a column of buttons; a pane's title runs down the column like a book's spine.
+   Placed after every upright rule for the same elements on purpose: at equal specificity, the later rule wins, so this block can only override them from below. */
+@media (orientation: landscape) {
+  .pane {
+    flex-direction: row;
+  }
+
+  #bar,
+  #quiz-bar,
+  .pane-bar {
+    position: relative;
+    /* One width for every column in every mode, so the map's surface never changes size when a bar swaps. */
+    width: var(--bar-column-width);
+    box-sizing: border-box;
+    flex-direction: column;
+    /* Buttons gather at the bottom of the column, where a lone one looks placed rather than lost. */
+    justify-content: flex-end;
+    /* Every button as wide as the widest, so the column reads as one. */
+    align-items: stretch;
+    padding: 12px 8px;
+    border-top: none;
+    border-left: 1px solid var(--theme-hairline);
+  }
+
+  #bar button,
+  #quiz-bar button,
+  .pane-bar button {
+    flex: 0 0 auto;
+    padding: 10px 12px;
+  }
+
+  /* The title, top to bottom from the column's top corner, out of the flow; cut with an ellipsis before it reaches the buttons. (The notes selector repeated so the upright right-alignment, more specific, does not win here.) */
+  .pane-bar h2,
+  #notes-pane .pane-bar h2 {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    flex: none;
+    max-height: 40%;
+    writing-mode: vertical-rl;
+    text-align: left;
+    padding-right: 0;
+  }
+
+  /* The counter sits in the column's top corner, one part per line, out of the flow. */
+
+  #quiz-counter {
+    top: 12px;
+    left: 8px;
+    right: auto;
+    padding: 0;
+    text-align: left;
+  }
+
+  #quiz-counter span {
+    display: block;
+  }
+
+  #quiz-counter span + span::before {
+    content: none;
+  }
+}
+
+/* Side panes' bodies: the bars' shade, so a side pane is one dark sheet; scroll vertically; a sideways gesture is the swipe's (gestures.ts). */
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--bar-shade);
+  touch-action: pan-y;
+}
+
+.pane-note {
+  margin: 0;
+  color: var(--theme-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* The quiz pane (§10.1). */
+.quiz-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+  font-size: 15px;
+}
+
+.quiz-field input[type='number'] {
+  width: 64px;
+  padding: 8px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--theme-text);
+  background: transparent;
+  border: 1px solid var(--theme-muted);
+  border-radius: 6px;
+}
+
+.quiz-help {
+  margin-top: 24px;
+}
+
+/* Notes (§9). The message rules the editor keeps inline in index.html, repeated here; the rest come from styles/chat-panel.css, whose fixed colours give way to the theme's. */
+#notes-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+}
+
+#notes-body .message-content {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--theme-text);
+  overflow-wrap: anywhere;
+}
+
+#notes-body .message.user .message-content {
+  background: color-mix(in srgb, var(--theme-text) 10%, transparent);
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+
+#notes-body .message.note {
+  border-top-color: var(--theme-hairline);
+}
+
+#notes-body .note-content,
+#notes-body .note-header,
+#notes-body .note-image-credit {
+  color: var(--theme-text-secondary);
+}
+
+#notes-body .message-content a {
+  color: var(--theme-accent);
+}

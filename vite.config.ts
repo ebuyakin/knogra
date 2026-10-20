@@ -9,5 +9,12 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'dist',
     sourcemap: false,
+    rollupOptions: {
+      // Two pages from one bundle: the editor and the mobile viewer (docs/mobile-viewer.md §3).
+      input: {
+        main: 'index.html',
+        view: 'view.html',
+      },
+    },
   },
 })

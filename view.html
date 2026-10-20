@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- viewport-fit=cover lets the page extend under the notch and the home bar; the CSS pads with the safe-area insets. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Knogra viewer: review a knowledge graph on a phone" />
+    <!-- The viewer is reached from knogra.io; it has nothing to index on its own. -->
+    <meta name="robots" content="noindex" />
+    <title>Knogra viewer</title>
+    <link rel="stylesheet" href="/src/mobile/viewer.css" />
+  </head>
+  <body>
+    <!-- The mobile viewer (docs/mobile-viewer.md). A second page of the app: its own DOM, its own styles,
+         its own startup; none of the editor's grid and no desktop gate.
+         Three panes side by side (§8), the map in the middle; #panes slides to show one. -->
+    <div id="viewer">
+      <div id="panes">
+        <section class="pane" id="quiz-pane">
+          <div class="pane-body quiz-body">
+            <p class="pane-note" data-role="eligible"></p>
+            <label class="quiz-field">
+              <span>Hide</span>
+              <input data-role="hidden-percent" type="number" min="10" max="100" step="10" value="50" inputmode="numeric" />
+              <span>% of the nodes</span>
+            </label>
+            <p class="pane-note" data-role="message" hidden></p>
+            <p class="pane-note quiz-help">Hidden nodes show as blank boxes on the map. Tap one to select it, tap it again to reveal it, then say whether you had it right. Travel as usual; the quiz follows.</p>
+          </div>
+          <!-- Every interactive element sits at the bottom of the screen, within the thumb's reach; the top holds nothing to tap. -->
+          <nav class="pane-bar">
+            <h2>Quiz</h2>
+            <button type="button" data-action="start">Start</button>
+            <button type="button" data-action="end" hidden>End quiz</button>
+            <button type="button" data-action="map">Map</button>
+          </nav>
+        </section>
+        <section class="pane" id="map-pane">
+          <div id="map"></div>
+          <p id="status"></p>
+          <nav id="bar">
+            <button type="button" data-action="quiz">Quiz</button>
+            <button type="button" data-action="back">Back</button>
+            <button type="button" data-action="home">Home</button>
+            <button type="button" data-action="notes">Notes</button>
+          </nav>
+          <!-- While a quiz runs, in place of the bar: the verdicts, and the two ways home; Notes is gone, so there is no cheating.
+               The counter is to read only: upright it floats to the top of the pane, sideways it heads the column. -->
+          <nav id="quiz-bar" hidden>
+            <div id="quiz-counter"></div>
+            <button type="button" data-action="correct">Correct</button>
+            <button type="button" data-action="wrong">Wrong</button>
+            <button type="button" data-action="back">Back</button>
+            <button type="button" data-action="home">Home</button>
+          </nav>
+        </section>
+        <section class="pane" id="notes-pane">
+          <div class="pane-body" id="notes-body"></div>
+          <nav class="pane-bar">
+            <button type="button" data-action="map">Map</button>
+            <h2 id="notes-title"></h2>
+          </nav>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/src/mobile/viewer.ts"></script>
+  </body>
+</html>
