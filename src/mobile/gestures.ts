@@ -104,14 +104,14 @@ export function wirePaneSwipe(strip: HTMLElement, panes: Panes, isHeld: () => bo
   let startY = 0;
 
   const finish = (dx: number): void => {
-    if (state === 'swiping') panes.release(dx, strip.clientWidth / 3);
+    if (state === 'swiping') panes.release(dx, panes.paneWidth());
     state = 'idle';
     pointerId = -1;
   };
 
   strip.addEventListener('pointerdown', event => {
     if (state !== 'idle' || !event.isPrimary) return;
-    const width = strip.clientWidth / 3;
+    const width = panes.paneWidth();
     if (event.clientX < EDGE_STRIP_PX || event.clientX > width - EDGE_STRIP_PX) return;
     state = 'judging';
     pointerId = event.pointerId;

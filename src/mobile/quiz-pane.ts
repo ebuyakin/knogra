@@ -3,8 +3,8 @@
  *
  * The quiz pane is where a quiz is configured, started and ended. While a
  * quiz runs, the map pane shows Correct and Wrong in place of the bar and a
- * counter to read: over the top of the map upright, heading the button column
- * sideways. Both are drawn from the quiz's snapshot.
+ * counter to read: over the top of the map in portrait, heading the button
+ * column in landscape. Both are drawn from the quiz's snapshot.
  */
 
 import type { PhoneQuiz, PhoneQuizSnapshot } from './quiz';
@@ -79,7 +79,7 @@ export class QuizPane {
     this.#el.quizBar.hidden = !active;
     if (!active) return;
 
-    // Four parts; the stylesheet joins them in a line upright and stacks them sideways.
+    // Four parts; the stylesheet joins them in a line in portrait and stacks them in landscape.
     const parts = [
       `${snapshot.remainingCount} left of ${snapshot.hiddenCount}`,
       `${snapshot.correctCount} right`,

@@ -8,7 +8,7 @@
     <meta name="description" content="Knogra viewer: review a knowledge graph on a phone" />
     <!-- The viewer is reached from knogra.io; it has nothing to index on its own. -->
     <meta name="robots" content="noindex" />
-    <!-- The home-screen app (§16.5): icon, name under it, no browser bars, the status bar over the page
+    <!-- The home-screen app (§3): icon, name under it, no browser bars, the status bar over the page
          (the CSS pads for it), and the manifest for the browsers that read one. iOS does not take SVG icons. -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="Knogra" />
@@ -24,9 +24,19 @@
   <body>
     <!-- The mobile viewer (docs/mobile-viewer.md). A second page of the app: its own DOM, its own styles,
          its own startup; none of the editor's grid and no desktop gate.
-         Three panes side by side (§8), the map in the middle; #panes slides to show one. -->
+         Four panes side by side (§8), the map the home; #panes slides to show one. -->
     <div id="viewer">
       <div id="panes">
+        <section class="pane" id="library-pane">
+          <div class="pane-body">
+            <p class="pane-note" data-role="message"></p>
+            <ul class="library-list" data-role="list"></ul>
+          </div>
+          <nav class="pane-bar">
+            <h2>Library</h2>
+            <button type="button" data-action="map">Map</button>
+          </nav>
+        </section>
         <section class="pane" id="quiz-pane">
           <div class="pane-body quiz-body">
             <p class="pane-note" data-role="eligible"></p>
@@ -41,6 +51,7 @@
           <!-- Every interactive element sits at the bottom of the screen, within the thumb's reach; the top holds nothing to tap. -->
           <nav class="pane-bar">
             <h2>Quiz</h2>
+            <button type="button" data-action="library">Library</button>
             <button type="button" data-action="start">Start</button>
             <button type="button" data-action="end" hidden>End quiz</button>
             <button type="button" data-action="map">Map</button>
@@ -56,7 +67,7 @@
             <button type="button" data-action="notes">Notes</button>
           </nav>
           <!-- While a quiz runs, in place of the bar: the verdicts, and the two ways home; Notes is gone, so there is no cheating.
-               The counter is to read only: upright it floats to the top of the pane, sideways it heads the column. -->
+               The counter is to read only: in portrait it floats to the top of the pane, in landscape it heads the column. -->
           <nav id="quiz-bar" hidden>
             <div id="quiz-counter"></div>
             <button type="button" data-action="correct">Correct</button>
@@ -72,6 +83,11 @@
             <h2 id="notes-title"></h2>
           </nav>
         </section>
+      </div>
+      <!-- In a browser, landscape, Safari's bars leave no room for a map (§3). Shown by CSS alone; the panes stay built behind it. -->
+      <div id="landscape-note">
+        <p>Landscape needs the home-screen app: Share, then Add to Home Screen.</p>
+        <p>Or turn the phone to portrait.</p>
       </div>
     </div>
     <script type="module" src="/src/mobile/viewer.ts"></script>

@@ -1,7 +1,7 @@
 /**
  * Phone band layout (docs/mobile-viewer.md §5.3), the landscape layout
  *
- * A phone held sideways is wide and short, and boxes are wide and short too:
+ * A phone in landscape is wide and short, and boxes are wide and short too:
  * a row of them reads as a line, a column does not. So this is not the
  * portrait layout with its axes swapped (that was tried on 2026-10-20 and
  * stacked boxes along their wide side, which holds few and reads badly); it
@@ -11,7 +11,7 @@
  *   middle    the focus, with landmarks beside it, left and right
  *   below     one row of landmarks across the width
  *
- * The same three facts of a stored direction are kept as upright: order
+ * The same three facts of a stored direction are kept as in portrait: order
  * around the focus, left stays left, above stays above. A landmark goes to
  * the band its direction says; one within `middleBand` of straight left or
  * right may go beside the focus instead, the most horizontal first, as long
@@ -27,7 +27,7 @@
  * or down by its direction. The middle band is as tall as the focus or that
  * pair, and the rows stand off its edge.
  *
- * Size is per box, as upright (phone-row-layout.ts): each landmark takes the
+ * Size is per box, as in portrait (phone-row-layout.ts): each landmark takes the
  * largest scale that fits, never above `scaleMax`. A line of boxes
  * (a row, or one side's beside boxes) shares its width and comes down
  * together when it would overrun. The middle band is a slot like the rows':

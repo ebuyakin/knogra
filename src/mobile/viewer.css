@@ -15,9 +15,13 @@
   --theme-dim: color-mix(in srgb, var(--theme-text) 25%, transparent);
   /* The bars: a translucent darkening over whatever is behind, so they sit back from the map and the text. */
   --bar-shade: color-mix(in srgb, #000 40%, transparent);
-  /* Sideways, the width of every bar column: wide enough for the longest label, "Correct", with its padding. */
+  /* The bar's colour as an opaque value: the shade over the page. The page's root is painted with it, which is what
+     Safari (iOS 26, which ignores theme-color) tints its own bars with, and what fills the safe-area strips around the
+     panes, so the bar reads as running to the screen's edge. viewer.ts mirrors the two numbers for theme-color. */
+  --bar-color: color-mix(in srgb, var(--theme-canvas) 60%, #000);
+  /* In landscape, the width of every bar column: wide enough for the longest label, "Correct", with its padding. */
   --bar-column-width: 104px;
-  /* Between buttons in a bar; the upright button width is computed from it. */
+  /* Between buttons in a bar; the portrait button width is computed from it. */
   --bar-gap: 8px;
 }
 
@@ -27,7 +31,7 @@ body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--theme-canvas);
+  background: var(--bar-color);
   color: var(--theme-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   /* No double-tap zoom: the map's double tap is travel (§6). Pinch stays off by the same rule (§8). */
@@ -35,18 +39,65 @@ body {
 }
 
 #viewer {
+  position: relative;
   height: 100%;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   box-sizing: border-box;
   overflow: hidden;
+  /* overflow clips at the padding edge, so the pane slid off to the side would show through the side insets (seen in
+     landscape as a home-screen app, 2026-10-22); the clip is drawn at the content edge instead. */
+  clip-path: inset(env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left));
 }
 
-/* The strip of three panes (§8): three times the width, slid by a third per pane. The browser gets no gesture on the strip itself; the notes body alone hands it vertical pans, and the swipe code judges the direction (gestures.ts). */
+/* As a home-screen app on iOS 26 the viewport comes up short by the status bar's height (a WebKit regression, measured
+   873 of 932 on 2026-10-22); the large-viewport unit still reports the whole screen. Only there: in Safari 100lvh is the
+   height with Safari's bars collapsed and would run under them. */
+@media (display-mode: standalone) {
+  html {
+    height: 100lvh;
+  }
+}
+
+/* In a browser, landscape, on a touch device: Safari's bars take a third of the height and cannot be hidden by the page
+   (no element fullscreen on iPhone), so the note stands in for the map (§3). The home-screen app has no bars and matches
+   display-mode: browser no more; a desktop window has no coarse pointer. */
+#landscape-note {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: var(--theme-text-secondary);
+  font-size: 15px;
+  background: var(--theme-canvas);
+}
+
+#landscape-note p {
+  margin: 0;
+}
+
+@media (display-mode: browser) and (orientation: landscape) and (pointer: coarse) {
+  #landscape-note {
+    display: flex;
+  }
+
+  #panes {
+    visibility: hidden;
+  }
+}
+
+/* The strip of four panes (§8): four times the width, slid by a quarter per pane; the map, third, is where it starts. The browser gets no gesture on the strip itself; the notes body alone hands it vertical pans, and the swipe code judges the direction (gestures.ts). */
 #panes {
   display: flex;
-  width: 300%;
+  width: 400%;
   height: 100%;
-  transform: translateX(-33.3333%);
+  /* The page's colour; the root around it carries the bar's (see --bar-color). */
+  background: var(--theme-canvas);
+  transform: translateX(-50%);
   transition: transform 250ms ease-out;
   touch-action: none;
 }
@@ -56,7 +107,7 @@ body {
 }
 
 .pane {
-  flex: 0 0 33.3333%;
+  flex: 0 0 25%;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -69,7 +120,7 @@ body {
 
 #map {
   flex: 1;
-  /* The canvas inside is sized to the container and will not shrink unless the container may: both axes, since the bar stands beside it sideways. */
+  /* The canvas inside is sized to the container and will not shrink unless the container may: both axes, since the bar stands beside it in landscape. */
   min-height: 0;
   min-width: 0;
 }
@@ -113,7 +164,7 @@ body {
   padding-right: 8px;
 }
 
-/* Upright, every button in every bar is a quarter of the bar's width less the gaps: the map's bar holds four, and the side panes' buttons match them. */
+/* In portrait, every button in every bar is a quarter of the bar's width less the gaps: the map's bar holds four, and the side panes' buttons match them. */
 #bar button,
 #quiz-bar button,
 .pane-bar button {
@@ -140,7 +191,7 @@ body {
   display: none;
 }
 
-/* The running quiz's counts, four parts; upright in one line in the top left corner of the map, where boxes seldom reach; nothing to tap, nothing opaque. */
+/* The running quiz's counts, four parts; in portrait one line in the top left corner of the map, where boxes seldom reach; nothing to tap, nothing opaque. */
 #quiz-counter {
   position: absolute;
   top: 0;
@@ -159,8 +210,8 @@ body {
   white-space: pre;
 }
 
-/* Sideways (§8): height is the scarce axis, so every pane's bar stands along the right edge, where the thumb is, as a column of buttons; a pane's title runs down the column like a book's spine.
-   Placed after every upright rule for the same elements on purpose: at equal specificity, the later rule wins, so this block can only override them from below. */
+/* Landscape (§8): height is the scarce axis, so every pane's bar stands along the right edge, where the thumb is, as a column of buttons; a pane's title runs down the column like a book's spine.
+   Placed after every portrait rule for the same elements on purpose: at equal specificity, the later rule wins, so this block can only override them from below. */
 @media (orientation: landscape) {
   .pane {
     flex-direction: row;
@@ -190,7 +241,7 @@ body {
     padding: 10px 12px;
   }
 
-  /* The title, top to bottom from the column's top corner, out of the flow; cut with an ellipsis before it reaches the buttons. (The notes selector repeated so the upright right-alignment, more specific, does not win here.) */
+  /* The title, top to bottom from the column's top corner, out of the flow; cut with an ellipsis before it reaches the buttons. (The notes selector repeated so the portrait right-alignment, more specific, does not win here.) */
   .pane-bar h2,
   #notes-pane .pane-bar h2 {
     position: absolute;
@@ -238,6 +289,46 @@ body {
   color: var(--theme-text-secondary);
   font-size: 14px;
   line-height: 1.5;
+}
+
+/* The library pane (§8): one row per graph, the title and the node count; the graph on the phone in the accent. */
+.library-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.library-list li {
+  border-bottom: 1px solid var(--theme-hairline);
+}
+
+.library-list button {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  background: transparent;
+  border: 0;
+  color: var(--theme-text);
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+}
+
+.library-list .library-count {
+  flex: none;
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+}
+
+.library-list .installed button {
+  color: var(--theme-accent);
+}
+
+.library-list button:disabled {
+  opacity: 0.5;
 }
 
 /* The quiz pane (§10.1). */

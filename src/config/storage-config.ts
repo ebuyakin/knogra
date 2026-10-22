@@ -69,6 +69,11 @@ export const NODE_IMAGE_PRESETS_KEY = 'knogra.nodeImagePresets';
 // (the `settings` member) nor get overwritten when one is opened.
 export const MERMAID_IMPORT_KEY = 'knogra.mermaid.import';
 
+// The mobile viewer's installed graph: the library file's URL, so the viewer's
+// library pane can mark it. Written and read by the viewer alone; the editor
+// never touches it. See docs/mobile-viewer.md §4.1.
+export const VIEWER_GRAPH_KEY = 'knogra.viewer.graph';
+
 // sessionStorage keys — deliberately not persisted across browser sessions.
 // Active Node Editor tab: sticky within a work session (a design pass keeps
 // landing on Design), reset to the default in a fresh tab.

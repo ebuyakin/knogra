@@ -44,9 +44,9 @@
  * cut at north and south, the halves and the band are contiguous in that
  * order, and rows fill from the focus outward.
  *
- * Upright only. A phone held sideways is not this problem with the axes
+ * Portrait only. A phone in landscape is not this problem with the axes
  * swapped: boxes are wide and short, a row of them reads as a line and a
- * column does not; the sideways layout is its own module.
+ * column does not; the landscape layout is its own module.
  *
  * Pure. Positions are in pixels at zoom 1, the focus at the origin.
  */

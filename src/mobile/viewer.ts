@@ -2,8 +2,8 @@
  * Mobile viewer — startup (docs/mobile-viewer.md).
  *
  * A second page of the app. With `?graph=<library url>` it installs that
- * graph on the phone and reloads; without, it shows the graph already stored.
- * Step 1 shows the graph's title and node count; the map follows.
+ * graph on the phone and reloads; without, it shows the graph already stored,
+ * or, with none stored, the library pane (§8), from which a tap installs.
  *
  * The stores read IndexedDB the moment they are imported, so they are
  * imported only on the showing path, after any install has been written and
@@ -55,22 +55,32 @@ async function install(url: string): Promise<void> {
 
 async function show(): Promise<void> {
   const { graphStore } = await import('../storage/graph-store');
+  const strip = document.getElementById('panes');
+  const libraryRoot = document.getElementById('library-pane');
+  if (!strip || !libraryRoot) throw new Error('Panes not found');
+  const [{ Panes }, { LibraryPane }] = await Promise.all([import('./panes'), import('./library-pane')]);
+  const panes = new Panes(strip);
+  wirePaneButtons(panes);
+
+  // A home-screen app starts with its own, empty storage (§4.3): the library pane is the way in, and the other panes stay shut.
   if (graphStore.nodes.length === 0) {
-    setStatus('No graph on this phone yet. Open one from the library on knogra.io.');
+    panes.goTo('library');
+    for (const pane of ['quiz', 'map', 'notes'] as const) panes.setLocked(pane, true);
+    await new LibraryPane(libraryRoot, null).refresh();
     return;
   }
   // The anchor's map is the first map (§6); without an anchor, the first scene's central node stands in.
   const anchor = graphStore.nodes.find(node => node.isAnchor);
   const firstCentralId = graphStore.scenes[0]?.centralNodeId;
   const start = anchor ?? graphStore.nodes.find(node => node.id === firstCentralId) ?? graphStore.nodes[0];
+  const library = new LibraryPane(libraryRoot, start.title);
 
-  const [{ default: cytoscape }, { initializeMathJax }, { getTheme }, { PhoneMap }, { wireMapGestures, wirePaneSwipe }, { Panes }, { NotesPane }, { PhoneQuiz }, { QuizPane }] = await Promise.all([
+  const [{ default: cytoscape }, { initializeMathJax }, { getTheme }, { PhoneMap }, { wireMapGestures, wirePaneSwipe }, { NotesPane }, { PhoneQuiz }, { QuizPane }] = await Promise.all([
     import('cytoscape'),
     import('../utils/mathjax'),
     import('../styles/themes'),
     import('./phone-map'),
     import('./gestures'),
-    import('./panes'),
     import('./notes-pane'),
     import('./quiz'),
     import('./quiz-pane'),
@@ -107,20 +117,18 @@ async function show(): Promise<void> {
   // The page takes the map's colours (§5.1): the variables viewer.css reads, set from the theme of every map shown.
   map.subscribe(() => applyViewerTheme(getTheme(map.themeId)));
 
-  const strip = document.getElementById('panes');
   const quizRoot = document.getElementById('quiz-pane');
   const mapRoot = document.getElementById('map-pane');
   const notesRoot = document.getElementById('notes-pane');
-  if (!strip || !quizRoot || !mapRoot || !notesRoot) throw new Error('Panes not found');
-  const panes = new Panes(strip);
+  if (!quizRoot || !mapRoot || !notesRoot) throw new Error('Panes not found');
   // A finger that has hold of a box is dragging it, not swiping the strip.
   wirePaneSwipe(strip, panes, () => cy.nodes(':grabbed').length > 0);
   const notes = new NotesPane(notesRoot);
-  // The notes pane follows the focus when opened (§9).
+  // The notes pane follows the focus when opened (§9); the library pane fetches the index when opened (§8).
   panes.subscribe(pane => {
     if (pane === 'notes') void notes.showNode(map.focusNodeId);
+    if (pane === 'library') void library.refresh();
   });
-  wirePaneButtons(panes);
 
   // The notes are out of reach while a quiz runs (§10.2); starting a quiz brings the map, since that is where it happens.
   new QuizPane(quiz, quizRoot, mapRoot);
@@ -162,11 +170,11 @@ function applyViewerTheme(theme: ColorTheme): void {
   root.setProperty('--theme-text-secondary', theme.node.textSecondary.color);
   root.setProperty('--theme-accent', theme.node.borderCentral.color);
   root.setProperty('--theme-line', theme.edge.line.color);
-  // Safari's own bar, when the viewer runs in the browser, takes the colour of the viewer's bars (§16.5).
+  // Safari's own bar, when the viewer runs in the browser, takes the colour of the viewer's bars (§3).
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', darken(theme.canvas.background.color, BAR_BRIGHTNESS));
 }
 
-/** The buttons that move between panes (§8): Quiz and Notes on the bar, Map on each side pane's bar. */
+/** The buttons that move between panes (§8): Quiz and Notes on the bar, Map on each side pane's bar, Library on the quiz pane's. */
 function wirePaneButtons(panes: Panes): void {
   const bind = (selector: string, pane: PaneName): void => {
     for (const button of document.querySelectorAll<HTMLButtonElement>(selector)) {
@@ -176,6 +184,7 @@ function wirePaneButtons(panes: Panes): void {
   bind('#bar [data-action="quiz"]', 'quiz');
   bind('#bar [data-action="notes"]', 'notes');
   bind('.pane-bar [data-action="map"]', 'map');
+  bind('#quiz-pane [data-action="library"]', 'library');
 }
 
 /** The bar's buttons (§8): Back steps through the history, Home travels to the anchor; both grey when they would do nothing. */

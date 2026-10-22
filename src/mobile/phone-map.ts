@@ -3,7 +3,7 @@
  *
  * Shows one-ring maps on the viewer's Cytoscape instance by calling the map
  * view's modules in order: walk, seed, style, lay out with one of the phone's
- * two layouts (rows upright, bands sideways; §5.3), draw, paint; and travels
+ * two layouts (rows in portrait, bands in landscape; §5.3), draw, paint; and travels
  * between them with the desktop's three-phase
  * animation (refocus-animator.ts). The desktop's conductor
  * (features/map-view/map-view.ts) is not used: its derive step has the
@@ -68,7 +68,7 @@ const PHONE_ROWS: PhoneRowParams = {
   rowStagger: 0.12,
 };
 
-/** Sideways (phone-band-layout.ts). */
+/** Landscape (phone-band-layout.ts). */
 const PHONE_BANDS: PhoneBandParams = {
   focusMaxWidth: 0.42,
   scaleMax: 0.8,
@@ -402,7 +402,7 @@ export class PhoneMap {
     await ensureBaseStyles({ tree, nodeById, themeId }, baseStyles);
     const baseSizes = new Map<NodeId, Size>([...baseStyles].map(([nodeId, style]) => [nodeId, { width: style.width, height: style.height }]));
     const surface = this.#surface();
-    // Upright: the rows. Sideways: the bands. Two layouts, not one with its axes swapped (§5.3).
+    // Portrait: the rows. Landscape: the bands. Two layouts, not one with its axes swapped (§5.3).
     const layout =
       surface.height >= surface.width
         ? layoutPhoneRows(tree, endsByEdge, surface, baseSizes, PHONE_ROWS)

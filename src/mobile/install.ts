@@ -11,10 +11,16 @@
  * map settings would mislead the phone layout, and the viewer has no settings
  * of its own to restore. Paths, shelf and presets have no screen here.
  *
+ * The installed file's URL is kept in localStorage (§4.1), so the library pane
+ * can mark the graph on the phone. Written last, after the stores: a failed
+ * install leaves the old mark, which is then wrong, but a reload shows an
+ * empty viewer and the library pane, so nothing is misread for long.
+ *
  * The caller reloads the page afterwards: the stores read IndexedDB when they
  * are first imported, so a fresh load is how the new graph reaches them.
  */
 
+import { VIEWER_GRAPH_KEY } from '../config/storage-config';
 import { detectWorkspaceFormat, parseEnvelope, WorkspaceFormatError, type WorkspaceMembers } from '../storage/workspace/envelope';
 import { readLegacyZip } from '../storage/workspace/legacy-zip';
 import { clearAllData, importConversations, importGraphData, importMapViews, importThemes } from '../storage/workspace/transfer';
@@ -26,11 +32,19 @@ import { clearAllData, importConversations, importGraphData, importMapViews, imp
  */
 const GRAPH_LIBRARY_URL_PREFIX = 'https://knogra.io/graphs/';
 
+/** The library's index (§12), under the same prefix: one CORS rule on the site serves the index and the files. */
+export const LIBRARY_INDEX_URL = `${GRAPH_LIBRARY_URL_PREFIX}index.json`;
+
 /** Bytes read to identify a file: `PK` at offset 0, or the first `{` past a BOM and whitespace. 64 is ample. */
 const HEAD_SNIFF_BYTES = 64;
 
 export function isLibraryUrl(url: string): boolean {
   return url.startsWith(GRAPH_LIBRARY_URL_PREFIX);
+}
+
+/** The URL of the file installed on this phone; null before the first install. */
+export function installedGraphUrl(): string | null {
+  return localStorage.getItem(VIEWER_GRAPH_KEY);
 }
 
 export async function installFromUrl(url: string): Promise<void> {
@@ -47,6 +61,7 @@ export async function installFromUrl(url: string): Promise<void> {
   await importConversations(members.chat);
   await importThemes(members.themes);
   await importMapViews(members.mapViews ?? []);
+  localStorage.setItem(VIEWER_GRAPH_KEY, url);
 }
 
 /** The editor's reader, repeated: it is private to workspace.ts, which the viewer does not import (§4.1). */

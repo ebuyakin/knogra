@@ -1,7 +1,7 @@
 # Mobile viewer
 
-> Status: Draft. Spec and plan agreed on 2026-10-19; steps 1 to 6 built and tuned in Chrome's device emulation on 2026-10-19 and 20; step 7, the real phone, pending. This text describes what is built.
-> Last reviewed: 2026-10-20
+> Status: Draft. Spec and plan agreed on 2026-10-19; built and tuned in emulation on 2026-10-19 and 20, on an iPhone from 2026-10-20. Version 2, the home-screen app with the library pane (§15), built 2026-10-22 and not yet seen on the phone. This text describes what is built.
+> Last reviewed: 2026-10-22
 > Authority: Canonical for the mobile viewer: what it is for, what it shows, how it is driven by touch, what it stores on the phone, what it reuses from the app and what it writes of its own. Where code and this document disagree during implementation, this document wins until amended in the same session.
 > Related: [Product vision](knogra-vision.md), [Map view](map-view.md), [Workspace architecture](workspace-architecture.md), [Architecture](architecture.md)
 
@@ -28,11 +28,12 @@ The viewer reuses the map view's terms (map-view.md §2) and adds a few of its o
 Use these words in code, comments and this document.
 
     viewer        The mobile page and everything on it. Not the app: the app is the desktop editor at index.html.
-    pane          One of the three screens the viewer swipes between: quiz, map, notes. The map pane is home.
+    pane          One of the four screens the viewer swipes between: library, quiz, map, notes. The map pane is home.
     one-ring map  The map the phone draws: the focus and its landmarks, nothing beyond. Not the desktop map, which draws two hops.
-    phone layout  The algorithms that place a one-ring map on a phone surface: the rows, upright, and the bands, sideways (§5.3). Not the desktop layout (geometry.ts), which they replace, not extend.
+    phone layout  The algorithms that place a one-ring map on a phone surface: the rows, portrait, and the bands, landscape (§5.3). Not the desktop layout (geometry.ts), which they replace, not extend.
     install       Fetching a library file and writing it into the phone's browser storage, replacing whatever graph was there. Not an import in the editor's sense: there is no workspace on the phone to protect.
-    bar           The strip with a pane's buttons: along the bottom upright, a column at the right edge sideways.
+    bar           The strip with a pane's buttons: along the bottom in portrait, a column at the right edge in landscape.
+    portrait, landscape   The phone's two orientations, taller than wide and wider than tall. The CSS and the layouts switch on the orientation media query.
 
 The terms focus, landmark, box, line, direction, balloon, re-focus and travel mean what map-view.md says.
 Markers do not exist on the phone.
@@ -44,16 +45,30 @@ It has its own HTML, its own CSS and its own startup script.
 It does not share index.html, so the desktop editor's mobile gate (the "Knogra is a desktop application" message) never applies to it, and the editor's grid never loads on a phone.
 
 The page opens in any browser.
-It is shaped for a phone, upright or sideways, each with a layout of its own (§5.3) and a place for its bars (§8); it works in a desktop window without any promise about looking good there.
+It is shaped for a phone, portrait or landscape, each with a layout of its own (§5.3) and a place for its bars (§8); it works in a desktop window without any promise about looking good there.
 
 The address carries one optional parameter:
 
     view.html?graph=<file url>    Install the file at that URL, then show it.
-    view.html                     Show the graph already on the phone.
+    view.html                     Show the graph already on the phone; with none, open on the library pane (§8).
 
 The URL must start with `https://knogra.io/graphs/`, the same allowlist the editor applies to `?import=` (main.ts), for the same reason: the parameter is anyone's to craft and install replaces what is stored.
 Any other URL is ignored and the page behaves as if the parameter were absent.
 The parameter is removed from the address after it is read, so a reload does not reinstall.
+Why that matters for the home screen: an icon saved with `?graph=X` would reinstall X at every open, undoing a graph chosen from the library pane.
+
+The home-screen app (2026-10-22). The page carries what iOS needs to save it as an app: `apple-touch-icon` (public/apple-touch-icon.png, 180×180, exported from public/logo.svg, since iOS does not take SVG), the app-capable tags, the status bar over the page (the CSS pads for the safe areas), the name under the icon, and public/viewer.webmanifest with standalone display for the browsers that read one.
+Saved to the home screen, the viewer opens without Safari's bars, with its own storage, separate from Safari's (§4.3).
+
+The colour of the browser's own bars. viewer.css paints the page's root with the colour of the viewer's bars (`--bar-color`, the canvas darkened as the bars darken it) and the panes with the canvas colour.
+Safari on iOS 26 takes its bar colour from the root and ignores the `theme-color` tag (reported by developers, not by Apple); the tag is set too, from the theme of every map shown, for the browsers that read it.
+The same root colour fills the safe-area strips around the panes, so the bar reads as running to the screen's edge.
+
+A home-screen app on iOS 26 gets a viewport short by the status bar's height (measured 873 of 932 on 2026-10-22, a WebKit regression reported by several projects); the page is sized with 100lvh in standalone display mode, which still sees the whole screen. In Safari the page stays at 100%, where 100lvh would run under Safari's bars.
+
+Landscape in a browser. Safari's bars, with the tab row, take about a third of the height in landscape, and a page cannot hide them: there is no element fullscreen on iPhone, and the bars collapse only under a real scroll, which the viewer has none of.
+So in a browser (display-mode: browser), in landscape, on a touch device (pointer: coarse), a note stands in for the map: landscape needs the home-screen app, or turn the phone to portrait. CSS alone; the panes stay built behind it, so a rotation back is instant.
+The home-screen app has no bars and is the mode landscape is for.
 
 ## 4. Data on the phone
 
@@ -70,7 +85,8 @@ API keys are never in a file (the export blocklist) and the viewer never asks fo
 
 After install the page shows the graph.
 Opening the page again without a parameter shows the stored graph, with no network.
-Opening it with a parameter replaces the stored graph; there is no library on the phone, only the one graph last opened.
+Opening it with a parameter, or choosing a graph on the library pane (§8), replaces the stored graph: one graph on the phone at a time, the one last installed.
+The installed file's URL is kept in localStorage under the viewer's own key (`knogra.viewer.graph`, registered in storage-config.ts with the app's keys, the one line of the viewer outside src/mobile and public/), so the library pane can mark the graph on the phone. Written last, after the stores.
 
 ### 4.2 What the phone writes
 
@@ -87,8 +103,8 @@ Nothing is sent anywhere.
 ### 4.3 Storage lifetime
 
 Safari on iOS removes a site's storage after seven days without a visit unless the page has been added to the home screen.
-The viewer does not fight this: a graph gone from the phone is one link away.
-Add to home screen is the recommended way to keep a graph, and the page should carry the metadata that makes that icon decent (title, icon, display mode); a full installable web app with offline caching is a later step (§13).
+The viewer does not fight this: a graph gone from the phone is one tap away on the library pane.
+Add to home screen is the recommended way to keep a graph; the page carries the metadata for it (§3). A home-screen app has its own storage, so its first open finds no graph and starts on the library pane. A full installable web app with offline caching is a later step (§13).
 
 ## 5. The map
 
@@ -113,34 +129,35 @@ The direction stored for an edge is read exactly as the desktop reads it (`resol
     half      a landmark above the focus is drawn above it, below stays below
 
 The angle itself is not kept.
-The first version did keep it (the spec of 2026-10-19 said "exactly"), and the result on a phone held upright was a map that shrank its east and west landmarks to squeeze them beside the focus while the top and bottom of the screen stayed empty: a direction chosen on a canvas twice as wide as tall, honoured to the degree on a screen half as wide as tall, wastes the long axis and spends the short one.
+The first version did keep it (the spec of 2026-10-19 said "exactly"), and the result on a phone in portrait was a map that shrank its east and west landmarks to squeeze them beside the focus while the top and bottom of the screen stayed empty: a direction chosen on a canvas twice as wide as tall, honoured to the degree on a screen half as wide as tall, wastes the long axis and spends the short one.
 Order, side and half are what makes the map recognisable; the three are kept by construction in both layouts.
 A landmark straight left or right of the focus has no half of its own and takes the one that balances the picture.
 
 ### 5.3 The phone layouts
 
-Two, one per orientation, each written for its own problem and not for the other's: boxes are wide and short, a row of them reads as a line of text and a column does not, so the sideways layout is not the upright one with its axes swapped (tried on 2026-10-20 and rejected on sight).
+Two, one per orientation, each written for its own problem and not for the other's: boxes are wide and short, a row of them reads as a line of text and a column does not, so the landscape layout is not the portrait one with its axes swapped (tried on 2026-10-20 and rejected on sight).
 Both take the one-ring tree, the directions, the surface size and each node's natural size, and give a position, a size and a length per box in the shape the shared drawing and animation code reads (`MapLayout`).
-Both draw the focus at the centre at its natural size capped to a fraction of the width, and give every landmark one common size, the largest that fits down to a floor.
-Numbers live in phone-map.ts and are starting points until seen on a real phone.
+Both draw the focus at the centre at its natural size capped to a fraction of the width (and, in landscape, to the landmark cap), and size every landmark on its own: the largest scale that fits the box in its slot, up to a cap (landmarkScaleMax, 0.8) and never below a floor (landmarkScaleMin, 0.35).
+One common scale for all landmarks was the rule until 2026-10-21: one image box and three rows set the scale for every title-only box, which came out small with room all round them.
+Numbers live in phone-map.ts.
 
-Upright, the rows (phone-row-layout.ts):
+Portrait, the rows (phone-row-layout.ts):
 
     Rows         The focus alone in the middle row; every other row holds at most one landmark on each side. Each side of the focus is a column in clockwise order cut at north and south, so order is kept; rows fill from the focus outward.
-    Bands        Each side's rows get equal bands sized for the tallest box, the box centred in its band. The regular rhythm, and the slack the shorter boxes keep, is what makes it look right; bands sized to their own boxes were tried and gave bigger boxes with no room between them.
+    Slots        Each side's rows get equal slots, the side's room over its rows, capped at a share of the height; the box is centred in its slot. The regular rhythm, and the room the shorter boxes keep, is what makes it look right; slots sized to their own boxes were tried and gave bigger boxes with no room between them.
+    Size         Per box: the cap, the slot's height over the box's height, the width over the box's width, whichever is least; the two boxes of a row that together outrun the width give up the same share. The floor last.
     Across       A landmark sits where its direction points, a nearly vertical one close above the focus, a nearly horizontal one at the edge; the two in a row are pushed apart only as far as clearing each other needs.
-    Stagger      The two boxes of a row are set off its line a little, the more horizontal one toward the focus, so unequal boxes do not sit in near symmetry (which the eye reads as a mistake); the size on a tie. Within the band's slack only, so a crowded map stays aligned.
+    Stagger      The two boxes of a row are set off its line a little, the more horizontal one toward the focus, so unequal boxes do not sit in near symmetry (which the eye reads as a mistake); the size on a tie. Within the slot's room only, so a crowded map stays aligned.
     Wide pair    Two boxes that cannot share a row even at the margins take a double-height row, one behind the other, rather than shrinking the map.
-    Size         Shrinks only when the rows do not fit the height, or a single box the width.
 
-Sideways, the bands (phone-band-layout.ts):
+Landscape, the bands (phone-band-layout.ts):
 
-    Bands        Three: a row of landmarks above the focus, a row below, and the focus's own row with landmarks beside it.
-    Beside       At most two a side, from those within a band of the horizontal, the most horizontal first, as many as fit at full size. A pair sits one wholly above the centre line and one wholly below, the more upward direction up, so the line to the far one passes clear of the near one and the fan of lines opens; a lone one is set a little up or down by its direction. They are spread over the side's room, the far one at the margin.
-    Rows         Boxes left to right in stored order, each where its direction points, pushed apart only to clear each other; the row above rests on one line and the row below hangs from one, so each shows a straight edge to the focus. The middle band is as tall as the focus or the pair beside it, and the rows stand off its edge.
-    Size         A row too long for the width may split in two, the most vertical boxes in the far row, or the map may shrink; whichever leaves the boxes larger wins, found by search since the band's height moves with the size.
+    Bands        Three: a row of landmarks above the focus, a row below, and the focus's own band with landmarks beside it. The middle band gets a slot like the rows, an equal share of the height; beside boxes fit it, they do not grow it (letting them grow until the rows reached the floor was tried on 2026-10-21 and squeezed the rows to nothing).
+    Beside       At most two a side, from those within a band of the horizontal, the most horizontal first, each taken only if it would be no smaller beside the focus than in its row. A pair sits one wholly above the centre line and one wholly below, the more upward direction up, so the line to the far one passes clear of the near one; a lone one is set a little up or down by its direction. They are spread over the side's room, the far one at the margin.
+    Rows         Boxes left to right in stored order, each where its direction points, pushed apart only to clear each other. Each row gets a slot, the side's room over its rows; a box is set off the row's edge by its direction, within its slot, so the rows bend around the focus (a straight edge was the rule until 2026-10-21).
+    Size         Per box: the cap, the slot over the box's height, the row's share of the width; the floor last. A row too long for the width may split in two, the most vertical boxes in the far row; of one row and two, the plan whose smallest box is larger wins, fewer rows on a tie.
 
-A landmark at the floor is small, and its title is unreadable; the balloon is how it is read (§7).
+A landmark at the floor may be unreadable; the balloon is how it is read (§7).
 
 ### 5.4 Resize
 
@@ -166,18 +183,27 @@ One balloon at a time:
 
 The focus never balloons; it is drawn readable.
 
+A tap on a box acts only once the double-tap interval (300ms, shorter than the editor's since a finger is quicker than a mouse) has passed with no second tap: Cytoscape's `onetap`.
+On the plain `tap` the two taps of a double tap ballooned the box and collapsed it before the travel (seen 2026-10-21).
+A tap on the empty surface has no double tap and acts at once.
+
 ## 8. Panes and gestures
 
-Three panes side by side, the map in the middle:
+Four panes side by side, the map the home:
 
-    quiz  |  map  |  notes
+    library  |  quiz  |  map  |  notes
 
 A horizontal swipe moves one pane left or right; a swipe past the end does nothing.
-The map pane also has two bar buttons, Quiz and Notes, that go to the same panes, so the panes are discoverable before the swipe is known.
-From either side pane, a swipe back or the Map button on its own bar returns to the map.
+The map pane also has two bar buttons, Quiz and Notes, that go to the neighbouring panes, so the panes are discoverable before the swipe is known; the quiz pane's bar has Library.
+From any side pane, a swipe back or the Map button on its own bar returns toward the map.
 
-Every interactive element sits within the thumb's reach and away from the map's own space: upright, each pane's bar runs along the bottom, the map's with its four buttons, each side pane's with its title and its Map button; sideways, where height is the scarce axis, every bar stands as a column at the right edge, buttons gathered at its foot, the pane's title running down from its top like a book's spine.
-Every button in a mode has the same width (a quarter of the bar upright, the column sideways), so nothing moves when a bar swaps.
+The library pane (2026-10-22) lists the library's graphs from the site's index (§12): one row per graph, the title and the node count, nothing more, since the visitor learns about a graph on the site and the pane is for choosing.
+The graph on the phone is marked. A tap on another row installs it, by the same path as the link (§4.1), and reloads to its map. No confirmation: nothing on the phone is lost that cannot be fetched again; a running quiz ends.
+The index is fetched each time the pane is shown. Without a connection the pane says the library needs one and names the graph on the phone, which stays usable.
+With no graph on the phone the viewer opens on this pane and the other three are locked.
+
+Every interactive element sits within the thumb's reach and away from the map's own space: in portrait, each pane's bar runs along the bottom, the map's with its four buttons, each side pane's with its title and its Map button; in landscape, where height is the scarce axis, every bar stands as a column at the right edge, buttons gathered at its foot, the pane's title running down from its top like a book's spine.
+Every button in a mode has the same width (a quarter of the bar in portrait, the column in landscape), so nothing moves when a bar swaps.
 The top of the screen holds nothing to tap; a counter may sit there (§10.2), never a button.
 
 Two constraints on the swipe:
@@ -223,7 +249,7 @@ A revealed node left unjudged counts as skipped from the moment another is selec
 The counts come from the session.
 While it runs:
 
-    Counter      Four parts: left of hidden, right, wrong, skipped. Upright, one line in the top left corner of the map, where boxes seldom reach, nothing to tap; sideways, four lines in the top corner of the button column. Never over the middle of the map.
+    Counter      Four parts: left of hidden, right, wrong, skipped. In portrait, one line in the top left corner of the map, where boxes seldom reach, nothing to tap; in landscape, four lines in the top corner of the button column. Never over the middle of the map.
     Quiz bar     Replaces the bar: Correct, Wrong, Back, Home. The verdicts act on the selected box; Back and Home work as always, so a lost user can return without leaving the quiz. Notes is gone, so there is no cheating.
     Hidden box   Never balloons masked. First tap selects, second tap reveals and balloons; a double tap reveals rather than travels.
     Travel       Allowed; the quiz is graph-wide and follows, and so does a rotation (§5.4).
@@ -306,29 +332,45 @@ The permission is this section and extends to nothing else.
 
 As built:
 
-    src/mobile/viewer.ts               Startup: parameter, install or load, instance, panes, first map, the bar's Back and Home, the resize, the page's theme colours.
-    src/mobile/install.ts              §4.1.
-    src/mobile/phone-row-layout.ts     §5.3 upright. Pure: tree, directions, surface, sizes in; MapLayout out.
-    src/mobile/phone-band-layout.ts    §5.3 sideways. Same inputs and output.
+    src/mobile/viewer.ts               Startup: parameter, install or load, instance, panes, first map or the library pane alone, the bar's Back and Home, the resize, the page's theme colours and the theme-color tag.
+    src/mobile/install.ts              §4.1, the remembered file, the index URL.
+    src/mobile/library-pane.ts         §8: the index as a list, install on tap.
+    src/mobile/phone-row-layout.ts     §5.3 portrait. Pure: tree, directions, surface, sizes in; MapLayout out.
+    src/mobile/phone-band-layout.ts    §5.3 landscape. Same inputs and output.
     src/mobile/phone-map.ts            The conductor: show, travel, balloon, resize, history, the drag's pinning of the focus, the layout numbers; calls the shared modules.
     src/mobile/gestures.ts             Tap, double tap, swipe, with the §8 constraints.
-    src/mobile/panes.ts                The strip of three panes.
+    src/mobile/panes.ts                The strip of four panes.
     src/mobile/notes-pane.ts           §9.
     src/mobile/quiz.ts                 §10.2: the session, sampling, masking, grading; the viewer's own.
     src/mobile/quiz-pane.ts            §10.1 and the running quiz's bar and counter.
-    src/mobile/viewer.css              The page, the panes, the bars in both orientations, the notes' theme overrides.
+    src/mobile/viewer.css              The page, the panes, the bars in both orientations, the notes' theme overrides, the library list, the home-screen rules (§3).
+    public/apple-touch-icon.png, public/viewer.webmanifest   The home-screen icon and manifest (§3).
 
-A ring layout (phone-layout.ts: landmarks on an ellipse at their exact directions, size then distance then a bounded deviation against crowding) was the first upright layout and the first sideways one; replaced by the rows on 2026-10-19 (§5.2) and deleted when the bands replaced it sideways on 2026-10-20.
+A ring layout (phone-layout.ts: landmarks on an ellipse at their exact directions, size then distance then a bounded deviation against crowding) was the first portrait layout and the first landscape one; replaced by the rows on 2026-10-19 (§5.2) and deleted when the bands replaced it in landscape on 2026-10-20.
 
 Coding standards as in architecture.md §7.
 
 ## 12. The site
 
 Built 2026-10-22, in the site repo.
-The site shows View on this phone on a graph's page when the visitor is on a phone (below 1025px, where Open is hidden), pointing at `https://app.knogra.io/view.html?graph=<file url>`, and keeps Open for desktops.
+The site shows View in Knogra on a graph's page when the visitor is on a phone (below 1025px, where Open is hidden), pointing at `https://app.knogra.io/view.html?graph=<file url>`, and keeps Open for desktops.
 Only the page, not the library card: the page is where the visitor decides, as with Open. A plain link, no script: the viewer installs the file itself.
 The note under the link says the editor needs a large screen and the viewer is a companion tool, so a phone visitor does not take the viewer for the product.
-The link is a cross-link, not a contract: the `?graph=` parameter and the allowlisted prefix are contract 1. The third contract is the index (§16.4).
+The link is a cross-link, not a contract: the `?graph=` parameter and the allowlisted prefix are contract 1. The third contract is the index.
+
+The index, the third site contract (built 2026-10-22: knogra-site/src/pages/graphs/index.json.ts, a build-time endpoint like the site's sitemap).
+The site publishes `https://knogra.io/graphs/index.json`, built with the library page from `loadLibrary()` (knogra-site/src/lib/graph-library.ts), so a graph dropped into public/graphs/ appears in both without a second step.
+Under /graphs/ because the site's CORS rule already covers that path and the viewer then knows one prefix for the index and the files.
+One array, in the library page's order:
+
+    file          The absolute URL of the workspace file, under the allowlisted prefix.
+    title         As on the library page.
+    nodeCount     For the line under the title.
+
+The viewer reads only these fields and ignores others, so the site may add to the index without an app release.
+Changing or removing one is an app release, as with the other two contracts (CLAUDE.md).
+Topic and a one-line description were in the first draft and dropped on 2026-10-22: the pane chooses, the site informs.
+The site's "no catalog file" rule stands: the index is generated from the folder, not maintained by hand.
 
 ## 13. Out of scope, deferred, open
 
@@ -347,14 +389,14 @@ Deferred, with the reason:
     Hints of what lies beyond a landmark (marks on its outer edge on the directions of its own edges)   Try after the one-ring map is seen on a real phone; may not be needed.
     Installable web app with offline caching   Add to home screen is enough to start; a service worker is a release concern of its own.
     Files from any URL   Needs the viewer to be shown safe against a hostile file's notes (the renderer's HTML output is not audited for that), and needs the host to allow cross-origin fetches. The library path has neither problem.
-    Several graphs on one phone   One graph, last opened, until someone asks.
+    Several graphs on one phone   One graph, last installed, chosen on the library pane; several until someone asks.
     A desktop View link that protects the desktop workspace   On a desktop the viewer's install would replace the editor's workspace in the same browser profile. The site shows View only on phones; a desktop user who opens view.html?graph= anyway replaces their workspace, which the editor's own import would also do after a question. Whether the viewer should ask is open.
 
 Open until seen on a phone:
 
     The numbers in §5.3 and the arrow factor in §5.1.
     Whether the bar's words should become dim contour icons (same width, quieter; but Quiz, Notes and Map have no universal sign). Words kept for now, to see how intrusive they are in use.
-    The home-screen metadata (§4.3), not yet added.
+    The bar colour (§3): whether the root colour matches the bars by eye, and how the side strips look in landscape.
 
 Settled in emulation, recorded so they are not reopened without a reason: Reveal is a second tap, not a button; the balloon opens on reveal; landscape has its own layout (§5.3); the counter stays out of the middle of the map (§10.2).
 
@@ -372,80 +414,16 @@ Steps 1 to 6 passed on 2026-10-19; the layouts, the bars and the quiz were then 
     6  Quiz                The quiz pane and the running-quiz bar and counter. Pass: a quiz over a small graph can be started, walked across two maps, revealed and graded, and ended, and the masks go.
     7  Real phone          Safari on an iPhone: the layout numbers, the viewport (address bar, 100vh), add to home screen, orientation. Pass: a reviewed graph is usable for ten minutes without reaching for the desktop.
 
-Then the site's View link (§12), the docs/README.md row, and this document to Current.
+The site's View link (§12) was built on 2026-10-22 with version 2 (§15). Still to come: the docs/README.md row, and this document to Current after the phone pass of version 2.
 
 ## 15. Phone pass: findings and the next version
 
-Collected from use on an iPhone from 2026-10-20 on, each with what was seen and what it implies; nothing here is built.
-When the list is long enough the next version is chosen from it and the sections above are rewritten for what is decided.
+Collected from use on an iPhone from 2026-10-20 on, each with what was seen and what it implied at the time.
+The three became version 2, agreed on 2026-10-21 and built on 2026-10-22; the sections above describe it. Kept as the record of why.
 
     Home screen       A home-screen web app on iOS keeps its own storage, separate from Safari's, and the icon saves the address without ?graph= because the viewer removes the parameter after installing (§3). Opened from the icon, the page finds no graph and shows the empty message. Implies: keep the parameter in the address; remember the installed file's URL on the phone (a new localStorage key, to be agreed on its own); on open with the same URL show the stored graph without network, with another install it. Refreshing a graph that changed on knogra.io becomes a question of its own.
     Catalogue         Typing a file address on a phone is not a way to choose a graph. The viewer should show the library's list and install the chosen graph, replacing or keeping the one stored. Implies: the site publishes a list the viewer can fetch (an index beside the graphs), a third item in the site contract (§12); and a decision on one graph or several on the phone (§13).
     Icon              The home-screen icon is a bare "K" from the page's title. Implies the home-screen metadata of §4.3: an apple-touch-icon in PNG (iOS does not take the SVGs the repo has; 180×180 from public/logo.svg), the app-capable and status-bar tags, a manifest with standalone display, and a theme colour set from the map's theme so Safari's own bar matches the viewer's bars.
 
-The three became the next version, §16, agreed on 2026-10-21.
-
-## 16. Version 2: the viewer as a home-screen app
-
-Agreed on 2026-10-21 from the findings of §15; not built. When built, §3, §4, §8, §12 and §13 are rewritten for it and this section goes.
-
-### 16.1 What it adds
-
-    Home screen   Saved to the home screen, the viewer opens without Safari's bars, with its own icon, and shows the graph on the phone.
-    Library       A fourth pane lists the library's graphs; a tap installs one in place of the graph on the phone.
-    Colour        Safari's own bar, when the viewer runs in the browser, takes the viewer's bar colour.
-
-Still one graph on the phone at a time (§13): install replaces. The link from the site, `view.html?graph=`, keeps working as in §3.
-
-### 16.2 The address and the home-screen app
-
-The address stays clean: the parameter is removed after install, as in §3, so a home-screen icon never carries one.
-Why: an icon that carried `?graph=X` would reinstall X at every open, undoing a graph chosen from the library inside the app.
-
-A home-screen app on iOS has its own storage, separate from Safari's, so its first open finds no graph.
-That is no longer an empty message: with no graph on the phone the viewer opens on the library pane, and one tap installs.
-
-The viewer remembers which file is installed, in localStorage under a key of its own (`knogra.viewer.graph`, the file's URL), so the library pane can mark it.
-The key is registered in storage-config.ts with the app's other keys, which is the one line of this version outside src/mobile and public/.
-
-### 16.3 The library pane
-
-A fourth pane, leftmost: library | quiz | map | notes.
-Reached by swiping, two swipes from the map, and by a Library button on the quiz pane's bar.
-The list comes from the site's index (§16.4): one entry per graph, in the library page's order, with the title and the node count.
-Only that: the visitor learns about a graph on the site, the pane is for choosing, and its brevity is the point.
-The installed graph is marked.
-A tap on another graph installs it, by the same path as the link (§4.1): fetch, clear, write, reload to the map. No confirmation: nothing on the phone is lost that cannot be fetched again; a running quiz ends.
-Without a connection the index cannot be fetched; the pane shows the installed graph's name and says the library needs a connection.
-
-### 16.4 The index, the third site contract
-
-Built 2026-10-22: knogra-site/src/pages/graphs/index.json.ts, a build-time endpoint like the site's sitemap.
-The site publishes `https://knogra.io/graphs/index.json`, built with the library page from `loadLibrary()` (knogra-site/src/lib/graph-library.ts), so a graph dropped into public/graphs/ appears in both without a second step.
-Under /graphs/ because the site's CORS rule already covers that path and the viewer then knows one prefix for the index and the files.
-One array, in the library page's order:
-
-    file          The absolute URL of the workspace file, under the allowlisted prefix.
-    title         As on the library page.
-    nodeCount     For the line under the title.
-
-The viewer reads only these fields and ignores others, so the site may add to the index without an app release.
-Changing or removing one is an app release, as with the other two contracts (CLAUDE.md).
-Topic and a one-line description were in the first draft and dropped on 2026-10-22: the pane chooses, the site informs.
-
-### 16.5 Home-screen metadata
-
-In view.html:
-
-    apple-touch-icon       public/apple-touch-icon.png, 180×180, exported from public/logo.svg (iOS does not take SVG).
-    apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style   Opens without browser chrome; the status bar overlays the page, which already pads for the safe areas.
-    manifest               public/viewer.webmanifest: name, start_url /view.html, display standalone, the icon, background and theme colours.
-    theme-color            Set at runtime by viewer.ts with the theme variables (§5.1), to the colour of the bars: the theme's canvas darkened as viewer.css darkens it. Safari colours its own bar with it when the viewer runs in the browser.
-
-### 16.6 Order of work
-
-    1  Icon and colour: the PNG (exported by Eugene), the tags, the manifest, the runtime theme-color. Visible at once, nothing else depends on it.
-    2  The index on the site. Done 2026-10-22, with the View link (§12).
-    3  The remembered file and the library pane: panes.ts widened to four, library-pane.ts new, the quiz bar's Library button, the start-on-library rule.
-
-Files: view.html, src/mobile/viewer.ts, viewer.css, panes.ts, install.ts, new library-pane.ts; public/apple-touch-icon.png, public/viewer.webmanifest; src/config/storage-config.ts (the key). In the site repo, done: src/pages/graphs/index.json.ts, the View link in src/pages/library/[id].astro.
+Decided on 2026-10-21, against the alternatives: one graph on the phone, not several (install replaces, as before); the list with the title and the node count only, not topic and a line; the address kept clean rather than carrying the parameter; the index generated on the site from the same enumeration as the library page, not a hand-kept file, and under /graphs/ for the CORS rule already there.
+Built 2026-10-22 in this order: icon and colour, the site's index and View link, the remembered file and the library pane. The first phone pass of it is pending; §3 records what the inspector showed on the way (the bar colour, the short viewport).

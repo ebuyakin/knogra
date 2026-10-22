@@ -1,16 +1,16 @@
 /**
  * Panes (docs/mobile-viewer.md §8)
  *
- * Three panes side by side, quiz, map, notes, the map in the middle and home.
- * The strip element holds all three at three times the width and slides by a
- * third per pane; this class owns which pane is shown and moves the strip,
+ * Four panes side by side, library, quiz, map, notes, the map the home.
+ * The strip element holds all four at four times the width and slides by a
+ * quarter per pane; this class owns which pane is shown and moves the strip,
  * by a button or by the swipe (gestures.ts), which drags the strip with the
  * finger and then settles it.
  */
 
-export type PaneName = 'quiz' | 'map' | 'notes';
+export type PaneName = 'library' | 'quiz' | 'map' | 'notes';
 
-const ORDER: PaneName[] = ['quiz', 'map', 'notes'];
+const ORDER: PaneName[] = ['library', 'quiz', 'map', 'notes'];
 const PANE_SHARE = 100 / ORDER.length;
 
 export type PaneListener = (pane: PaneName) => void;
@@ -29,6 +29,11 @@ export class Panes {
 
   current(): PaneName {
     return ORDER[this.#index];
+  }
+
+  /** The width of one pane on screen: the strip holds them all, so its width over their number. */
+  paneWidth(): number {
+    return this.#strip.clientWidth / ORDER.length;
   }
 
   /** Called when a pane becomes the shown one, after the slide starts. */
