@@ -65,6 +65,8 @@ export interface PhoneRowParams {
   gap: number;
   /** Clear space kept between a box and the surface's edge, in pixels. */
   edgeMargin: number;
+  /** Clear space kept between two rows of landmarks, in pixels: a line to the far row ends in an arrowhead that must not land on the near row's box. A side with one row keeps `gap`. */
+  rowClearance: number;
   /** Clear space kept between the focus and the nearest row, in pixels: a line is clipped by both boxes, and what shows must be long enough to carry its arrowhead. */
   focusClearance: number;
   /** Within this many degrees of straight left or right a landmark belongs to neither half and goes where there is room. */
@@ -307,6 +309,11 @@ function pitchOf(row: Row, frame: Frame): number {
   return Math.min(sideRoom(frame) / row.sideUnits, frame.params.rowPitchMax * frame.surface.height);
 }
 
+/** The clear space a unit keeps to the next: the row clearance where there is a next unit on the side, else the plain gap. */
+function clearanceOf(row: Row, params: PhoneRowParams): number {
+  return row.sideUnits > 1 ? params.rowClearance : params.gap;
+}
+
 /**
  * Every landmark's scale: the largest that fits its slot's height and the
  * width, never above the maximum. The two boxes of a plain row share the
@@ -319,7 +326,7 @@ function scalesOf(rows: Row[], frame: Frame): Map<Address, number> {
   const across = surface.width - 2 * params.edgeMargin;
   const scales = new Map<Address, number>();
   for (const row of rows) {
-    const slot = pitchOf(row, frame) - params.gap;
+    const slot = pitchOf(row, frame) - clearanceOf(row, params);
     const fitting = (landmark: Landmark): number => Math.min(params.landmarkScaleMax, slot / landmark.base.height, across / landmark.base.width);
     let leftScale = row.left ? fitting(row.left) : 0;
     let rightScale = row.right ? fitting(row.right) : 0;
@@ -389,7 +396,7 @@ function place(rows: Row[], scales: Map<Address, number>, frame: Frame): Map<Add
         xRight = clamp(xLeft + need, reachOf(row.right, rightScale, frame));
         xLeft = clamp(xRight - need, reachOf(row.left, leftScale, frame));
       }
-      stagger = staggerOf(row.left.base.height * leftScale, row.right.base.height * rightScale, pitch, params);
+      stagger = staggerOf(row.left.base.height * leftScale, row.right.base.height * rightScale, pitch, clearanceOf(row, params), params);
     }
     if (row.left) positions.set(row.left.box.address, { x: xLeft, y: y - row.sign * stagger * nearSign(row.left, row.right) });
     if (row.right) positions.set(row.right.box.address, { x: xRight, y: y - row.sign * stagger * nearSign(row.right, row.left) });
@@ -422,7 +429,7 @@ function nearSign(landmark: Landmark, partner: Landmark | null): number {
  * either box has in its band, so the row never closes on its neighbours. On
  * a crowded map the slack is nil and the pair stays aligned.
  */
-function staggerOf(leftHeight: number, rightHeight: number, pitch: number, params: PhoneRowParams): number {
-  const slack = (height: number): number => pitch / 2 - height / 2 - params.gap;
+function staggerOf(leftHeight: number, rightHeight: number, pitch: number, clearance: number, params: PhoneRowParams): number {
+  const slack = (height: number): number => pitch / 2 - height / 2 - clearance;
   return Math.max(0, Math.min(params.rowStagger * pitch, slack(leftHeight), slack(rightHeight)));
 }

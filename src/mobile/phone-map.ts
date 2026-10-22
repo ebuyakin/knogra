@@ -54,6 +54,7 @@ import { MapHistory } from '../features/map-view/history';
 import { MarkerPreview } from '../features/map-view/preview';
 import { layoutPhoneRows, type PhoneRowParams } from './phone-row-layout';
 import { layoutPhoneBands, type PhoneBandParams } from './phone-band-layout';
+import { crossedLines, type CrossedLine } from './line-crossings';
 
 /** The phone's own values (§4.1: the desktop map settings are not installed). Starting points, tuned on a real phone. */
 const PHONE_ROWS: PhoneRowParams = {
@@ -66,6 +67,8 @@ const PHONE_ROWS: PhoneRowParams = {
   horizontalBand: 10,
   rowPitchMax: 0.3,
   rowStagger: 0.12,
+  // An arrowhead at phone size (ARROW_SCALE_FACTOR) and a little; by eye.
+  rowClearance: 20,
 };
 
 /** Landscape (phone-band-layout.ts). */
@@ -86,6 +89,19 @@ const LINE_SCALE_POWER = 0.5;
 
 /** The arrowheads, enlarged over the desktop's: at phone size the desktop's are too small to tell the types apart. */
 const ARROW_SCALE_FACTOR = 1.8;
+
+/**
+ * On a crowded portrait map a line to a far row passes behind a box of the
+ * near row, and the eye reads the line as touching that box too; drawn in
+ * the canvas colour where it passes (line-crossings.ts says where) it reads
+ * as two line ends. The colour runs out over this many pixels before the box
+ * and comes back over as many after it, so the ends are soft. Only in
+ * portrait: the bands keep their lines clear. Cytoscape's gradient stops take
+ * no transparency (the renderer keeps a stop's red, green and blue and uses
+ * the line's opacity for all of them), so the canvas colour stands in for
+ * none.
+ */
+const FADE_RAMP = 10;
 
 /** The three phases of travel, in milliseconds. */
 const DEPART_MS = 220;
@@ -111,6 +127,8 @@ interface DerivedPhoneMap {
   endsByEdge: Map<EdgeId, EdgeEnds>;
   baseStyles: Map<NodeId, BoxBaseStyle>;
   render: MapRenderInput;
+  /** Landmarks whose line crosses other boxes, and where: those parts of the line are hidden. Empty in landscape. */
+  crossing: Map<Address, CrossedLine>;
 }
 
 /** The shown map: what was derived and what draws it. */
@@ -195,7 +213,34 @@ export class PhoneMap {
     this.#state = { ...derived, ids };
     applyCanvasTheme(this.#container(), getTheme(derived.themeId));
     this.#frame();
+    this.#fadeLines();
     this.#pinFocus();
+  }
+
+  /**
+   * Every crossing line in the canvas colour where it runs behind a box
+   * (FADE_RAMP), every other line solid again. Inline per line, since the
+   * colour is the edge type's: read off the line's computed style, so it is
+   * right after a theme change too. Run after every draw and every travel; a
+   * survivor keeps its old fill during the move.
+   */
+  #fadeLines(): void {
+    const state = this.#state;
+    if (!state) return;
+    const canvas = getTheme(state.themeId).canvas.background.color;
+    this.#cy.startBatch();
+    for (const line of state.tree.lines) {
+      const lineId = state.ids.lines.get(line.key);
+      const element = lineId ? this.#cy.getElementById(lineId) : null;
+      if (!element || element.length === 0) continue;
+      const crossed = state.crossing.get(line.address);
+      if (!crossed) {
+        element.style({ 'line-fill': 'solid' });
+        continue;
+      }
+      element.style(fadeStyle(element.style('line-color') as string, canvas, crossed, fadeStops(crossed, line.reversed)));
+    }
+    this.#cy.endBatch();
   }
 
   /**
@@ -318,8 +363,10 @@ export class PhoneMap {
     const { tree, layout, baseStyles } = derived;
     const plan = planRefocus(old.tree, tree, old.ids);
 
-    // Depart: leavers fold into their parent, the old focus, and go with their lines.
+    // Depart: leavers fold into their parent, the old focus, and go with their lines; a surviving line's holes close, so it travels whole.
+    const closing = this.#tweenStops(this.#closingTweens(old, plan.ids), DEPART_MS);
     if (plan.leaving.length > 0) await depart(this.#cy, plan, DEPART_MS);
+    await closing;
     removeElements(this.#cy, [...plan.leaving.map(leaver => leaver.elementId), ...staleLineIds(old.tree, old.ids, plan)]);
 
     // Survivors take their new addresses before they move, so the central rule follows the focus during the glide.
@@ -354,10 +401,14 @@ export class PhoneMap {
     // Arrive: the new focus's other neighbours are added at their places and grow out of it.
     const arrivingLines = [...linesOfBoxes(tree, plan.arriving).map(line => line.key), ...plan.arrivingLines];
     addElements(this.#cy, derived.render, plan.ids, plan.arriving, arrivingLines, baseStyles);
+    // A surviving line's new holes open while the arrivals grow in; the arrivals' own lines get theirs at the end.
+    const opening = this.#tweenStops(this.#openingTweens(old, derived, plan.ids), ARRIVE_MS);
     await arrive(this.#cy, plan, tree, layout, ARRIVE_MS);
+    await opening;
 
     this.#state = { ...derived, ids: plan.ids };
     this.#frame();
+    this.#fadeLines();
   }
 
   /** Reused lines whose weight changes with their box's new role, tweened during the move rather than switched. */
@@ -371,6 +422,71 @@ export class PhoneMap {
       tweens.push({ element: line, weight: { from: current, to: weight } });
     }
     return tweens;
+  }
+
+  /** The old map's crossing lines that survive the travel: each from its holes to the same holes closed. */
+  #closingTweens(old: PhoneMapState, newIds: MapElementIds): StopsTween[] {
+    const surviving = new Set(newIds.lines.values());
+    const tweens: StopsTween[] = [];
+    for (const line of old.tree.lines) {
+      const crossed = old.crossing.get(line.address);
+      const lineId = old.ids.lines.get(line.key);
+      if (!crossed || !lineId || !surviving.has(lineId)) continue;
+      const element = this.#cy.getElementById(lineId);
+      if (element.length === 0) continue;
+      tweens.push({ element, from: fadeStops(crossed, line.reversed), to: closedStops(crossed, line.reversed) });
+    }
+    return tweens;
+  }
+
+  /**
+   * The new map's crossing lines that were in the old map: each from its
+   * holes closed to its holes open. The line is whole at this point (solid,
+   * or its old holes closed), so it is given the new gradient closed here
+   * and the loop has only positions to set.
+   */
+  #openingTweens(old: PhoneMapState, derived: DerivedPhoneMap, ids: MapElementIds): StopsTween[] {
+    const survived = new Set(old.ids.lines.values());
+    const canvas = getTheme(derived.themeId).canvas.background.color;
+    const tweens: StopsTween[] = [];
+    for (const line of derived.tree.lines) {
+      const crossed = derived.crossing.get(line.address);
+      const lineId = ids.lines.get(line.key);
+      if (!crossed || !lineId || !survived.has(lineId)) continue;
+      const element = this.#cy.getElementById(lineId);
+      if (element.length === 0) continue;
+      const from = closedStops(crossed, line.reversed);
+      element.style(fadeStyle(element.style('line-color') as string, canvas, crossed, from));
+      tweens.push({ element, from, to: fadeStops(crossed, line.reversed) });
+    }
+    return tweens;
+  }
+
+  /**
+   * Sets the lines' stop positions each frame for `duration`, between their
+   * two sets. A loop of the phone's own beside the animator's
+   * (refocus-animator.ts), which tweens opacity and weight and stays the
+   * desktop's; the two start at most a frame apart. One curve for closing
+   * and opening: a hole's edges are not locked to anything else that moves.
+   */
+  #tweenStops(tweens: StopsTween[], duration: number): Promise<void> {
+    if (tweens.length === 0) return Promise.resolve();
+    return new Promise(resolve => {
+      const start = performance.now();
+      const frame = (now: number): void => {
+        // Clamped as the animator clamps: a frame's timestamp can precede `start`.
+        const raw = Math.max(0, Math.min(1, (now - start) / duration));
+        const e = easeInOutCubic(raw);
+        this.#cy.startBatch();
+        for (const { element, from, to } of tweens) {
+          element.style({ 'line-gradient-stop-positions': from.map((stop, index) => stop + e * (to[index] - stop)) });
+        }
+        this.#cy.endBatch();
+        if (raw < 1) requestAnimationFrame(frame);
+        else resolve();
+      };
+      requestAnimationFrame(frame);
+    });
   }
 
   /** Survivors whose scale differs between the old and new map: their rules are rewritten after the move. */
@@ -403,10 +519,11 @@ export class PhoneMap {
     const baseSizes = new Map<NodeId, Size>([...baseStyles].map(([nodeId, style]) => [nodeId, { width: style.width, height: style.height }]));
     const surface = this.#surface();
     // Portrait: the rows. Landscape: the bands. Two layouts, not one with its axes swapped (§5.3).
-    const layout =
-      surface.height >= surface.width
-        ? layoutPhoneRows(tree, endsByEdge, surface, baseSizes, PHONE_ROWS)
-        : layoutPhoneBands(tree, endsByEdge, surface, baseSizes, PHONE_BANDS);
+    const portrait = surface.height >= surface.width;
+    const layout = portrait
+      ? layoutPhoneRows(tree, endsByEdge, surface, baseSizes, PHONE_ROWS)
+      : layoutPhoneBands(tree, endsByEdge, surface, baseSizes, PHONE_BANDS);
+    const crossing = portrait ? crossedLines(tree, layout, baseSizes) : new Map<Address, CrossedLine>();
 
     const edgeTypes = graphStore.edgeTypes;
     const render: MapRenderInput = {
@@ -419,7 +536,7 @@ export class PhoneMap {
       lineBases: withLargerArrows(lineBases(edgeTypes, themeId)),
       lineScalePower: LINE_SCALE_POWER,
     };
-    return { tree, layout, surface, themeId, edgeById, endsByEdge, baseStyles, render };
+    return { tree, layout, surface, themeId, edgeById, endsByEdge, baseStyles, render, crossing };
   }
 
   /** Zoom 1, the focus (the origin) at the surface's centre. */
@@ -443,6 +560,69 @@ export class PhoneMap {
     const container = this.#container();
     return { width: container.clientWidth, height: container.clientHeight };
   }
+}
+
+/** A line whose gradient stop positions move during a travel. */
+interface StopsTween {
+  element: { style(style: object): unknown };
+  from: number[];
+  to: number[];
+}
+
+/** The animator's move curve (refocus-animator.ts), copied so that file stays the desktop's. */
+const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+/**
+ * A crossing line's gradient: four stops per hole between the two ends,
+ * colour, canvas, canvas, colour, with the given positions. The stop
+ * colours are fixed for a line; only the positions move.
+ */
+function fadeStyle(colour: string, canvas: string, crossed: CrossedLine, positions: number[]): Record<string, unknown> {
+  const colours = [colour];
+  for (let index = 0; index < crossed.holes.length; index++) colours.push(colour, canvas, canvas, colour);
+  colours.push(colour);
+  return { 'line-fill': 'linear-gradient', 'line-gradient-stop-colors': colours, 'line-gradient-stop-positions': positions };
+}
+
+/**
+ * The stop positions of a crossing line with its holes open: colour to just
+ * before each hole, canvas over it, colour again just after, each ramp
+ * FADE_RAMP long but never reaching the line's end or the next hole's ramp.
+ */
+function fadeStops(crossed: CrossedLine, reversed: boolean): number[] {
+  const { holes, length } = crossed;
+  const fromFocus = [0];
+  holes.forEach((hole, index) => {
+    const before = index === 0 ? hole.start : (hole.start - holes[index - 1].end) / 2;
+    const after = index === holes.length - 1 ? 1 - hole.end : (holes[index + 1].start - hole.end) / 2;
+    const ramp = Math.min(FADE_RAMP / length, before, after);
+    fromFocus.push(hole.start - ramp, hole.start, hole.end, hole.end + ramp);
+  });
+  fromFocus.push(1);
+  return orientStops(fromFocus, reversed);
+}
+
+/** The same stops with every hole closed to a point at its centre: what the holes open from, or close to, during a travel. */
+function closedStops(crossed: CrossedLine, reversed: boolean): number[] {
+  const fromFocus = [0];
+  for (const hole of crossed.holes) {
+    const centre = (hole.start + hole.end) / 2;
+    fromFocus.push(centre, centre, centre, centre);
+  }
+  fromFocus.push(1);
+  return orientStops(fromFocus, reversed);
+}
+
+/**
+ * Stops measured from the focus as fractions, turned into percent of the
+ * drawn line from the edge's source to its target, which is how Cytoscape
+ * runs a gradient. An edge walked from its target (`reversed`) has its
+ * source at the landmark, so the stops are mirrored; the colours read the
+ * same either way, since each hole's four are symmetric.
+ */
+function orientStops(fromFocus: number[], reversed: boolean): number[] {
+  const stops = reversed ? fromFocus.map(stop => 1 - stop).reverse() : fromFocus;
+  return stops.map(stop => stop * 100);
 }
 
 /** The desktop's line bases with every arrowhead enlarged by the phone's factor; widths as they are. */

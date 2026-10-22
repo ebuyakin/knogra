@@ -125,12 +125,20 @@ body {
   min-width: 0;
 }
 
+/* Over the map, out of the flow: in the column it took 24px while the first map was drawn and gave them back when hidden,
+   which left the focus 12px above the centre until the first travel re-framed the map (seen 2026-10-22). */
 #status {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
   margin: 0;
   padding: 12px 16px;
   font-size: 14px;
   color: var(--theme-text-secondary);
   text-align: center;
+  pointer-events: none;
 }
 
 /* Bars (§8): along the bottom of every pane, a translucent shade darker than the page, dimmed text and buttons, so the map and the notes hold the eye. The map's bar gives way to the quiz bar while a quiz runs (§10.2). */
@@ -213,6 +221,16 @@ body {
 /* Landscape (§8): height is the scarce axis, so every pane's bar stands along the right edge, where the thumb is, as a column of buttons; a pane's title runs down the column like a book's spine.
    Placed after every portrait rule for the same elements on purpose: at equal specificity, the later rule wins, so this block can only override them from below. */
 @media (orientation: landscape) {
+  /* The side insets stand beside the map and the bar column, where the root's bar colour made the column look half as
+     wide again (seen 2026-10-22); painted as borders in the page's colour they read as margins. The bottom inset keeps
+     the bar colour, under the column as in portrait. Same geometry: a border takes the room the padding took. */
+  #viewer {
+    padding-left: 0;
+    padding-right: 0;
+    border-left: env(safe-area-inset-left) solid var(--theme-canvas);
+    border-right: env(safe-area-inset-right) solid var(--theme-canvas);
+  }
+
   .pane {
     flex-direction: row;
   }
