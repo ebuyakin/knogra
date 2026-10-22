@@ -8,6 +8,16 @@
     <meta name="description" content="Knogra viewer: review a knowledge graph on a phone" />
     <!-- The viewer is reached from knogra.io; it has nothing to index on its own. -->
     <meta name="robots" content="noindex" />
+    <!-- The home-screen app (§16.5): icon, name under it, no browser bars, the status bar over the page
+         (the CSS pads for it), and the manifest for the browsers that read one. iOS does not take SVG icons. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Knogra" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/viewer.webmanifest" />
+    <!-- Safari colours its own bar with this; viewer.ts sets it to the bar colour of every map shown. The value is the dark theme's bar. -->
+    <meta name="theme-color" content="#07090c" />
     <title>Knogra viewer</title>
     <link rel="stylesheet" href="/src/mobile/viewer.css" />
   </head>

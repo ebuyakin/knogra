@@ -324,9 +324,11 @@ Coding standards as in architecture.md §7.
 
 ## 12. The site
 
-The viewer adds a third contract between the app and the site repo, as small as the other two: the `?graph=` parameter and the allowlisted prefix.
-The site shows View on a graph's page and library card when the visitor is on a phone, pointing at `https://app.knogra.io/view.html?graph=<file url>`, and keeps Open for desktops.
-This is a change in the site repo and is done after the viewer works; it is not part of the plan below.
+Built 2026-10-22, in the site repo.
+The site shows View on this phone on a graph's page when the visitor is on a phone (below 1025px, where Open is hidden), pointing at `https://app.knogra.io/view.html?graph=<file url>`, and keeps Open for desktops.
+Only the page, not the library card: the page is where the visitor decides, as with Open. A plain link, no script: the viewer installs the file itself.
+The note under the link says the editor needs a large screen and the viewer is a companion tool, so a phone visitor does not take the viewer for the product.
+The link is a cross-link, not a contract: the `?graph=` parameter and the allowlisted prefix are contract 1. The third contract is the index (§16.4).
 
 ## 13. Out of scope, deferred, open
 
@@ -371,3 +373,79 @@ Steps 1 to 6 passed on 2026-10-19; the layouts, the bars and the quiz were then 
     7  Real phone          Safari on an iPhone: the layout numbers, the viewport (address bar, 100vh), add to home screen, orientation. Pass: a reviewed graph is usable for ten minutes without reaching for the desktop.
 
 Then the site's View link (§12), the docs/README.md row, and this document to Current.
+
+## 15. Phone pass: findings and the next version
+
+Collected from use on an iPhone from 2026-10-20 on, each with what was seen and what it implies; nothing here is built.
+When the list is long enough the next version is chosen from it and the sections above are rewritten for what is decided.
+
+    Home screen       A home-screen web app on iOS keeps its own storage, separate from Safari's, and the icon saves the address without ?graph= because the viewer removes the parameter after installing (§3). Opened from the icon, the page finds no graph and shows the empty message. Implies: keep the parameter in the address; remember the installed file's URL on the phone (a new localStorage key, to be agreed on its own); on open with the same URL show the stored graph without network, with another install it. Refreshing a graph that changed on knogra.io becomes a question of its own.
+    Catalogue         Typing a file address on a phone is not a way to choose a graph. The viewer should show the library's list and install the chosen graph, replacing or keeping the one stored. Implies: the site publishes a list the viewer can fetch (an index beside the graphs), a third item in the site contract (§12); and a decision on one graph or several on the phone (§13).
+    Icon              The home-screen icon is a bare "K" from the page's title. Implies the home-screen metadata of §4.3: an apple-touch-icon in PNG (iOS does not take the SVGs the repo has; 180×180 from public/logo.svg), the app-capable and status-bar tags, a manifest with standalone display, and a theme colour set from the map's theme so Safari's own bar matches the viewer's bars.
+
+The three became the next version, §16, agreed on 2026-10-21.
+
+## 16. Version 2: the viewer as a home-screen app
+
+Agreed on 2026-10-21 from the findings of §15; not built. When built, §3, §4, §8, §12 and §13 are rewritten for it and this section goes.
+
+### 16.1 What it adds
+
+    Home screen   Saved to the home screen, the viewer opens without Safari's bars, with its own icon, and shows the graph on the phone.
+    Library       A fourth pane lists the library's graphs; a tap installs one in place of the graph on the phone.
+    Colour        Safari's own bar, when the viewer runs in the browser, takes the viewer's bar colour.
+
+Still one graph on the phone at a time (§13): install replaces. The link from the site, `view.html?graph=`, keeps working as in §3.
+
+### 16.2 The address and the home-screen app
+
+The address stays clean: the parameter is removed after install, as in §3, so a home-screen icon never carries one.
+Why: an icon that carried `?graph=X` would reinstall X at every open, undoing a graph chosen from the library inside the app.
+
+A home-screen app on iOS has its own storage, separate from Safari's, so its first open finds no graph.
+That is no longer an empty message: with no graph on the phone the viewer opens on the library pane, and one tap installs.
+
+The viewer remembers which file is installed, in localStorage under a key of its own (`knogra.viewer.graph`, the file's URL), so the library pane can mark it.
+The key is registered in storage-config.ts with the app's other keys, which is the one line of this version outside src/mobile and public/.
+
+### 16.3 The library pane
+
+A fourth pane, leftmost: library | quiz | map | notes.
+Reached by swiping, two swipes from the map, and by a Library button on the quiz pane's bar.
+The list comes from the site's index (§16.4): one entry per graph, in the library page's order, with the title and the node count.
+Only that: the visitor learns about a graph on the site, the pane is for choosing, and its brevity is the point.
+The installed graph is marked.
+A tap on another graph installs it, by the same path as the link (§4.1): fetch, clear, write, reload to the map. No confirmation: nothing on the phone is lost that cannot be fetched again; a running quiz ends.
+Without a connection the index cannot be fetched; the pane shows the installed graph's name and says the library needs a connection.
+
+### 16.4 The index, the third site contract
+
+Built 2026-10-22: knogra-site/src/pages/graphs/index.json.ts, a build-time endpoint like the site's sitemap.
+The site publishes `https://knogra.io/graphs/index.json`, built with the library page from `loadLibrary()` (knogra-site/src/lib/graph-library.ts), so a graph dropped into public/graphs/ appears in both without a second step.
+Under /graphs/ because the site's CORS rule already covers that path and the viewer then knows one prefix for the index and the files.
+One array, in the library page's order:
+
+    file          The absolute URL of the workspace file, under the allowlisted prefix.
+    title         As on the library page.
+    nodeCount     For the line under the title.
+
+The viewer reads only these fields and ignores others, so the site may add to the index without an app release.
+Changing or removing one is an app release, as with the other two contracts (CLAUDE.md).
+Topic and a one-line description were in the first draft and dropped on 2026-10-22: the pane chooses, the site informs.
+
+### 16.5 Home-screen metadata
+
+In view.html:
+
+    apple-touch-icon       public/apple-touch-icon.png, 180×180, exported from public/logo.svg (iOS does not take SVG).
+    apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style   Opens without browser chrome; the status bar overlays the page, which already pads for the safe areas.
+    manifest               public/viewer.webmanifest: name, start_url /view.html, display standalone, the icon, background and theme colours.
+    theme-color            Set at runtime by viewer.ts with the theme variables (§5.1), to the colour of the bars: the theme's canvas darkened as viewer.css darkens it. Safari colours its own bar with it when the viewer runs in the browser.
+
+### 16.6 Order of work
+
+    1  Icon and colour: the PNG (exported by Eugene), the tags, the manifest, the runtime theme-color. Visible at once, nothing else depends on it.
+    2  The index on the site. Done 2026-10-22, with the View link (§12).
+    3  The remembered file and the library pane: panes.ts widened to four, library-pane.ts new, the quiz bar's Library button, the start-on-library rule.
+
+Files: view.html, src/mobile/viewer.ts, viewer.css, panes.ts, install.ts, new library-pane.ts; public/apple-touch-icon.png, public/viewer.webmanifest; src/config/storage-config.ts (the key). In the site repo, done: src/pages/graphs/index.json.ts, the View link in src/pages/library/[id].astro.

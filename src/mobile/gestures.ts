@@ -9,6 +9,9 @@
  *   tap empty surface       collapse it
  *   double tap a landmark   travel; a balloon on it is released into the move
  *
+ * A tap on a box counts once the double-tap interval has passed without a
+ * second tap, so a double tap leaves the balloon alone and only travels.
+ *
  * During a quiz a hidden box answers differently: the first tap selects it
  * (Cytoscape's own selection), the second reveals it and balloons it if it is
  * small; a double tap on it reveals rather than travels. A hidden box never
@@ -58,13 +61,18 @@ export function wireMapGestures(cy: Core, map: PhoneMap, quiz: PhoneQuiz): void 
     if (map.needsBalloon(elementId) && !map.isBallooned(elementId)) map.toggleBalloon(elementId);
   };
 
+  // The empty surface has no double tap, so a tap there acts at once.
   cy.on('tap', event => {
+    if (map.isTravelling() || event.target !== cy) return;
+    lastTapped = null;
+    map.collapseBalloon();
+  });
+
+  // A box answers to 'onetap', which Cytoscape fires only after the double-tap interval has passed
+  // with no second tap. On 'tap' the two taps of a double tap ballooned the box and collapsed it
+  // again before the travel started (seen 2026-10-21).
+  cy.on('onetap', 'node', event => {
     if (map.isTravelling()) return;
-    if (event.target === cy) {
-      lastTapped = null;
-      map.collapseBalloon();
-      return;
-    }
     const elementId = event.target.id() as string;
     const secondTap = lastTapped === elementId;
     lastTapped = elementId;

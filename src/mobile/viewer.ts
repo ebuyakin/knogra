@@ -19,6 +19,8 @@ import { installFromUrl, isLibraryUrl } from './install';
 const GRAPH_PARAM = 'graph';
 /** How long after the last resize event the map is laid out again. */
 const RESIZE_SETTLE_MS = 150;
+/** Two taps within this are a double tap; a tap on a box acts only after it has passed. A finger's double tap is faster than a mouse's, so this is shorter than the editor's interval. */
+const DOUBLE_TAP_MS = 300;
 
 /** The `?graph=` URL, removed from the address so a reload does not reinstall; null when absent or not a library file. */
 function consumeGraphUrl(): string | null {
@@ -62,10 +64,9 @@ async function show(): Promise<void> {
   const firstCentralId = graphStore.scenes[0]?.centralNodeId;
   const start = anchor ?? graphStore.nodes.find(node => node.id === firstCentralId) ?? graphStore.nodes[0];
 
-  const [{ default: cytoscape }, { initializeMathJax }, { DOUBLE_CLICK_INTERVAL_MS }, { getTheme }, { PhoneMap }, { wireMapGestures, wirePaneSwipe }, { Panes }, { NotesPane }, { PhoneQuiz }, { QuizPane }] = await Promise.all([
+  const [{ default: cytoscape }, { initializeMathJax }, { getTheme }, { PhoneMap }, { wireMapGestures, wirePaneSwipe }, { Panes }, { NotesPane }, { PhoneQuiz }, { QuizPane }] = await Promise.all([
     import('cytoscape'),
     import('../utils/mathjax'),
-    import('../config/interaction-settings'),
     import('../styles/themes'),
     import('./phone-map'),
     import('./gestures'),
@@ -89,7 +90,7 @@ async function show(): Promise<void> {
     boxSelectionEnabled: false,
     // Landmarks can be dragged, to feel them, to peek under them, to clear room; the next travel tidies up (phone-map.ts).
     autoungrabify: false,
-    multiClickDebounceTime: DOUBLE_CLICK_INTERVAL_MS,
+    multiClickDebounceTime: DOUBLE_TAP_MS,
   });
 
   const map = new PhoneMap(cy);
@@ -141,6 +142,18 @@ async function show(): Promise<void> {
   }
 }
 
+/**
+ * The bar's brightness relative to the theme's canvas, mirroring viewer.css: the page is 85% of the
+ * canvas (--theme-canvas), and the bar lays 40% black over that (--bar-shade). Change those, change this.
+ */
+const BAR_BRIGHTNESS = 0.85 * 0.6;
+
+/** A 6-digit hex colour at a fraction of its brightness. Theme colours are all 6-digit hex (src/styles/themes). */
+function darken(hex: string, brightness: number): string {
+  const channel = (at: number): string => Math.round(parseInt(hex.slice(at, at + 2), 16) * brightness).toString(16).padStart(2, '0');
+  return `#${channel(1)}${channel(3)}${channel(5)}`;
+}
+
 /** The theme's colours as CSS variables on the root, so bars, buttons, counter and notes match the map. */
 function applyViewerTheme(theme: ColorTheme): void {
   const root = document.documentElement.style;
@@ -149,6 +162,8 @@ function applyViewerTheme(theme: ColorTheme): void {
   root.setProperty('--theme-text-secondary', theme.node.textSecondary.color);
   root.setProperty('--theme-accent', theme.node.borderCentral.color);
   root.setProperty('--theme-line', theme.edge.line.color);
+  // Safari's own bar, when the viewer runs in the browser, takes the colour of the viewer's bars (§16.5).
+  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', darken(theme.canvas.background.color, BAR_BRIGHTNESS));
 }
 
 /** The buttons that move between panes (§8): Quiz and Notes on the bar, Map on each side pane's bar. */

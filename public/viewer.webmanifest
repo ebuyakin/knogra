@@ -1,0 +1,11 @@
+{
+  "name": "Knogra viewer",
+  "short_name": "Knogra",
+  "start_url": "/view.html",
+  "display": "standalone",
+  "background_color": "#0b0e14",
+  "theme_color": "#07090c",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

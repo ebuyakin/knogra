@@ -71,13 +71,14 @@ const PHONE_ROWS: PhoneRowParams = {
 /** Sideways (phone-band-layout.ts). */
 const PHONE_BANDS: PhoneBandParams = {
   focusMaxWidth: 0.42,
-  landmarkScaleMax: 0.8,
+  scaleMax: 0.8,
   landmarkScaleMin: 0.35,
   gap: 6,
   edgeMargin: 12,
   focusClearance: 40,
   middleBand: 35,
   middleOffset: 30,
+  rowStagger: 0.12,
 };
 
 /** How much a line thins with its box's scale; the desktop's default. */

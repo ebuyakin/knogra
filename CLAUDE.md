@@ -39,10 +39,11 @@ When explicitly asked by Eugene, append an entry. Record decisions and the reaso
 ## The sibling site repo
 
 The marketing site is at ~/pro/knogra-site and deploys to knogra.io. It is outside this project, so nothing there loads automatically and reading it may prompt. Use /add-dir when a task needs sustained access.
-Two contracts couple the repos, and both are stable because breaking either requires an app release:
+Three contracts couple the repos, and all are stable because breaking any requires an app release:
 
 1. The app's import allowlist pins `https://knogra.io/graphs/`.
 2. The site's `src/lib/graph-extract.ts` parses the app's workspace export format.
+3. The site's `/graphs/index.json` carries `file`, `title` and `nodeCount`, which the mobile viewer reads. Fields may be added; none renamed or removed.
 
 Otherwise: no shared code, no shared build, cross-links are absolute URLs.
 The site's legal pages name the AI providers the app sends data to. Adding or removing a provider is a change to those pages too.

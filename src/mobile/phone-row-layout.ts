@@ -23,16 +23,22 @@
  * horizontal one at the edge, and the two in a row are pushed apart if they
  * would touch. A pair too wide to share a row even pushed to the margins is
  * not shrunk: it takes a double-height row, one box in each half, the more
- * horizontal one nearer the focus. One common scale, the maximum unless the
- * rows do not fit the height; width alone never shrinks the map, except for
- * a single box wider than the screen.
+ * horizontal one nearer the focus.
  *
- * Every row on a side gets the same band, sized for the tallest box among
- * the landmarks. Box heights are much alike upright, so the shorter boxes
- * keep a little slack around them and the rows keep a regular rhythm; that
- * slack is what the stagger uses. (Sizing each band to its own boxes was
- * tried on 2026-10-20 and gave bigger boxes with no room between them; the
- * regular band is the better trade upright.)
+ * Every row on a side gets the same slot: the side's room divided by its
+ * units. Equal slots keep a regular rhythm, and the room a box leaves in its
+ * slot is what the stagger uses. (Sizing each slot to its own boxes was tried
+ * on 2026-10-20 and gave bigger boxes with no room between them.)
+ *
+ * Size is per box: each landmark takes the largest scale that fits its
+ * slot's height and the width, never above `landmarkScaleMax`; the two boxes
+ * of a row share the width and come down together when they would overlap
+ * even at the margins. One common scale for all landmarks was the rule until
+ * 2026-10-21: the map's biggest box, an image, set it, and the title boxes
+ * shrank with it to a third of the slot they stood in while the screen
+ * stayed empty (seen on The Odyssey). A readable minimum height on top of the
+ * common scale was tried the same day and held the small boxes at that
+ * minimum instead of letting them use the room.
  *
  * Order is kept by construction: each side is one column in clockwise order
  * cut at north and south, the halves and the band are contiguous in that
@@ -52,7 +58,7 @@ import { firstLineByAddress, type Address, type MapBox, type MapTree } from '../
 export interface PhoneRowParams {
   /** The focus is drawn no wider than this fraction of the surface's width. */
   focusMaxWidth: number;
-  /** The common scale of the landmarks: as large as fits, between these. */
+  /** A landmark's scale: as large as fits its slot and the width, between these. */
   landmarkScaleMax: number;
   landmarkScaleMin: number;
   /** Clear space kept between two boxes, in pixels. */
@@ -153,19 +159,18 @@ export function layoutPhoneRows(
   const landmarks = landmarksOf(tree, endsByEdge, baseSizes, params.horizontalBand);
   const split = splitHalves(columnOf(landmarks, 'right'), columnOf(landmarks, 'left'));
   const rows = rowsOf(split, frame);
-  const scale = scaleFor(rows, frame);
-  const placed = place(rows, scale, frame);
+  const scales = scalesOf(rows, frame);
+  const placed = place(rows, scales, frame);
 
   const positions = new Map<Address, Position>([[focusBox.address, { x: 0, y: 0 }]]);
   const lengths = new Map<Address, number>([[focusBox.address, 0]]);
-  const scales = new Map<Address, number>([[focusBox.address, focusScale]]);
+  scales.set(focusBox.address, focusScale);
   const deviations = new Map<Address, number>();
   for (const landmark of landmarks) {
     const position = placed.get(landmark.box.address);
     if (!position) throw new Error(`Phone row layout: ${landmark.box.address} not placed`);
     positions.set(landmark.box.address, position);
     lengths.set(landmark.box.address, Math.hypot(position.x, position.y));
-    scales.set(landmark.box.address, scale);
     deviations.set(landmark.box.address, turnBetween(landmark.bearing, normalizeBearing(toDegrees(Math.atan2(position.y, position.x)))));
   }
   return { positions, lengths, scales, derived: { deviations, landmarks: new Map(), fans: new Map(), sideClearances: new Map() } };
@@ -297,17 +302,45 @@ function sideRoom({ surface, focusSize, params }: Frame): number {
   return surface.height / 2 - params.edgeMargin - focusSize.height / 2 - params.focusClearance;
 }
 
-/** The largest common scale at which each side's units fit its room and every box alone fits the width, not below the floor. */
-function scaleFor(rows: Row[], frame: Frame): number {
+/** The distance between the lines of a side's units; capped, so a lone row stays near the focus. */
+function pitchOf(row: Row, frame: Frame): number {
+  return Math.min(sideRoom(frame) / row.sideUnits, frame.params.rowPitchMax * frame.surface.height);
+}
+
+/**
+ * Every landmark's scale: the largest that fits its slot's height and the
+ * width, never above the maximum. The two boxes of a plain row share the
+ * width: when at their own largest they would overlap even pushed to the
+ * margins, both come down in the same proportion. Never below the minimum;
+ * at the minimum a pair overlaps rather than vanishes.
+ */
+function scalesOf(rows: Row[], frame: Frame): Map<Address, number> {
   const { surface, params } = frame;
-  const { landmarkScaleMax, landmarkScaleMin, gap, edgeMargin } = params;
-  const landmarks = rows.flatMap(row => [row.left, row.right]).filter((landmark): landmark is Landmark => landmark !== null);
-  if (landmarks.length === 0) return landmarkScaleMax;
-  let scale = landmarkScaleMax;
-  const tallest = Math.max(...landmarks.map(landmark => landmark.base.height));
-  for (const row of rows) scale = Math.min(scale, (sideRoom(frame) / row.sideUnits - gap) / tallest);
-  for (const landmark of landmarks) scale = Math.min(scale, (surface.width - 2 * edgeMargin) / landmark.base.width);
-  return Math.max(landmarkScaleMin, scale);
+  const across = surface.width - 2 * params.edgeMargin;
+  const scales = new Map<Address, number>();
+  for (const row of rows) {
+    const slot = pitchOf(row, frame) - params.gap;
+    const fitting = (landmark: Landmark): number => Math.min(params.landmarkScaleMax, slot / landmark.base.height, across / landmark.base.width);
+    let leftScale = row.left ? fitting(row.left) : 0;
+    let rightScale = row.right ? fitting(row.right) : 0;
+    if (row.units === 1 && row.left && row.right) {
+      const needed = row.left.base.width * leftScale + row.right.base.width * rightScale + params.gap;
+      if (needed > across) {
+        const share = (across - params.gap) / (needed - params.gap);
+        leftScale *= share;
+        rightScale *= share;
+      }
+    }
+    if (row.left) scales.set(row.left.box.address, Math.max(params.landmarkScaleMin, leftScale));
+    if (row.right) scales.set(row.right.box.address, Math.max(params.landmarkScaleMin, rightScale));
+  }
+  return scales;
+}
+
+function scaleOf(scales: Map<Address, number>, landmark: Landmark): number {
+  const scale = scales.get(landmark.box.address);
+  if (scale === undefined) throw new Error(`Phone row layout: no scale for ${landmark.box.address}`);
+  return scale;
 }
 
 /** How far from the centre a box of this landmark may sit without crossing the margin. */
@@ -329,33 +362,34 @@ function clamp(value: number, limit: number): number {
  * directed x; the pair of a plain row pushed apart to clear each other, the
  * pair of a double row one unit each.
  */
-function place(rows: Row[], scale: number, frame: Frame): Map<Address, Position> {
-  const { surface, focusSize, params } = frame;
-  const room = sideRoom(frame);
+function place(rows: Row[], scales: Map<Address, number>, frame: Frame): Map<Address, Position> {
+  const { focusSize, params } = frame;
   const positions = new Map<Address, Position>();
   for (const row of rows) {
-    const pitch = Math.min(room / row.sideUnits, params.rowPitchMax * surface.height);
+    const pitch = pitchOf(row, frame);
     const yAt = (unit: number): number => row.sign * (focusSize.height / 2 + params.focusClearance + (unit + 0.5) * pitch);
     if (row.units === 2 && row.left && row.right) {
       const [near, far] = nearerFirst(row.left, row.right);
-      positions.set(near.box.address, { x: directedX(near, scale, frame), y: yAt(row.start) });
-      positions.set(far.box.address, { x: directedX(far, scale, frame), y: yAt(row.start + 1) });
+      positions.set(near.box.address, { x: directedX(near, scaleOf(scales, near), frame), y: yAt(row.start) });
+      positions.set(far.box.address, { x: directedX(far, scaleOf(scales, far), frame), y: yAt(row.start + 1) });
       continue;
     }
     const y = yAt(row.start);
-    let xLeft = row.left ? directedX(row.left, scale, frame) : 0;
-    let xRight = row.right ? directedX(row.right, scale, frame) : 0;
+    let xLeft = row.left ? directedX(row.left, scaleOf(scales, row.left), frame) : 0;
+    let xRight = row.right ? directedX(row.right, scaleOf(scales, row.right), frame) : 0;
     let stagger = 0;
     if (row.left && row.right) {
-      const need = ((row.left.base.width + row.right.base.width) * scale) / 2 + params.gap;
+      const leftScale = scaleOf(scales, row.left);
+      const rightScale = scaleOf(scales, row.right);
+      const need = (row.left.base.width * leftScale + row.right.base.width * rightScale) / 2 + params.gap;
       const short = need - (xRight - xLeft);
       if (short > 0) {
         // Each takes half; whatever the margin refuses one of them, the other takes.
-        xLeft = clamp(xLeft - short / 2, reachOf(row.left, scale, frame));
-        xRight = clamp(xLeft + need, reachOf(row.right, scale, frame));
-        xLeft = clamp(xRight - need, reachOf(row.left, scale, frame));
+        xLeft = clamp(xLeft - short / 2, reachOf(row.left, leftScale, frame));
+        xRight = clamp(xLeft + need, reachOf(row.right, rightScale, frame));
+        xLeft = clamp(xRight - need, reachOf(row.left, leftScale, frame));
       }
-      stagger = staggerOf(row.left, row.right, scale, pitch, params);
+      stagger = staggerOf(row.left.base.height * leftScale, row.right.base.height * rightScale, pitch, params);
     }
     if (row.left) positions.set(row.left.box.address, { x: xLeft, y: y - row.sign * stagger * nearSign(row.left, row.right) });
     if (row.right) positions.set(row.right.box.address, { x: xRight, y: y - row.sign * stagger * nearSign(row.right, row.left) });
@@ -388,7 +422,7 @@ function nearSign(landmark: Landmark, partner: Landmark | null): number {
  * either box has in its band, so the row never closes on its neighbours. On
  * a crowded map the slack is nil and the pair stays aligned.
  */
-function staggerOf(left: Landmark, right: Landmark, scale: number, pitch: number, params: PhoneRowParams): number {
-  const slack = (landmark: Landmark): number => pitch / 2 - (landmark.base.height * scale) / 2 - params.gap;
-  return Math.max(0, Math.min(params.rowStagger * pitch, slack(left), slack(right)));
+function staggerOf(leftHeight: number, rightHeight: number, pitch: number, params: PhoneRowParams): number {
+  const slack = (height: number): number => pitch / 2 - height / 2 - params.gap;
+  return Math.max(0, Math.min(params.rowStagger * pitch, slack(leftHeight), slack(rightHeight)));
 }
