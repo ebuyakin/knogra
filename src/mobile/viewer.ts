@@ -73,7 +73,8 @@ async function show(): Promise<void> {
   const anchor = graphStore.nodes.find(node => node.isAnchor);
   const firstCentralId = graphStore.scenes[0]?.centralNodeId;
   const start = anchor ?? graphStore.nodes.find(node => node.id === firstCentralId) ?? graphStore.nodes[0];
-  const library = new LibraryPane(libraryRoot, start.title);
+  // The graph has no title of its own; the start node's stands for it, as it does on the map.
+  const library = new LibraryPane(libraryRoot, { title: start.title, nodeCount: graphStore.nodes.length });
 
   const [{ default: cytoscape }, { initializeMathJax }, { getTheme }, { PhoneMap }, { wireMapGestures, wirePaneSwipe }, { NotesPane }, { PhoneQuiz }, { QuizPane }] = await Promise.all([
     import('cytoscape'),

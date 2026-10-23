@@ -28,12 +28,23 @@
     <div id="viewer">
       <div id="panes">
         <section class="pane" id="library-pane">
+          <!-- Two sections (§8): the status, one row for the graph the phone holds, and the menu, the library's graphs. -->
           <div class="pane-body">
-            <p class="pane-note" data-role="message"></p>
-            <ul class="library-list" data-role="list"></ul>
+            <h3 class="library-heading">Installed on this phone</h3>
+            <div class="library-group">
+              <ul class="library-list" data-role="installed"></ul>
+            </div>
+            <h3 class="library-heading">Demo library</h3>
+            <div class="library-group">
+              <p class="library-message" data-role="message"></p>
+              <ul class="library-list" data-role="list"></ul>
+            </div>
+            <!-- The user's own graph: a workspace file from the phone's Files app, opened by the bar's button. Both formats install.ts reads. -->
+            <input type="file" accept=".json,.knogra" data-role="file" hidden>
           </div>
           <nav class="pane-bar">
             <h2>Library</h2>
+            <button type="button" data-action="open-file">Open a file</button>
             <button type="button" data-action="map">Map</button>
           </nav>
         </section>

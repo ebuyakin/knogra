@@ -1,7 +1,7 @@
 # Mobile viewer
 
-> Status: Draft. Spec and plan agreed on 2026-10-19; built and tuned in emulation on 2026-10-19 and 20, on an iPhone from 2026-10-20. Version 2, the home-screen app with the library pane (§15), built 2026-10-22 and not yet seen on the phone. This text describes what is built.
-> Last reviewed: 2026-10-22
+> Status: Current. Spec and plan agreed on 2026-10-19; built and tuned in emulation on 2026-10-19 and 20, on an iPhone from 2026-10-20. Version 2, the home-screen app with the library pane (§15), built 2026-10-22 and in use on the phone since; the user's own file added 2026-10-23. This text describes what is built. The viewer is in private use before its public launch (a version, the site's feature text and a post are that launch's work).
+> Last reviewed: 2026-10-23
 > Authority: Canonical for the mobile viewer: what it is for, what it shows, how it is driven by touch, what it stores on the phone, what it reuses from the app and what it writes of its own. Where code and this document disagree during implementation, this document wins until amended in the same session.
 > Related: [Product vision](knogra-vision.md), [Map view](map-view.md), [Workspace architecture](workspace-architecture.md), [Architecture](architecture.md)
 
@@ -19,8 +19,8 @@ Nothing on the phone changes the graph.
 Two audiences, served by the same page:
 the author who built a graph on the desktop and wants it on the phone for review;
 the visitor who found a graph in the library on knogra.io and cannot try knogra on a phone today.
-Both get their graph from the library on knogra.io; a user's own graph reaches the phone by being published there.
-Opening files from other hosts is out of scope for this version and recorded in §13.
+The visitor gets their graph from the library on knogra.io; the author either publishes there or opens the desktop's export from the phone's Files app (§4.1), which is where a synced folder puts it.
+Fetching files from other hosts is out of scope for this version and recorded in §13.
 
 ## 2. Vocabulary
 
@@ -31,7 +31,7 @@ Use these words in code, comments and this document.
     pane          One of the four screens the viewer swipes between: library, quiz, map, notes. The map pane is home.
     one-ring map  The map the phone draws: the focus and its landmarks, nothing beyond. Not the desktop map, which draws two hops.
     phone layout  The algorithms that place a one-ring map on a phone surface: the rows, portrait, and the bands, landscape (§5.3). Not the desktop layout (geometry.ts), which they replace, not extend.
-    install       Fetching a library file and writing it into the phone's browser storage, replacing whatever graph was there. Not an import in the editor's sense: there is no workspace on the phone to protect.
+    install       Writing a workspace file, fetched from the library or picked from the phone's files, into the phone's browser storage, replacing whatever graph was there. Not an import in the editor's sense: there is no workspace on the phone to protect.
     bar           The strip with a pane's buttons: along the bottom in portrait, a column at the right edge in landscape.
     portrait, landscape   The phone's two orientations, taller than wide and wider than tall. The CSS and the layouts switch on the orientation media query.
 
@@ -62,7 +62,9 @@ Saved to the home screen, the viewer opens without Safari's bars, with its own s
 
 The colour of the browser's own bars. viewer.css paints the page's root with the colour of the viewer's bars (`--bar-color`, the canvas darkened as the bars darken it) and the panes with the canvas colour.
 Safari on iOS 26 takes its bar colour from the root and ignores the `theme-color` tag (reported by developers, not by Apple); the tag is set too, from the theme of every map shown, for the browsers that read it.
-The same root colour fills the safe-area strips around the panes, so the bar reads as running to the screen's edge.
+The same root colour fills the safe-area strips around the panes, so the bar reads as running to the screen's edge. In landscape the side strips stand beside the map and the bar column, where the bar colour made the column look half as wide again (seen 2026-10-22), so there the strips are painted in the canvas colour, as borders on the viewer in place of the padding; the bottom strip keeps the bar colour, as in portrait.
+
+The status line ("Loading…", the empty message) lies over the map's centre, out of the page's flow. In the flow it took 24px of the map's column while the first map was drawn and gave them back when hidden, which left the first map's focus 12px off centre until the first travel re-framed it: the notch on the first travel after a reload, seen 2026-10-22.
 
 A home-screen app on iOS 26 gets a viewport short by the status bar's height (measured 873 of 932 on 2026-10-22, a WebKit regression reported by several projects); the page is sized with 100lvh in standalone display mode, which still sees the whole screen. In Safari the page stays at 100%, where 100lvh would run under Safari's bars.
 
@@ -87,6 +89,11 @@ After install the page shows the graph.
 Opening the page again without a parameter shows the stored graph, with no network.
 Opening it with a parameter, or choosing a graph on the library pane (§8), replaces the stored graph: one graph on the phone at a time, the one last installed.
 The installed file's URL is kept in localStorage under the viewer's own key (`knogra.viewer.graph`, registered in storage-config.ts with the app's keys, the one line of the viewer outside src/mobile and public/), so the library pane can mark the graph on the phone. Written last, after the stores.
+
+The user's own file (2026-10-23). The install is split into fetching the text and installing it (`installFromUrl` and `installFile` in install.ts), and the library pane's "Open a file" hands a file from the phone's file picker to the second half.
+This is how a graph not in the library reaches the phone: the desktop's export goes into iCloud Drive, OneDrive, Google Drive or anything else the Files app shows, and the picker reaches all of them with one mechanism. Both formats the reader knows are accepted (.json and the legacy .knogra).
+A picked file has no URL, so the install clears the key instead of writing one: the pane then marks no row and says the graph came from a file. No new value shape in storage.
+Trust is the desktop's: the file is the user's own, as when the editor opens one, which is why this is not the deferred "files from any URL" (§13).
 
 ### 4.2 What the phone writes
 
@@ -144,10 +151,10 @@ Numbers live in phone-map.ts.
 Portrait, the rows (phone-row-layout.ts):
 
     Rows         The focus alone in the middle row; every other row holds at most one landmark on each side. Each side of the focus is a column in clockwise order cut at north and south, so order is kept; rows fill from the focus outward.
-    Slots        Each side's rows get equal slots, the side's room over its rows, capped at a share of the height; the box is centred in its slot. The regular rhythm, and the room the shorter boxes keep, is what makes it look right; slots sized to their own boxes were tried and gave bigger boxes with no room between them.
+    Slots        Each side's rows get equal slots, the side's room over its rows, capped at a share of the height; the box is centred in its slot. The regular rhythm, and the room the shorter boxes keep, is what makes it look right; slots sized to their own boxes were tried and gave bigger boxes with no room between them. Between two rows a clearance is kept out of the slot (rowClearance, 20px, an arrowhead and a little), so the line to the far row ends in a head that does not land on the near row's box (seen 2026-10-22); a side with one row keeps the ordinary gap.
     Size         Per box: the cap, the slot's height over the box's height, the width over the box's width, whichever is least; the two boxes of a row that together outrun the width give up the same share. The floor last.
     Across       A landmark sits where its direction points, a nearly vertical one close above the focus, a nearly horizontal one at the edge; the two in a row are pushed apart only as far as clearing each other needs.
-    Stagger      The two boxes of a row are set off its line a little, the more horizontal one toward the focus, so unequal boxes do not sit in near symmetry (which the eye reads as a mistake); the size on a tie. Within the slot's room only, so a crowded map stays aligned.
+    Stagger      The two boxes of a row are set off its line a little, the more horizontal one toward the focus, so unequal boxes do not sit in near symmetry (which the eye reads as a mistake); the size on a tie. Within the slot's room only, so a crowded map stays aligned. Starved in practice (seen 2026-10-22): the per-box size fills the slot, so the room is near zero and the stagger seldom shows; reserving room before sizing is the fix, left for the layout rethink (§13).
     Wide pair    Two boxes that cannot share a row even at the margins take a double-height row, one behind the other, rather than shrinking the map.
 
 Landscape, the bands (phone-band-layout.ts):
@@ -163,6 +170,16 @@ A landmark at the floor may be unreadable; the balloon is how it is read (§7).
 
 A rotation lays the shown map out again for the new surface with the other layout and redraws it in place, without animation and without touching the history; a balloon or a selection goes with the old drawing, and a running quiz masks the new boxes as it masks any arrival.
 The viewer listens to the window's resize, settled over a short delay, and does nothing when the surface has not actually changed.
+
+### 5.5 Lines behind boxes
+
+The layouts place boxes by direction and size and never look at the lines, so on a crowded portrait map a line to a far row runs behind a box of the near row. A line through a box is accepted as the lesser harm against boxes overlapping or shrinking (decided 2026-10-22), and its damage to the eye is reduced instead (phone-map.ts, line-crossings.ts, built 2026-10-22):
+
+    Where       A detector over the layout's output finds, per line, the stretches that lie behind another landmark's box, as fractions of the drawn line; overlapping stretches merge, and the strip between two crossed boxes stays visible so the eye can follow the line.
+    How         The line is painted as a gradient whose colour turns to the canvas colour over each stretch, with a 10px ramp (FADE_RAMP) at either end so the ends are soft. The canvas colour stands in for transparency, since the renderer keeps only a stop's colour and uses the line's one opacity for all stops.
+    Portrait    Only. The bands keep their lines clear by construction.
+    Travel      A surviving line is unfaded before it moves and faded for the new map after it arrives, so it travels whole and the eye keeps it: its holes close during the departure and the new ones open during the arrival, by a frame loop of the viewer's own over the stop positions, so refocus-animator.ts stays the desktop's. An arriving line gets its holes at the end, without a transition, which was judged not worth more.
+    Not built   Bent lines (Cytoscape's unbundled bezier) and the desktop's margin trick. Kept as options if the fade proves insufficient.
 
 ## 6. Travel
 
@@ -197,10 +214,17 @@ A horizontal swipe moves one pane left or right; a swipe past the end does nothi
 The map pane also has two bar buttons, Quiz and Notes, that go to the neighbouring panes, so the panes are discoverable before the swipe is known; the quiz pane's bar has Library.
 From any side pane, a swipe back or the Map button on its own bar returns toward the map.
 
-The library pane (2026-10-22) lists the library's graphs from the site's index (§12): one row per graph, the title and the node count, nothing more, since the visitor learns about a graph on the site and the pane is for choosing.
-The graph on the phone is marked. A tap on another row installs it, by the same path as the link (§4.1), and reloads to its map. No confirmation: nothing on the phone is lost that cannot be fetched again; a running quiz ends.
-The index is fetched each time the pane is shown. Without a connection the pane says the library needs one and names the graph on the phone, which stays usable.
+The library pane (2026-10-22, two sections since 2026-10-23) is a grouped list, the shape the phone's own settings use: a heading over a card of rows.
+
+    Installed on this phone   One row: the graph the phone holds, named by its start node's title since a graph has no title of its own, with its source ("from the library" or "from a file") and its node count. On an empty phone the row says to pick a graph below or open a file.
+    Demo library              The library's graphs from the site's index (§12): one row per graph, the title and the node count, nothing more, since the visitor learns about a graph on the site and the pane is for choosing. The installed one carries "✓ installed" in the accent and does nothing on a tap.
+
+A tap on another library row installs it, by the same path as the link (§4.1), and reloads to its map. No confirmation: nothing on the phone is lost that cannot be fetched again; a running quiz ends.
+The index is fetched each time the pane is shown. Without a connection the library's card says it needs one; the status row stands regardless, and the graph on the phone stays usable.
+The bar holds "Open a file" beside Map: it opens the phone's file picker, and the picked file installs by the same path (§4.1). In the bar rather than in a section because every tappable thing sits within the thumb's reach, and a row that is not a graph would be the only one of its kind.
 With no graph on the phone the viewer opens on this pane and the other three are locked.
+
+Design rules the pane follows, so they are not rediscovered: the card tells the heading from the rows, so the two need not differ by size alone (heading 17px semibold, rows 16px); separators run between rows only, inside the card; rows are 48px tall, above the 44 a thumb needs; the installed mark is a tick on the detail, not a coloured row, since the accent on a whole row reads as tappable; a pressed row darkens; a long title is cut with an ellipsis and the count stays whole; headings are never in capitals.
 
 Every interactive element sits within the thumb's reach and away from the map's own space: in portrait, each pane's bar runs along the bottom, the map's with its four buttons, each side pane's with its title and its Map button; in landscape, where height is the scarce axis, every bar stands as a column at the right edge, buttons gathered at its foot, the pane's title running down from its top like a book's spine.
 Every button in a mode has the same width (a quarter of the bar in portrait, the column in landscape), so nothing moves when a bar swaps.
@@ -333,11 +357,12 @@ The permission is this section and extends to nothing else.
 As built:
 
     src/mobile/viewer.ts               Startup: parameter, install or load, instance, panes, first map or the library pane alone, the bar's Back and Home, the resize, the page's theme colours and the theme-color tag.
-    src/mobile/install.ts              §4.1, the remembered file, the index URL.
-    src/mobile/library-pane.ts         §8: the index as a list, install on tap.
+    src/mobile/install.ts              §4.1: install from a URL or from a file, the remembered file, the index URL.
+    src/mobile/library-pane.ts         §8: the status row, the index as a list, install on tap or from the picker.
     src/mobile/phone-row-layout.ts     §5.3 portrait. Pure: tree, directions, surface, sizes in; MapLayout out.
     src/mobile/phone-band-layout.ts    §5.3 landscape. Same inputs and output.
-    src/mobile/phone-map.ts            The conductor: show, travel, balloon, resize, history, the drag's pinning of the focus, the layout numbers; calls the shared modules.
+    src/mobile/line-crossings.ts       §5.5: where a line runs behind a box. Pure geometry over a layout's output.
+    src/mobile/phone-map.ts            The conductor: show, travel, balloon, resize, history, the drag's pinning of the focus, the line fades and their travel (§5.5), the layout numbers; calls the shared modules.
     src/mobile/gestures.ts             Tap, double tap, swipe, with the §8 constraints.
     src/mobile/panes.ts                The strip of four panes.
     src/mobile/notes-pane.ts           §9.
@@ -382,23 +407,24 @@ Out of scope for this version, stated so it stays out:
     Paths.
     The second ring of markers.
     Syncing anything back to a desktop.
-    Files from hosts other than knogra.io/graphs.
+    Fetching files from hosts other than knogra.io/graphs. (A file the user picks on the phone is not a fetch, §4.1.)
 
 Deferred, with the reason:
 
     Hints of what lies beyond a landmark (marks on its outer edge on the directions of its own edges)   Try after the one-ring map is seen on a real phone; may not be needed.
     Installable web app with offline caching   Add to home screen is enough to start; a service worker is a release concern of its own.
-    Files from any URL   Needs the viewer to be shown safe against a hostile file's notes (the renderer's HTML output is not audited for that), and needs the host to allow cross-origin fetches. The library path has neither problem.
+    Files from any URL   Needs the viewer to be shown safe against a hostile file's notes (the renderer's HTML output is not audited for that), and needs the host to allow cross-origin fetches. The library path has neither problem, and the user's own file (§4.1) carries the desktop's trust.
     Several graphs on one phone   One graph, last installed, chosen on the library pane; several until someone asks.
+    A personal library of the user's files   Wanted (2026-10-23) as remembered rows that reinstall the latest export without the picker. Not buildable on an iPhone: the file input gives bytes and a name, never a path or a reusable handle (Safari has no showOpenFilePicker, WebKit bug 231706 open), and no browser lists a folder. The two shapes that are buildable were declined: copies of the files in IndexedDB (a new store, old versions kept, no fresher than the last pick) and rows holding URLs (needs the user to upload somewhere with cross-origin fetches allowed, the manual step moved, not removed). Reopen if the desktop learns to save in place to a synced folder under a fixed name.
     A desktop View link that protects the desktop workspace   On a desktop the viewer's install would replace the editor's workspace in the same browser profile. The site shows View only on phones; a desktop user who opens view.html?graph= anyway replaces their workspace, which the editor's own import would also do after a question. Whether the viewer should ask is open.
 
-Open until seen on a phone:
+Open after the phone passes:
 
-    The numbers in §5.3 and the arrow factor in §5.1.
+    The layout rethink (parked 2026-10-22)   The portrait rules have been patched one case at a time and each patch opened another case: strange maps still appear, small boxes with room all round them. Agreed framing for the next attempt, nothing decided: the rules are mechanisms, not goals; the one principle is that the screen is used efficiently and a box shrinks only when there is not enough room to place it readable without overlap; two structural faults in the current rules (the scale is of the natural size, not of a readable pixel height; boxes are placed between the focus and other boxes); two regimes rather than one formula, an ample one where every box fits at readable size and composition can honour the directions, and a packed one where rows are the price and crossings follow; the band is set by pressure (demand at readable size against the screen), not by node count. First step proposed: count the crossings over the library's graphs with the §5.5 detector, to see how often the packed regime is real.
+    The numbers in §5.3 and the arrow factor in §5.1, until the rethink.
     Whether the bar's words should become dim contour icons (same width, quieter; but Quiz, Notes and Map have no universal sign). Words kept for now, to see how intrusive they are in use.
-    The bar colour (§3): whether the root colour matches the bars by eye, and how the side strips look in landscape.
 
-Settled in emulation, recorded so they are not reopened without a reason: Reveal is a second tap, not a button; the balloon opens on reveal; landscape has its own layout (§5.3); the counter stays out of the middle of the map (§10.2).
+Settled on the phone (2026-10-22): the root colour matches the bars by eye; the landscape side strips in the canvas colour (§3). Settled in emulation, recorded so they are not reopened without a reason: Reveal is a second tap, not a button; the balloon opens on reveal; landscape has its own layout (§5.3); the counter stays out of the middle of the map (§10.2).
 
 ## 14. Plan
 
@@ -414,7 +440,7 @@ Steps 1 to 6 passed on 2026-10-19; the layouts, the bars and the quiz were then 
     6  Quiz                The quiz pane and the running-quiz bar and counter. Pass: a quiz over a small graph can be started, walked across two maps, revealed and graded, and ended, and the masks go.
     7  Real phone          Safari on an iPhone: the layout numbers, the viewport (address bar, 100vh), add to home screen, orientation. Pass: a reviewed graph is usable for ten minutes without reaching for the desktop.
 
-The site's View link (§12) was built on 2026-10-22 with version 2 (§15). Still to come: the docs/README.md row, and this document to Current after the phone pass of version 2.
+The site's View link (§12) was built on 2026-10-22 with version 2 (§15), passed on the phone the same day, and the user's own file followed on 2026-10-23. Still to come, as the public launch: a version, the site's feature text, a post on how to use it, and the architecture.md pointer.
 
 ## 15. Phone pass: findings and the next version
 
@@ -426,4 +452,5 @@ The three became version 2, agreed on 2026-10-21 and built on 2026-10-22; the se
     Icon              The home-screen icon is a bare "K" from the page's title. Implies the home-screen metadata of §4.3: an apple-touch-icon in PNG (iOS does not take the SVGs the repo has; 180×180 from public/logo.svg), the app-capable and status-bar tags, a manifest with standalone display, and a theme colour set from the map's theme so Safari's own bar matches the viewer's bars.
 
 Decided on 2026-10-21, against the alternatives: one graph on the phone, not several (install replaces, as before); the list with the title and the node count only, not topic and a line; the address kept clean rather than carrying the parameter; the index generated on the site from the same enumeration as the library page, not a hand-kept file, and under /graphs/ for the CORS rule already there.
-Built 2026-10-22 in this order: icon and colour, the site's index and View link, the remembered file and the library pane. The first phone pass of it is pending; §3 records what the inspector showed on the way (the bar colour, the short viewport).
+Built 2026-10-22 in this order: icon and colour, the site's index and View link, the remembered file and the library pane. Seen on the phone the same day and judged to work well; §3 records what the inspector showed on the way (the bar colour, the short viewport) and what the pass found (the side strips, the first-travel notch), §5.3 and §5.5 what it found on the map (the arrowheads on the near row, the lines behind boxes).
+The fourth finding, after a few days' use: the author's own graph, built on the desktop and not in the library, had no way onto the phone. The file picker (§4.1, 2026-10-23) is the answer; a personal library that reinstalls the latest export was wanted and found unbuildable (§13).

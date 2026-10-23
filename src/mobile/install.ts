@@ -1,9 +1,10 @@
 /**
  * Install — a library graph onto the phone (docs/mobile-viewer.md §4.1).
  *
- * Fetches a workspace file from the knogra.io library, reads it with the app's
- * own format functions, clears the phone's stores and writes the graph into
- * them through the same transfer functions the editor's import uses. The
+ * Takes a workspace file, fetched from the knogra.io library or picked by the
+ * user from the phone's Files app, reads it with the app's own format
+ * functions, clears the phone's stores and writes the graph into them through
+ * the same transfer functions the editor's import uses. The
  * editor's `importWorkspace` is not called: it asks questions on the way
  * (validation, scale to fit, in-note images) that belong to an editor.
  *
@@ -12,9 +13,11 @@
  * of its own to restore. Paths, shelf and presets have no screen here.
  *
  * The installed file's URL is kept in localStorage (§4.1), so the library pane
- * can mark the graph on the phone. Written last, after the stores: a failed
- * install leaves the old mark, which is then wrong, but a reload shows an
- * empty viewer and the library pane, so nothing is misread for long.
+ * can mark the graph on the phone. A picked file has no URL and clears the
+ * key: the pane then marks no row, and the graph's own title names what is on
+ * the phone. Written last, after the stores: a failed install leaves the old
+ * mark, which is then wrong, but a reload shows an empty viewer and the
+ * library pane, so nothing is misread for long.
  *
  * The caller reloads the page afterwards: the stores read IndexedDB when they
  * are first imported, so a fresh load is how the new graph reaches them.
@@ -54,6 +57,15 @@ export async function installFromUrl(url: string): Promise<void> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   // The name is cosmetic: the reader identifies the file by content.
   const file = new File([await response.blob()], url.split('/').pop() ?? 'workspace.json');
+  await installFile(file, url);
+}
+
+/**
+ * Installs a workspace file: one fetched from the library, or one the user
+ * picked on the phone (§4.1). `url` is the library URL to remember, or null
+ * for a picked file, which has no address the pane could mark.
+ */
+export async function installFile(file: File, url: string | null): Promise<void> {
   const members = await readMembers(file);
 
   await clearAllData();
@@ -61,7 +73,8 @@ export async function installFromUrl(url: string): Promise<void> {
   await importConversations(members.chat);
   await importThemes(members.themes);
   await importMapViews(members.mapViews ?? []);
-  localStorage.setItem(VIEWER_GRAPH_KEY, url);
+  if (url === null) localStorage.removeItem(VIEWER_GRAPH_KEY);
+  else localStorage.setItem(VIEWER_GRAPH_KEY, url);
 }
 
 /** The editor's reader, repeated: it is private to workspace.ts, which the viewer does not import (§4.1). */
